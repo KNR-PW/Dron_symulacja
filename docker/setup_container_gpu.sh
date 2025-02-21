@@ -17,6 +17,6 @@ docker run --gpus all \
     -e DISPLAY=$DISPLAY \
     -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
     --name knr_drone \
-    -v ./../src:/ros_ws/src:rw \
+    -v ./../src:/root/ros_ws/src:rw \
     -it \
     $1
