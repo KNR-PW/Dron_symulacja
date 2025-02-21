@@ -1,0 +1,1 @@
+docker exec -it knr_drone bash -c "/tools/ardupilot/Tools/autotest/sim_vehicle.py -v ArduCopter -w --model webots-python --add-param-file=/tools/ardupilot/libraries/SITL/examples/Webots_Python/params/iris.parm"

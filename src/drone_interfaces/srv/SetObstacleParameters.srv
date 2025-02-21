@@ -1,0 +1,7 @@
+string obstacle_def
+geometry_msgs/Point translation
+AxisAngle rotation
+string[] fields_names
+float32[] fields_values
+---
+int8 result

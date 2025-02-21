@@ -1,0 +1,586 @@
+#VRML_SIM R2023b utf8
+
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackground.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/floors/protos/Floor.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/appearances/protos/Grass.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/factory/pipes/protos/PipeSection.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/factory/manhole/protos/SquareManhole.proto"
+IMPORTABLE EXTERNPROTO "../protos/Iris.proto"
+
+WorldInfo {
+  defaultDamping Damping {
+    linear 0.6
+    angular 0.6
+  }
+  contactProperties [
+    ContactProperties {
+      coulombFriction [
+        10
+      ]
+    }
+  ]
+}
+Viewpoint {
+  orientation -0.03692214989268459 -0.0076672431983115736 -0.9992887311628406 2.732453023397316
+  position -6.662864952878813 -6.649572922872819 0.271315512810858
+  follow "Mavic 2 PRO"
+}
+TexturedBackground {
+}
+TexturedBackgroundLight {
+}
+Floor {
+  size 1000 1000
+  appearance Grass {
+  }
+}
+DEF drone Solid {
+  translation -6.487827768237703 -6.526218029207014 0.24921128539324167
+  rotation 0.466296645075633 0.20419314422723842 -0.8607395649334375 0.00039444183704509745
+  children [
+    Transform {
+      translation -0.28 -0.28 -0.22
+      scale 0.001 0.001 0.001
+      children [
+        Shape {
+        }
+        Shape {
+          appearance PBRAppearance {
+          }
+          geometry Mesh {
+            url [
+              "../resources/drone_model.obj"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+  boundingObject Box {
+    size 0.5 0.5 0.4
+  }
+  physics Physics {
+    mass 2
+    damping Damping {
+      linear 0.6
+      angular 0.6
+    }
+  }
+  linearVelocity -2.3415492385160738e-07 5.553544192179728e-07 7.765054420046383e-06
+  angularVelocity -2.838810800499489e-06 -1.1977511668667784e-06 -2.8546376574843276e-11
+}
+SquareManhole {
+  translation -6.5 -6.5 0
+  name "drone takeoff(1)"
+  size 0.5 0.5 0.1
+}
+PipeSection {
+  translation 0 20 0.3
+  radius 0.2
+  subdivision 20
+  appearance PBRAppearance {
+    baseColor 0 0 1
+    roughness 1
+    metalness 0
+  }
+}
+SquareManhole {
+  translation -6.5 -5.5 -1.11022e-16
+  name "robot parking"
+  size 0.5 0.5 0.1
+}
+Solid {
+  translation -4 4 0.03281610302769164
+  rotation 0.8806687748121309 -0.47373252904028024 -5.083739119121024e-18 3.09357676753462e-18
+  children [
+    Transform {
+      translation -0.035 -0.035 -0.035
+      scale 0.001 0.001 0.001
+      children [
+        DEF tennis_ball Shape {
+          appearance PBRAppearance {
+            baseColor 0 1 0
+            roughness 1
+            metalness 0
+          }
+          geometry Mesh {
+            url [
+              "../resources/tennis_ball.obj"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+  name "ball"
+  boundingObject Sphere {
+    radius 0.03
+  }
+  physics Physics {
+  }
+  linearVelocity -9.508392629530959e-20 1.1360550131434047e-19 4.077435435341529e-17
+  angularVelocity 9.422392598227912e-18 7.865789066247885e-18 7.318368303651835e-52
+}
+Solid {
+  translation 1.2015770918818778e-17 4 0.03281610302769164
+  rotation -0.00944559852284274 0.9999553893392171 -2.2995425300608537e-18 4.0967693751339904e-16
+  children [
+    Transform {
+      translation -0.035 -0.035 -0.035
+      scale 0.001 0.001 0.001
+      children [
+        DEF tennis_ball Shape {
+          appearance PBRAppearance {
+            baseColor 0 1 0
+            roughness 1
+            metalness 0
+          }
+          geometry Mesh {
+            url [
+              "../resources/tennis_ball.obj"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+  name "ball(1)"
+  boundingObject Sphere {
+    radius 0.03
+  }
+  physics Physics {
+  }
+  linearVelocity -5.052204737555642e-19 -7.225144351985118e-20 -6.476463927292064e-17
+  angularVelocity -5.9740396381476066e-18 5.127434292277953e-18 2.696010371372822e-34
+}
+Solid {
+  translation 4 4 0.03281610302769164
+  rotation 0.8806687748121309 -0.47373252904028024 -5.083739119121024e-18 3.09357676753462e-18
+  children [
+    Transform {
+      translation -0.035 -0.035 -0.035
+      scale 0.001 0.001 0.001
+      children [
+        DEF tennis_ball Shape {
+          appearance PBRAppearance {
+            baseColor 0 0 1
+            roughness 1
+            metalness 0
+          }
+          geometry Mesh {
+            url [
+              "../resources/tennis_ball.obj"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+  name "ball(2)"
+  boundingObject Sphere {
+    radius 0.03
+  }
+  physics Physics {
+  }
+  linearVelocity -9.508392629530959e-20 1.1360550131434047e-19 4.077435435341529e-17
+  angularVelocity 9.422392598227912e-18 7.865789066247885e-18 7.318368303651835e-52
+}
+Solid {
+  translation -4 -5.145473101646097e-18 0.03281610302769164
+  rotation 0.9999776836271167 -0.006680737066049961 -5.707312941608534e-18 1.7852861994144045e-16
+  children [
+    Transform {
+      translation -0.035 -0.035 -0.035
+      scale 0.001 0.001 0.001
+      children [
+        DEF tennis_ball Shape {
+          appearance PBRAppearance {
+            baseColor 0 0 0
+            roughness 1
+            metalness 0
+          }
+          geometry Mesh {
+            url [
+              "../resources/tennis_ball.obj"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+  name "ball(3)"
+  boundingObject Sphere {
+    radius 0.03
+  }
+  physics Physics {
+  }
+  linearVelocity -1.7023966102868928e-19 -7.024239296743195e-18 6.366507630963589e-17
+  angularVelocity 2.5574438392265926e-16 1.409170783019214e-17 2.6382791114927495e-34
+}
+Solid {
+  translation 0.0008928275537012438 -0.0003585561871657701 0.032816102927469885
+  rotation 0.805080009683476 0.5931015134977868 -0.00876200289253032 0.037023517784430915
+  children [
+    Transform {
+      translation -0.035 -0.035 -0.035
+      scale 0.001 0.001 0.001
+      children [
+        DEF tennis_ball Shape {
+          appearance PBRAppearance {
+            baseColor 0 1 0
+            roughness 1
+            metalness 0
+          }
+          geometry Mesh {
+            url [
+              "../resources/tennis_ball.obj"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+  name "ball(4)"
+  boundingObject Sphere {
+    radius 0.03
+  }
+  physics Physics {
+  }
+  linearVelocity 2.125147422752514e-06 -4.773462929366903e-07 -5.835544215140901e-13
+  angularVelocity 1.60062394210292e-05 7.125983613902204e-05 8.44931453768668e-10
+}
+Solid {
+  translation 4 -5.145473101646097e-18 0.03281610302769164
+  rotation 0.9999776836271167 -0.006680737066049961 -5.707312941608534e-18 1.7852861994144045e-16
+  children [
+    Transform {
+      translation -0.035 -0.035 -0.035
+      scale 0.001 0.001 0.001
+      children [
+        DEF tennis_ball Shape {
+          appearance PBRAppearance {
+            baseColor 0 1 0
+            roughness 1
+            metalness 0
+          }
+          geometry Mesh {
+            url [
+              "../resources/tennis_ball.obj"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+  name "ball(5)"
+  boundingObject Sphere {
+    radius 0.03
+  }
+  physics Physics {
+  }
+  linearVelocity -1.7023966102868928e-19 -7.024239296743195e-18 6.366507630963589e-17
+  angularVelocity 2.5574438392265926e-16 1.409170783019214e-17 2.6382791114927495e-34
+}
+Solid {
+  translation -4 -4 0.03281610302769164
+  rotation 0.8806687748121309 -0.47373252904028024 -5.083739119121024e-18 3.09357676753462e-18
+  children [
+    Transform {
+      translation -0.035 -0.035 -0.035
+      scale 0.001 0.001 0.001
+      children [
+        DEF tennis_ball Shape {
+          appearance PBRAppearance {
+            baseColor 0 1 0
+            roughness 1
+            metalness 0
+          }
+          geometry Mesh {
+            url [
+              "../resources/tennis_ball.obj"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+  name "ball(6)"
+  boundingObject Sphere {
+    radius 0.03
+  }
+  physics Physics {
+  }
+  linearVelocity -9.508392629530959e-20 1.1360550131434047e-19 4.077435435341529e-17
+  angularVelocity 9.422392598227912e-18 7.865789066247885e-18 7.318368303651835e-52
+}
+Solid {
+  translation 1.2015770918818778e-17 -4 0.03281610302769164
+  rotation -0.00944559852284274 0.9999553893392171 -2.2995425300608537e-18 4.0967693751339904e-16
+  children [
+    Transform {
+      translation -0.035 -0.035 -0.035
+      scale 0.001 0.001 0.001
+      children [
+        DEF tennis_ball Shape {
+          appearance PBRAppearance {
+            baseColor 0 1 0
+            roughness 1
+            metalness 0
+          }
+          geometry Mesh {
+            url [
+              "../resources/tennis_ball.obj"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+  name "ball(7)"
+  boundingObject Sphere {
+    radius 0.03
+  }
+  physics Physics {
+  }
+  linearVelocity -5.052204737555642e-19 -7.225144351985118e-20 -6.476463927292064e-17
+  angularVelocity -5.9740396381476066e-18 5.127434292277953e-18 2.696010371372822e-34
+}
+Solid {
+  translation 4 -4 0.03281610302769164
+  rotation 0.8806687748121309 -0.47373252904028024 -5.083739119121024e-18 3.09357676753462e-18
+  children [
+    Transform {
+      translation -0.035 -0.035 -0.035
+      scale 0.001 0.001 0.001
+      children [
+        DEF tennis_ball Shape {
+          appearance PBRAppearance {
+            baseColor 1 0 0
+            roughness 1
+            metalness 0
+          }
+          geometry Mesh {
+            url [
+              "../resources/tennis_ball.obj"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+  name "ball(8)"
+  boundingObject Sphere {
+    radius 0.03
+  }
+  physics Physics {
+  }
+  linearVelocity -9.508392629530959e-20 1.1360550131434047e-19 4.077435435341529e-17
+  angularVelocity 9.422392598227912e-18 7.865789066247885e-18 7.318368303651835e-52
+}
+Solid {
+  translation 0.00023229365504389825 -3.128756598212565e-08 0.0004936206055383164
+  rotation 0.4771603488581128 0.8787936021312435 -0.006309225847741281 1.3335434577506482e-07
+  children [
+    DEF plachta Shape {
+      appearance PBRAppearance {
+        metalness 0
+      }
+      geometry Box {
+        size 1 1 0.005
+      }
+    }
+  ]
+  name "plachta_1"
+  boundingObject USE plachta
+  physics Physics {
+  }
+  linearVelocity 8.118140772720227e-13 -8.981027503141553e-14 2.2957655115478003e-17
+  angularVelocity 8.472582504209054e-11 4.145983278296455e-10 8.250876337556537e-18
+}
+Solid {
+  translation 4 6.114293558081254e-20 0.0004936206055383321
+  rotation 0.5635178827898051 -0.8261018534456636 -0.0018230495700768993 5.845024180815233e-18
+  children [
+    Shape {
+      appearance PBRAppearance {
+        metalness 0
+      }
+      geometry Box {
+        size 1 1 0.005
+      }
+    }
+  ]
+  name "plachta_2"
+  boundingObject USE plachta
+  physics Physics {
+  }
+  linearVelocity -6.508594633896033e-20 2.420859591898965e-19 3.106285123220336e-17
+  angularVelocity -2.2252040172879654e-17 -5.870943003385023e-17 -1.6166817534160032e-19
+}
+Solid {
+  translation 4 4 0.0004936206055383324
+  rotation 0.8425731520539563 -0.5385719798055132 0.003272003397086419 7.059222611180316e-18
+  children [
+    Shape {
+      appearance PBRAppearance {
+        metalness 0
+      }
+      geometry Box {
+        size 1 1 0.005
+      }
+    }
+  ]
+  name "plachta_3"
+  boundingObject USE plachta
+  physics Physics {
+  }
+  linearVelocity -1.1615325117179662e-19 1.3758008359568087e-19 2.9890907257635115e-17
+  angularVelocity 6.482631470401805e-17 -1.3704704166842432e-16 -3.2336919862047374e-19
+}
+Solid {
+  translation 1.0681610334281925e-20 4 0.0004936206055383309
+  rotation 0.9583453708470542 -0.28550427571068937 0.007839561654632694 5.438247241269061e-18
+  children [
+    Shape {
+      appearance PBRAppearance {
+        metalness 0
+      }
+      geometry Box {
+        size 1 1 0.005
+      }
+    }
+  ]
+  name "plachta_4"
+  boundingObject USE plachta
+  physics Physics {
+  }
+  linearVelocity -3.070018280053064e-19 8.536109520353927e-20 -1.428166966714092e-17
+  angularVelocity 6.381407554113381e-17 -1.1994410757371645e-16 -5.3868118367456836e-20
+}
+Robot {
+  name "ros2_sim_manager"
+  controller "<extern>"
+  supervisor TRUE
+}
+Solid {
+  translation 1.0681610334281925e-20 -4 0.0004936206055383309
+  rotation 0.9583453708470542 -0.28550427571068937 0.007839561654632694 5.438247241269061e-18
+  children [
+    Shape {
+      appearance PBRAppearance {
+        metalness 0
+      }
+      geometry Box {
+        size 1 1 0.005
+      }
+    }
+  ]
+  name "plachta_5"
+  boundingObject USE plachta
+  physics Physics {
+  }
+  linearVelocity -3.070018280053064e-19 8.536109520353927e-20 -1.428166966714092e-17
+  angularVelocity 6.381407554113381e-17 -1.1994410757371645e-16 -5.3868118367456836e-20
+}
+Solid {
+  translation -4 -4 0.0004936206055383324
+  rotation 0.8425731520539563 -0.5385719798055132 0.003272003397086419 7.059222611180316e-18
+  children [
+    Shape {
+      appearance PBRAppearance {
+        metalness 0
+      }
+      geometry Box {
+        size 1 1 0.005
+      }
+    }
+  ]
+  name "plachta_6"
+  boundingObject USE plachta
+  physics Physics {
+  }
+  linearVelocity -1.1615325117179662e-19 1.3758008359568087e-19 2.9890907257635115e-17
+  angularVelocity 6.482631470401805e-17 -1.3704704166842432e-16 -3.2336919862047374e-19
+}
+Solid {
+  translation -4 6.114293558081254e-20 0.0004936206055383321
+  rotation 0.5635178827898051 -0.8261018534456636 -0.0018230495700768993 5.845024180815233e-18
+  children [
+    Shape {
+      appearance PBRAppearance {
+        metalness 0
+      }
+      geometry Box {
+        size 1 1 0.005
+      }
+    }
+  ]
+  name "plachta_7"
+  boundingObject USE plachta
+  physics Physics {
+  }
+  linearVelocity -6.508594633896033e-20 2.420859591898965e-19 3.106285123220336e-17
+  angularVelocity -2.2252040172879654e-17 -5.870943003385023e-17 -1.6166817534160032e-19
+}
+Solid {
+  translation -4 4 0.0004936206055383324
+  rotation 0.8425731520539563 -0.5385719798055132 0.003272003397086419 7.059222611180316e-18
+  children [
+    Shape {
+      appearance PBRAppearance {
+        metalness 0
+      }
+      geometry Box {
+        size 1 1 0.005
+      }
+    }
+  ]
+  name "plachta_8"
+  boundingObject USE plachta
+  physics Physics {
+  }
+  linearVelocity -1.1615325117179662e-19 1.3758008359568087e-19 2.9890907257635115e-17
+  angularVelocity 6.482631470401805e-17 -1.3704704166842432e-16 -3.2336919862047374e-19
+}
+Solid {
+  translation 4 -4 0.0004936206055383324
+  rotation 0.8425731520539563 -0.5385719798055132 0.003272003397086419 7.059222611180316e-18
+  children [
+    Shape {
+      appearance PBRAppearance {
+        metalness 0
+      }
+      geometry Box {
+        size 1 1 0.005
+      }
+    }
+  ]
+  name "plachta_9"
+  boundingObject USE plachta
+  physics Physics {
+  }
+  linearVelocity -1.1615325117179662e-19 1.3758008359568087e-19 2.9890907257635115e-17
+  angularVelocity 6.482631470401805e-17 -1.3704704166842432e-16 -3.2336919862047374e-19
+}
+DEF Iris Iris {
+  translation 0.07024949999999996 1.45039 0.05441027786839505
+  rotation -0.9222025652328377 -0.3864282907047179 0.014683488039416772 1.4877240436545985e-17
+  controller "ardupilot_sitl_controller"
+  controllerArgs [
+    "--motors"
+    "m1_motor, m2_motor, m3_motor, m4_motor"
+    "--camera"
+    "camera"
+    "--camera-port"
+    "5599"
+  ]
+  extensionSlot [
+    DEF camera Camera {
+      translation 0.05 0 0.05
+      rotation 0 1 0 0
+      width 640
+      height 480
+    }
+  ]
+}

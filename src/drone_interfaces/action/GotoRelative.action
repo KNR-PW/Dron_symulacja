@@ -1,0 +1,7 @@
+float32 north
+float32 east
+float32 down
+---
+int8 result
+---
+float32 distance

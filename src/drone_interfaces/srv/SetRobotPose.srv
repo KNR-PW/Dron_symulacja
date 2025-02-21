@@ -1,0 +1,6 @@
+string robot_def
+geometry_msgs/Point translation
+AxisAngle rotation
+bool reset_physics
+---
+int8 result

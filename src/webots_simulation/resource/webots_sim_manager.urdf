@@ -1,0 +1,6 @@
+<?xml version="1.0" ?>
+<robot name="Webots Sim Manager">
+    <webots>
+        <plugin type="webots_simulation.webots_sim_manager.WebotsSimManager" />
+    </webots>
+</robot>
