@@ -27,12 +27,17 @@ docker image pull staskolo/knr-drone-sim:latest
 ```
 
 ### 4. Start the Docker Container
-Navigate to the `docker` directory and execute the setup script (running container without gpu isn't supported yet):
+Navigate to the `docker` directory and execute the setup script: \
+If your host has nvidia gpu:
 ```bash
 cd docker
 ./setup_container_gpu.sh staskolo/knr-drone-sim:latest
 ```
-
+If your host doesnt have nvidia gpu:
+```bash
+cd docker
+./setup_container_cpu.sh staskolo/knr-drone-sim:latest
+```
 Once executed, you will be attached to the newly created Docker container.
 
 ### 5. ROS2 Workspace and Build Process
