@@ -1,6 +1,14 @@
 xhost +local:docker
 
-echo creating new container with name: knr_drone
+# Check if a Docker image is provided
+if [ -z "$1" ]; then
+    echo "Error: No Docker image specified."
+    echo "Usage: $0 <docker-image-name>"
+    exit 1
+fi
+
+echo "using docker image: $1"
+echo "creating new container with name: knr_drone"
 
 docker run --gpus all \
     --shm-size=1g \
@@ -11,4 +19,4 @@ docker run --gpus all \
     --name knr_drone \
     -v ./../src:/ros_ws/src:rw \
     -it \
-    stas/rostest:9
+    $1
