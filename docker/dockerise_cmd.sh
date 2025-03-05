@@ -7,4 +7,4 @@ fi
 
 echo "running command in knr_drone container: $1"
 
-docker exec -it knr_drone bash -c "$1"
+docker exec -it knr_drone bash -c "source /opt/ros/humble/setup.bash && $1"
