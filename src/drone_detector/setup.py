@@ -38,7 +38,8 @@ setup(
             "detector=drone_detector.detector:main",
             "detection_subscriber=drone_detector.detection_subscriber:main",
             "detector_server=drone_detector.detector_server:main",
-            "detection_client=drone_detector.detection_client:main"
+            "detection_client=drone_detector.detection_client:main",
+            "aruco_detector=drone_detector.aruco_detector:main",
         ],
     },
 )
