@@ -1,4 +1,4 @@
-#VRML_SIM R2023b utf8
+#VRML_SIM R2025a utf8
 
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackground.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
@@ -7,6 +7,7 @@ EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/project
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/factory/pipes/protos/PipeSection.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/factory/manhole/protos/SquareManhole.proto"
 IMPORTABLE EXTERNPROTO "../protos/Iris.proto"
+IMPORTABLE EXTERNPROTO "../protos/ArucoMarker.proto"
 
 WorldInfo {
   title "Iris Mines"
@@ -14,8 +15,8 @@ WorldInfo {
   FPS 20
 }
 Viewpoint {
-  orientation 0.10264123808602478 -0.7648124131744727 -0.6360241732028804 5.867275660921915
-  position -18.208871478718525 -8.190009200156597 5.8116036415607315
+  orientation 0.21296866703677064 -0.7450865730456504 -0.6320524863709263 5.433777728810489
+  position -6.415380922398103 -12.179342878547722 8.103230170609013
   follow "Iris"
   followSmoothness 0.01
 }
@@ -541,4 +542,8 @@ DEF Iris Iris {
       height 480
     }
   ]
+}
+ArucoMarker {
+  translation 2 -7 0
+  size 0.5
 }

@@ -109,13 +109,16 @@ class DroneHandler(Node):
     def goto_position_target_local_ned(self, north, east, down=-1):
         if down == -1:
             down = self.vehicle.location.local_frame.down
+
+        type_mask = 0b0000011111000000
+        # type_mask = 0b0000011111111000
         msg = self.vehicle.message_factory.set_position_target_local_ned_encode(
             0,       # time_boot_ms (not used)
             0, 0,    # target system, target component
             mavutil.mavlink.MAV_FRAME_LOCAL_NED, # frame
-            0b0000011111111000, # type_mask (only positions enabled)
+            type_mask, # type_mask (only positions enabled)
             north, east, down, # x, y, z positions (or North, East, Down in the MAV_FRAME_BODY_NED frame
-            0, 0, 0, # x, y, z velocity in m/s  (not used)
+            0.001, 0.001, 0.001, # x, y, z velocity in m/s  (not used)
             0, 0, 0, # x, y, z acceleration (not supported yet, ignored in GCS_Mavlink)
             0, 0)    # yaw, yaw_rate (not supported yet, ignored in GCS_Mavlink)
         # send command to vehicle

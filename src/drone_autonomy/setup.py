@@ -23,6 +23,7 @@ setup(
             "goto_detection_client=drone_autonomy.goto_detection_client:main",
             "goto_detection_group=drone_autonomy.goto_detection_group:main",
             "mission=drone_autonomy.mission:main",
+            "fly_to_aruco_example=drone_autonomy.fly_to_aruco_example:main",
         ],
     },
 )
