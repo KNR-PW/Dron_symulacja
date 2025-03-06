@@ -35,11 +35,10 @@ class ImagePublisher(Node):
         # Create the timer
         self.timer = self.create_timer(timer_period, self.timer_callback)
 
-        # Create a VideoCapture object
-        # The argument '0' gets the default webcam.
-        self.img = cv2.imread('/home/stas/Dron/drone_photos/drone_photosdrone_photo111.jpg', cv2.IMREAD_COLOR)
-        self.cap = cv2.VideoCapture(
-            "/home/stas/Dron/KNRDron/rosDron/install/drone_detector/lib/drone_detector/car_counting.mp4")
+        # self.img = cv2.imread('/home/stas/Dron/drone_photos/drone_photosdrone_photo111.jpg', cv2.IMREAD_COLOR)
+        video_file = "/home/stas/Videos/Screencasts/aruco_website.mp4"
+        # video_file = "/home/stas/Dron/KNRDron/rosDron/install/drone_detector/lib/drone_detector/car_counting.mp4"
+        self.cap = cv2.VideoCapture(video_file)
 
         # Used to convert between ROS and OpenCV images
         self.br = CvBridge()
@@ -61,16 +60,17 @@ class ImagePublisher(Node):
             # The 'cv2_to_imgmsg' method converts an OpenCV
             # image to a ROS 2 image message
             frame = cv2.resize(frame, (640, 480), interpolation=cv2.INTER_LINEAR)
+            self.img = frame
             # self.publisher_.publish(self.br.cv2_to_imgmsg(frame))
 
             # Display the message on the console
             self.get_logger().info('Publishing video frame')
         else:
             self.cap.release()
-            self.cap = cv2.VideoCapture(
-                "/home/stas/Dron/KNRDron/rosDron/install/drone_detector/lib/drone_detector/car_counting.mp4")
+            self.cap = cv2.VideoCapture(video_file)
+            return
         img = cv2.resize(self.img, (640, 480), interpolation=cv2.INTER_LINEAR)
-        img = cv2.blur(img, (10, 10))  
+        # img = cv2.blur(img, (10, 10))  
         self.publisher_.publish(self.br.cv2_to_imgmsg(img))
 
 
