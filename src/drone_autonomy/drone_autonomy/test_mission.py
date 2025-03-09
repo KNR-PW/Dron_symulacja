@@ -7,7 +7,7 @@ from dronekit import connect, VehicleMode, LocationGlobal, LocationLocal, Locati
 # from detection import Detection
 from drone_interfaces.msg import DetectionMsg, DetectionsList
 from drone_interfaces.srv import DetectTrees, GetLocationRelative, GetAttitude, SetYaw, SetMode
-from drone_interfaces.action import GotoRelative, GotoGlobal, Shoot, Arm, Takeoff
+from drone_interfaces.action import GotoRelative, GotoGlobal, Shoot, Arm, Takeoff, Yaw
 from std_msgs.msg import Int32MultiArray
 import time
 from rclpy.action import ActionClient
@@ -61,10 +61,11 @@ class Mission(Node):
         self.shoot_action_client = ActionClient(self, Shoot, "shoot")
         self.takeoff_action_client = ActionClient(self, Takeoff, 'takeoff')
         self.arm_action_client = ActionClient(self, Arm, 'Arm')
-        self.yaw_cli = self.create_client(SetYaw, "set_yaw")
+        self.yaw_action_client = ActionClient(self, Yaw, 'Set_yaw')
+        #self.yaw_cli = self.create_client(SetYaw, "set_yaw")
         self.mode_cli = self.create_client(SetMode, 'set_mode')
-        while not self.yaw_cli.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info("set yaw service not available, waiting again...")
+        #while not self.yaw_cli.wait_for_service(timeout_sec=1.0):
+        #    self.get_logger().info("set yaw service not available, waiting again...")
         self.get_logger().info("Mission node created")
         self.state = "OK"
         altit = 10
@@ -495,6 +496,29 @@ class Mission(Node):
         rclpy.spin_until_future_complete(self, mode_future, timeout_sec=10)
         self.get_logger().info("Mode LAND request sucesfull")      
 
+    def set_yaw_action(self,yaw: float):
+        self.state = "BUSY"
+        self.get_logger().info("Sending set yaw action goal")
+        goal_msg = Yaw.Goal()
+        goal_msg.yaw = yaw
+
+        while not self.yaw_action_client.wait_for_server():
+            self.get_logger().info("waiting for yaw server...")
+        
+        self.send_goal_future = self.yaw_action_client.send_goal_async(goal_msg)
+        self.send_goal_future.add_done_callback(self.set_yaw_response)
+        self.get_logger().info("Yaw action sent")
+        self.wait_busy()
+
+    def set_yaw_response(self, future):
+        self.get_logger().info("Yaw response callback")
+        goal_handle = future.result()
+        self.get_result_future = goal_handle.get_result_async()
+        self.get_result_future.add_done_callback(self.set_yaw_result_callback)
+    
+    def set_yaw_result_callback(self, kamil):
+        self.get_logger().info("Yaw  action finished")
+        self.state = "OK"
 
 def main(args=None):
     rclpy.init(args=args)
@@ -502,6 +526,7 @@ def main(args=None):
     mission = Mission()
     mission.arm_and_takeoff()
     mission.get_yaw()
+    mission.set_yaw_action(3.14)
     #mission.send_set_yaw(3.14)
    #mission.scan_area()
     #mission.photos_tour()

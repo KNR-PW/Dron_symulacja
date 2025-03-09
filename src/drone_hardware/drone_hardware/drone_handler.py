@@ -10,7 +10,7 @@ from rclpy.node import Node
 from rclpy.action import ActionServer
 
 from drone_interfaces.srv import GetAttitude, GetLocationRelative, SetServo, SetYaw, SetMode
-from drone_interfaces.action import GotoRelative, GotoGlobal, Arm, Takeoff, Shoot
+from drone_interfaces.action import GotoRelative, GotoGlobal, Arm, Takeoff, Shoot, Yaw
 
 import haversine as hv
 class DroneHandler(Node):
@@ -26,7 +26,7 @@ class DroneHandler(Node):
         self.attitude = self.create_service(GetAttitude, 'get_attitude', self.get_attitude_callback)
         self.gps = self.create_service(GetLocationRelative, 'get_location_relative', self.get_location_relative_callback)
         self.servo = self.create_service(SetServo, 'set_servo', self.set_servo_callback)
-        self.yaw = self.create_service(SetYaw, 'set_yaw', self.set_yaw_callback)
+        #self.yaw = self.create_service(SetYaw, 'set_yaw', self.set_yaw_callback)
         self.mode = self.create_service(SetMode, 'set_mode',self.set_mode_callback)
         
         ## DECLARE ACTIONS
@@ -35,6 +35,7 @@ class DroneHandler(Node):
         self.arm = ActionServer(self,Arm, 'Arm',self.arm_callback)
         self.takeoff = ActionServer(self, Takeoff, 'takeoff',self.takeoff_callback)
         self.shoot = ActionServer(self, Shoot, 'shoot', self.shoot_callback)
+        self.yaw = ActionServer(self, Yaw, 'Set_yaw', self.yaw_callback)
 
         ## DRONE MEMBER VARIABLES
         self.state = "BUSY"
@@ -369,6 +370,31 @@ class DroneHandler(Node):
         gps_msg = GPSPos()
         GPSPos.gps_position = vehicle.location.local_frame
         self.gps_publisher.piblish(GPSPos)
+
+    def yaw_callback(self, goal_handle):
+        self.get_logger().info(f'-- Set yaw action registered. --')
+        setted_yaw = goal_handle.request.yaw
+        actual_yaw = self.vehicle.attitude.yaw
+
+        self.state = "BUSY"
+        self.set_yaw(setted_yaw)
+
+        feefback_msg = Yaw.Feedback()
+        feefback_msg.angle = abs(setted_yaw-actual_yaw)
+        self.get_logger().info(f"Angle remainig: {feefback_msg.angle}")
+
+        while feefback_msg.angle > 0.5:
+            feefback_msg.angle = abs(setted_yaw-actual_yaw)
+            actual_yaw = self.vehicle.attitude.yaw
+            self.get_logger().info(f"Angle remainig: {feefback_msg.angle}")
+            time.sleep(1)
+        self.get_logger().info(f"Angle remainig: {feefback_msg.angle}")
+        goal_handle.succeed()
+        self.state = "OK"
+        result = Yaw.Result()
+        result.result = 1
+
+        return result
 
 def main():
     rclpy.init()
