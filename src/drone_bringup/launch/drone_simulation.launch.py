@@ -31,6 +31,10 @@ def generate_launch_description():
     drone_handler_node = Node(
             package='drone_hardware',
             executable='drone_handler',
+            parameters=[
+                {'fc_ip': 'tcp:127.0.0.1:5762'}
+            ]
+
         )
 
     # Delay running drone_handler to wain for  webots init

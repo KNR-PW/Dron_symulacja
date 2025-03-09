@@ -18,6 +18,10 @@ class DroneHandler(Node):
         super().__init__('drone_handler')
         self.vehicle = None
 
+        ## DECLARE PARAMETERS
+        #---------------------'  give here ip to flight controler   '
+        self.declare_parameter('fc_ip', '127.0.0.1:14550')
+
         ## DECLARE SERVICES
         self.attitude = self.create_service(GetAttitude, 'get_attitude', self.get_attitude_callback)
         self.gps = self.create_service(GetLocationRelative, 'get_location_relative', self.get_location_relative_callback)
@@ -47,8 +51,8 @@ class DroneHandler(Node):
         # connection_string = None
         
         # WEBOTS
-        connection_string = 'tcp:127.0.0.1:5762'
-
+        connection_string = self.get_parameter('fc_ip').get_parameter_value().string_value
+        #connection_string = 'tcp:127.0.0.1:5762'
         sitl = None
 
         if not connection_string:
@@ -106,7 +110,7 @@ class DroneHandler(Node):
         return result
 
     ## INTERNAL HELPER METHODS
-    def goto_position_target_local_ned(self, north, east, down=-1):
+    def goto_position_target_local_ned( self, north, east, down=-1):
         if down == -1:
             down = self.vehicle.location.local_frame.down
 
@@ -118,7 +122,7 @@ class DroneHandler(Node):
             mavutil.mavlink.MAV_FRAME_LOCAL_NED, # frame
             type_mask, # type_mask (only positions enabled)
             north, east, down, # x, y, z positions (or North, East, Down in the MAV_FRAME_BODY_NED frame
-            0.001, 0.001, 0.001, # x, y, z velocity in m/s  (not used)
+            0, 0, 0, # x, y, z velocity in m/s  (not used)
             0, 0, 0, # x, y, z acceleration (not supported yet, ignored in GCS_Mavlink)
             0, 0)    # yaw, yaw_rate (not supported yet, ignored in GCS_Mavlink)
         # send command to vehicle
@@ -248,6 +252,7 @@ class DroneHandler(Node):
         north = self.vehicle.location.local_frame.north + goal_handle.request.north
         east = self.vehicle.location.local_frame.east + goal_handle.request.east
         down = self.vehicle.location.local_frame.down + goal_handle.request.down
+        #velocity = goal_handle.request.velocity
         destination = LocationLocal(north, east, down)
 
         self.get_logger().info(f'North: {destination.north}')
