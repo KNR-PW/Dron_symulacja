@@ -1,4 +1,5 @@
-xhost +local:docker
+echo "xhost +local:docker" >> ~/.bashrc
+source ~/.bashrc
 
 # Check if a Docker image is provided
 if [ -z "$1" ]; then
