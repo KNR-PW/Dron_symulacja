@@ -51,18 +51,15 @@ class DroneHandler(Node):
 
         sitl = None
 
-        if not connection_string:
-            self.get_logger().info("Start simulator (SITL)")
-            import dronekit_sitl
-            sitl = dronekit_sitl.start_default()
-            connection_string = sitl.connection_string()
 
         baud_rate = 57600
         self.get_logger().info(f"Connectiong with copter at {connection_string}...")
         # self.vehicle = connect(connection_string, baud=baud_rate, wait_ready=False) #doesnt work with wait_ready=True
         while self.vehicle is None:
             try:
-                self.vehicle = connect(connection_string, wait_ready=False) #doesnt work with wait_ready=True
+                # self.vehicle = connect(connection_string, wait_ready=False) #doesnt work with wait_ready=True
+                # RPI USB-C
+                self.vehicle = vehicle = connect('/dev/ttyACM0', baud=115200, wait_ready=True)
             except Exception as e:
                 self.get_logger().info(f"Connecting failed with error: {e}")
                 self.get_logger().info("Retrying to connect in {3} seconds...")
