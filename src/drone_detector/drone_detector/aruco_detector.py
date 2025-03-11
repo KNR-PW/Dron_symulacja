@@ -50,7 +50,7 @@ class ArucoDetector(Node):
                 aruco_marker.marker_id = int(marker_id)
                 aruco_marker.corners = marker_corners
                 aruco_markers_list.aruco_markers.append(aruco_marker)
-
+                self.get_logger().info(f'Marker ID: {marker_id}, corners: {marker_corners}')
         self.publisher.publish(aruco_markers_list)
 
 
