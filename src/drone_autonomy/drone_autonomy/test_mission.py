@@ -532,7 +532,7 @@ def main(args=None):
 
     mission.set_yaw_action(+3.14+3.14/2)
 
-    mission.set_yaw_action(-3.14-3.14/2)
+    #mission.set_yaw_action(-3.14-3.14/2)
 
     #mission.send_set_yaw(3.14)
    #mission.scan_area()

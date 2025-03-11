@@ -63,9 +63,11 @@ class DroneHandler(Node):
         # self.vehicle = connect(connection_string, baud=baud_rate, wait_ready=False) #doesnt work with wait_ready=True
         while self.vehicle is None:
             try:
-                # self.vehicle = connect(connection_string, wait_ready=False) #doesnt work with wait_ready=True
+                if connection_string ==  'tcp:127.0.0.1:5762':
+                    self.vehicle = connect(connection_string, wait_ready=False) #doesnt work with wait_ready=True
+                else:
                 # RPI USB-C
-                self.vehicle = vehicle = connect('/dev/ttyACM0', baud=115200, wait_ready=True)
+                    self.vehicle = vehicle = connect('/dev/ttyACM0', baud=115200, wait_ready=True)
             except Exception as e:
                 self.get_logger().info(f"Connecting failed with error: {e}")
                 self.get_logger().info("Retrying to connect in {3} seconds...")
