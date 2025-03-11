@@ -39,6 +39,7 @@ class DroneHandler(Node):
 
         ## DRONE MEMBER VARIABLES
         self.state = "BUSY"
+        self.__relative = False
 
         ##CONNECT TO COPTER
         # parser = argparse.ArgumentParser(description='commands')
@@ -115,15 +116,15 @@ class DroneHandler(Node):
         if down == -1:
             down = self.vehicle.location.local_frame.down
 
-        type_mask = 0b0000011111000000
-        # type_mask = 0b0000011111111000
+        #type_mask = 0b0000011111000000
+        type_mask = 0b0000011111111000
         msg = self.vehicle.message_factory.set_position_target_local_ned_encode(
             0,       # time_boot_ms (not used)
             0, 0,    # target system, target component
             mavutil.mavlink.MAV_FRAME_LOCAL_NED, # frame
             type_mask, # type_mask (only positions enabled)
             north, east, down, # x, y, z positions (or North, East, Down in the MAV_FRAME_BODY_NED frame
-            0, 0, 0, # x, y, z velocity in m/s  (not used)
+            5, 5, 5, # x, y, z velocity in m/s  (not used)
             0, 0, 0, # x, y, z acceleration (not supported yet, ignored in GCS_Mavlink)
             0, 0)    # yaw, yaw_rate (not supported yet, ignored in GCS_Mavlink)
         # send command to vehicle
@@ -154,9 +155,8 @@ class DroneHandler(Node):
         # send command to vehicle
         self.vehicle.send_mavlink(msg)
 
-    def set_yaw(self, yaw, relative=False):
-        if yaw<0:
-            yaw+=6.283185
+    def set_yaw(self, yaw, cw ,relative=False):
+        
         yaw = yaw / 3.141592 * 180
         if abs(self.vehicle.attitude.yaw - yaw) > 3.141592:
             dir = 1 if self.vehicle.attitude.yaw < yaw else -1
@@ -173,7 +173,7 @@ class DroneHandler(Node):
             0,           #confirmation
             yaw,         # param 1, yaw in degrees
             0,           # param 2, yaw speed deg/s
-            1,           # param 3, direction -1 ccw, 1 cw
+            cw,           # param 3, direction -1 ccw, 1 cw
             is_relative, # param 4, relative offset 1, absolute angle 0
             0, 0, 0)     # param 5 ~ 7 not used
         # send command to vehicle
@@ -371,23 +371,51 @@ class DroneHandler(Node):
         GPSPos.gps_position = vehicle.location.local_frame
         self.gps_publisher.piblish(GPSPos)
 
+    def calc_yaw(self, yaw: float, actual_yaw: float)->float:
+        if not self.__relative:
+            return yaw
+        return yaw+actual_yaw
+
+    def calc_remaning_yaw(self, yaw: float, actual_yaw: float, cw)->float:
+        if cw > 0:
+            if actual_yaw < 0:
+                actual_yaw = 2*math.pi + actual_yaw
+            return abs(yaw-actual_yaw)
+        if actual_yaw < 0:
+            actual_yaw = 2*math.pi - actual_yaw
+        return abs(-yaw+actual_yaw)
+
+
     def yaw_callback(self, goal_handle):
         self.get_logger().info(f'-- Set yaw action registered. --')
+        self.__relative = goal_handle.request.relative
         setted_yaw = goal_handle.request.yaw
         actual_yaw = self.vehicle.attitude.yaw
+        cw = 1
+
+
+        requested_yaw = self.calc_yaw(setted_yaw, actual_yaw)
+
+        if requested_yaw<0:
+            requested_yaw+=6.283185
+
+        if setted_yaw < 0:
+            setted_yaw = -setted_yaw
+            cw = -1
 
         self.state = "BUSY"
-        self.set_yaw(setted_yaw)
+        self.set_yaw(requested_yaw, cw)
 
         feefback_msg = Yaw.Feedback()
-        feefback_msg.angle = abs(setted_yaw-actual_yaw)
+        feefback_msg.angle = self.calc_remaning_yaw(requested_yaw, actual_yaw, cw)
         self.get_logger().info(f"Angle remainig: {feefback_msg.angle}")
 
         while feefback_msg.angle > 0.5:
-            feefback_msg.angle = abs(setted_yaw-actual_yaw)
+            feefback_msg.angle = self.calc_remaning_yaw(requested_yaw, actual_yaw, cw)
             actual_yaw = self.vehicle.attitude.yaw
             self.get_logger().info(f"Angle remainig: {feefback_msg.angle}")
             time.sleep(1)
+
         self.get_logger().info(f"Angle remainig: {feefback_msg.angle}")
         goal_handle.succeed()
         self.state = "OK"

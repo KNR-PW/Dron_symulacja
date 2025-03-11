@@ -501,6 +501,7 @@ class Mission(Node):
         self.get_logger().info("Sending set yaw action goal")
         goal_msg = Yaw.Goal()
         goal_msg.yaw = yaw
+        goal_msg.relative = True
 
         while not self.yaw_action_client.wait_for_server():
             self.get_logger().info("waiting for yaw server...")
@@ -527,10 +528,16 @@ def main(args=None):
     mission.arm_and_takeoff()
     mission.get_yaw()
     mission.set_yaw_action(3.14)
+    mission.set_yaw_action(-3.14)
+
+    mission.set_yaw_action(+3.14+3.14/2)
+
+    mission.set_yaw_action(-3.14-3.14/2)
+
     #mission.send_set_yaw(3.14)
    #mission.scan_area()
     #mission.photos_tour()
-    mission.rtl_and_land()
+    mission.land()
 
     end = time.time()
     mission.get_logger().info(f"Time taken (min): {(end-start)/60}")

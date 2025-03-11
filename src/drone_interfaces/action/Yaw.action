@@ -1,4 +1,5 @@
 float32 yaw
+bool relative
 ---
 int8 result
 ---
