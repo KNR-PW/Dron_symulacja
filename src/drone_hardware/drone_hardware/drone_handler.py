@@ -10,7 +10,7 @@ from rclpy.node import Node
 from rclpy.action import ActionServer
 
 from drone_interfaces.srv import GetAttitude, GetLocationRelative, SetServo, SetYaw, SetMode
-from drone_interfaces.action import GotoRelative, GotoGlobal, Arm, Takeoff, Shoot
+from drone_interfaces.action import GotoRelative, GotoGlobal, Arm, Takeoff, Shoot, SetYawAction
 
 import haversine as hv
 class DroneHandler(Node):
@@ -18,11 +18,15 @@ class DroneHandler(Node):
         super().__init__('drone_handler')
         self.vehicle = None
 
+        ## DECLARE PARAMETERS
+        #---------------------'  give here ip to flight controler   '
+        self.declare_parameter('fc_ip', '/dev/ttyACM0')
+
         ## DECLARE SERVICES
         self.attitude = self.create_service(GetAttitude, 'get_attitude', self.get_attitude_callback)
         self.gps = self.create_service(GetLocationRelative, 'get_location_relative', self.get_location_relative_callback)
         self.servo = self.create_service(SetServo, 'set_servo', self.set_servo_callback)
-        self.yaw = self.create_service(SetYaw, 'set_yaw', self.set_yaw_callback)
+        #self.yaw = self.create_service(SetYaw, 'set_yaw', self.set_yaw_callback)
         self.mode = self.create_service(SetMode, 'set_mode',self.set_mode_callback)
         
         ## DECLARE ACTIONS
@@ -31,9 +35,11 @@ class DroneHandler(Node):
         self.arm = ActionServer(self,Arm, 'Arm',self.arm_callback)
         self.takeoff = ActionServer(self, Takeoff, 'takeoff',self.takeoff_callback)
         self.shoot = ActionServer(self, Shoot, 'shoot', self.shoot_callback)
+        self.yaw = ActionServer(self, SetYawAction, 'Set_yaw', self.yaw_callback)
 
         ## DRONE MEMBER VARIABLES
         self.state = "BUSY"
+        self.__relative = False
 
         ##CONNECT TO COPTER
         # parser = argparse.ArgumentParser(description='commands')
@@ -47,8 +53,8 @@ class DroneHandler(Node):
         # connection_string = None
         
         # WEBOTS
-        connection_string = 'tcp:127.0.0.1:5762'
-
+        connection_string = self.get_parameter('fc_ip').get_parameter_value().string_value
+        #connection_string = 'tcp:127.0.0.1:5762'
         sitl = None
 
 
@@ -57,9 +63,8 @@ class DroneHandler(Node):
         # self.vehicle = connect(connection_string, baud=baud_rate, wait_ready=False) #doesnt work with wait_ready=True
         while self.vehicle is None:
             try:
-                # self.vehicle = connect(connection_string, wait_ready=False) #doesnt work with wait_ready=True
                 # RPI USB-C
-                self.vehicle = vehicle = connect('/dev/ttyACM0', baud=115200, wait_ready=True)
+                self.vehicle = connect(connection_string, baud=115200, wait_ready=True)
             except Exception as e:
                 self.get_logger().info(f"Connecting failed with error: {e}")
                 self.get_logger().info("Retrying to connect in {3} seconds...")
@@ -103,19 +108,19 @@ class DroneHandler(Node):
         return result
 
     ## INTERNAL HELPER METHODS
-    def goto_position_target_local_ned(self, north, east, down=-1):
+    def goto_position_target_local_ned( self, north, east, down=-1):
         if down == -1:
             down = self.vehicle.location.local_frame.down
 
-        type_mask = 0b0000011111000000
-        # type_mask = 0b0000011111111000
+        #type_mask = 0b0000011111000000
+        type_mask = 0b0000011111111000
         msg = self.vehicle.message_factory.set_position_target_local_ned_encode(
             0,       # time_boot_ms (not used)
             0, 0,    # target system, target component
             mavutil.mavlink.MAV_FRAME_LOCAL_NED, # frame
             type_mask, # type_mask (only positions enabled)
             north, east, down, # x, y, z positions (or North, East, Down in the MAV_FRAME_BODY_NED frame
-            0.001, 0.001, 0.001, # x, y, z velocity in m/s  (not used)
+            5, 5, 5, # x, y, z velocity in m/s  (not used)
             0, 0, 0, # x, y, z acceleration (not supported yet, ignored in GCS_Mavlink)
             0, 0)    # yaw, yaw_rate (not supported yet, ignored in GCS_Mavlink)
         # send command to vehicle
@@ -146,9 +151,8 @@ class DroneHandler(Node):
         # send command to vehicle
         self.vehicle.send_mavlink(msg)
 
-    def set_yaw(self, yaw, relative=False):
-        if yaw<0:
-            yaw+=6.283185
+    def set_yaw(self, yaw, cw ,relative=False):
+        
         yaw = yaw / 3.141592 * 180
         if abs(self.vehicle.attitude.yaw - yaw) > 3.141592:
             dir = 1 if self.vehicle.attitude.yaw < yaw else -1
@@ -165,7 +169,7 @@ class DroneHandler(Node):
             0,           #confirmation
             yaw,         # param 1, yaw in degrees
             0,           # param 2, yaw speed deg/s
-            1,           # param 3, direction -1 ccw, 1 cw
+            cw,           # param 3, direction -1 ccw, 1 cw
             is_relative, # param 4, relative offset 1, absolute angle 0
             0, 0, 0)     # param 5 ~ 7 not used
         # send command to vehicle
@@ -245,6 +249,7 @@ class DroneHandler(Node):
         north = self.vehicle.location.local_frame.north + goal_handle.request.north
         east = self.vehicle.location.local_frame.east + goal_handle.request.east
         down = self.vehicle.location.local_frame.down + goal_handle.request.down
+        #velocity = goal_handle.request.velocity
         destination = LocationLocal(north, east, down)
 
         self.get_logger().info(f'North: {destination.north}')
@@ -361,6 +366,59 @@ class DroneHandler(Node):
         gps_msg = GPSPos()
         GPSPos.gps_position = vehicle.location.local_frame
         self.gps_publisher.piblish(GPSPos)
+
+    def calc_yaw(self, yaw: float, actual_yaw: float)->float:
+        if not self.__relative:
+            return yaw
+        return yaw+actual_yaw
+
+    def calc_remaning_yaw(self, yaw: float, actual_yaw: float, cw)->float:
+        if cw > 0:
+            if actual_yaw < 0:
+                actual_yaw = 2*math.pi + actual_yaw
+            return abs(yaw-actual_yaw)
+        if actual_yaw < 0:
+            actual_yaw = 2*math.pi - actual_yaw
+        return abs(-yaw+actual_yaw)
+
+
+    def yaw_callback(self, goal_handle):
+        self.get_logger().info(f'-- Set yaw action registered. --')
+        self.__relative = goal_handle.request.relative
+        setted_yaw = goal_handle.request.yaw
+        actual_yaw = self.vehicle.attitude.yaw
+        cw = 1
+
+
+        requested_yaw = self.calc_yaw(setted_yaw, actual_yaw)
+
+        if requested_yaw<0:
+            requested_yaw+=6.283185
+
+        if setted_yaw < 0:
+            setted_yaw = -setted_yaw
+            cw = -1
+
+        self.state = "BUSY"
+        self.set_yaw(requested_yaw, cw)
+
+        feefback_msg = SetYawAction.Feedback()
+        feefback_msg.angle = self.calc_remaning_yaw(requested_yaw, actual_yaw, cw)
+        self.get_logger().info(f"Angle remainig: {feefback_msg.angle}")
+
+        while feefback_msg.angle > 0.5:
+            feefback_msg.angle = self.calc_remaning_yaw(requested_yaw, actual_yaw, cw)
+            actual_yaw = self.vehicle.attitude.yaw
+            self.get_logger().info(f"Angle remainig: {feefback_msg.angle}")
+            time.sleep(1)
+
+        self.get_logger().info(f"Angle remainig: {feefback_msg.angle}")
+        goal_handle.succeed()
+        self.state = "OK"
+        result = SetYawAction.Result()
+        result.result = 1
+
+        return result
 
 def main():
     rclpy.init()

@@ -1,0 +1,1 @@
+./dockerise_cmd.sh "cd ~/ros_ws && colcon build && source install/setup.bash && ros2 launch drone_bringup drone_simulation.launch.py"

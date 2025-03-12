@@ -1,0 +1,6 @@
+float32 yaw
+bool relative
+---
+int8 result
+---
+float32 angle
