@@ -7,7 +7,7 @@ from dronekit import connect, VehicleMode, LocationGlobal, LocationLocal, Locati
 # from detection import Detection
 from drone_interfaces.msg import DetectionMsg, DetectionsList
 from drone_interfaces.srv import DetectTrees, GetLocationRelative, GetAttitude, SetYaw, SetMode
-from drone_interfaces.action import GotoRelative, GotoGlobal, Shoot, Arm, Takeoff, Yaw
+from drone_interfaces.action import GotoRelative, GotoGlobal, Shoot, Arm, Takeoff, SetYawAction
 from std_msgs.msg import Int32MultiArray
 import time
 from rclpy.action import ActionClient
@@ -61,7 +61,7 @@ class Mission(Node):
         self.shoot_action_client = ActionClient(self, Shoot, "shoot")
         self.takeoff_action_client = ActionClient(self, Takeoff, 'takeoff')
         self.arm_action_client = ActionClient(self, Arm, 'Arm')
-        self.yaw_action_client = ActionClient(self, Yaw, 'Set_yaw')
+        self.yaw_action_client = ActionClient(self, SetYawAction, 'Set_yaw')
         #self.yaw_cli = self.create_client(SetYaw, "set_yaw")
         self.mode_cli = self.create_client(SetMode, 'set_mode')
         #while not self.yaw_cli.wait_for_service(timeout_sec=1.0):
@@ -499,7 +499,7 @@ class Mission(Node):
     def set_yaw_action(self,yaw: float):
         self.state = "BUSY"
         self.get_logger().info("Sending set yaw action goal")
-        goal_msg = Yaw.Goal()
+        goal_msg = SetYawAction.Goal()
         goal_msg.yaw = yaw
         goal_msg.relative = True
 

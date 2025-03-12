@@ -10,7 +10,7 @@ from rclpy.node import Node
 from rclpy.action import ActionServer
 
 from drone_interfaces.srv import GetAttitude, GetLocationRelative, SetServo, SetYaw, SetMode
-from drone_interfaces.action import GotoRelative, GotoGlobal, Arm, Takeoff, Shoot, Yaw
+from drone_interfaces.action import GotoRelative, GotoGlobal, Arm, Takeoff, Shoot, SetYawAction
 
 import haversine as hv
 class DroneHandler(Node):
@@ -35,7 +35,7 @@ class DroneHandler(Node):
         self.arm = ActionServer(self,Arm, 'Arm',self.arm_callback)
         self.takeoff = ActionServer(self, Takeoff, 'takeoff',self.takeoff_callback)
         self.shoot = ActionServer(self, Shoot, 'shoot', self.shoot_callback)
-        self.yaw = ActionServer(self, Yaw, 'Set_yaw', self.yaw_callback)
+        self.yaw = ActionServer(self, SetYawAction, 'Set_yaw', self.yaw_callback)
 
         ## DRONE MEMBER VARIABLES
         self.state = "BUSY"
@@ -402,7 +402,7 @@ class DroneHandler(Node):
         self.state = "BUSY"
         self.set_yaw(requested_yaw, cw)
 
-        feefback_msg = Yaw.Feedback()
+        feefback_msg = SetYawAction.Feedback()
         feefback_msg.angle = self.calc_remaning_yaw(requested_yaw, actual_yaw, cw)
         self.get_logger().info(f"Angle remainig: {feefback_msg.angle}")
 
@@ -415,7 +415,7 @@ class DroneHandler(Node):
         self.get_logger().info(f"Angle remainig: {feefback_msg.angle}")
         goal_handle.succeed()
         self.state = "OK"
-        result = Yaw.Result()
+        result = SetYawAction.Result()
         result.result = 1
 
         return result
