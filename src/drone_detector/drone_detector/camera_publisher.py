@@ -23,7 +23,7 @@ class CameraPublisher(Node):
     Class constructor to set up the node
     """
         # Initiate the Node class's constructor and give it a name
-        super().__init__('image_publisher')
+        super().__init__('camera_publisher')
 
         # Create the publisher. This publisher will publish an Image
         # to the video_frames topic. The queue size is 10 messages.
@@ -70,13 +70,13 @@ def main(args=None):
     rclpy.init(args=args)
 
     # Create the node
-    image_publisher = ImagePublisher()
+    camera_publisher = CameraPublisher()
 
     # Spin the node so the callback function is called.
-    rclpy.spin(image_publisher)
+    rclpy.spin(camera_publisher)
 
     # Destroy the node explicitly
-    image_publisher.destroy_node()
+    camera_publisher.destroy_node()
 
     # Shutdown the ROS client library for Python
     rclpy.shutdown()
