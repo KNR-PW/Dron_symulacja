@@ -20,7 +20,7 @@ class DroneHandler(Node):
 
         ## DECLARE PARAMETERS
         #---------------------'  give here ip to flight controler   '
-        self.declare_parameter('fc_ip', '127.0.0.1:14550')
+        self.declare_parameter('fc_ip', '/dev/ttyACM0')
 
         ## DECLARE SERVICES
         self.attitude = self.create_service(GetAttitude, 'get_attitude', self.get_attitude_callback)
@@ -63,11 +63,8 @@ class DroneHandler(Node):
         # self.vehicle = connect(connection_string, baud=baud_rate, wait_ready=False) #doesnt work with wait_ready=True
         while self.vehicle is None:
             try:
-                if connection_string ==  'tcp:127.0.0.1:5762':
-                    self.vehicle = connect(connection_string, wait_ready=False) #doesnt work with wait_ready=True
-                else:
                 # RPI USB-C
-                    self.vehicle = vehicle = connect('/dev/ttyACM0', baud=115200, wait_ready=True)
+                self.vehicle = connect(connection_string, baud=115200, wait_ready=True)
             except Exception as e:
                 self.get_logger().info(f"Connecting failed with error: {e}")
                 self.get_logger().info("Retrying to connect in {3} seconds...")
