@@ -16,7 +16,8 @@ RUN apt update && apt install -y \
     python3-lxml \ 
     python3-pil \ 
     python3-setuptools \ 
-    python3-future
+    python3-future \
+    opencv-python
 
 RUN pip install \
     empy==3.3.4 \
