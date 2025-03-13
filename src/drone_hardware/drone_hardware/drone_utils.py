@@ -1,11 +1,46 @@
+import rclpy
+from dronekit import connect, VehicleMode
+from pymavlink import mavutil
+
+import time
+
+# LED control imports
+import neopixel_spi as neopixel
+import board
+
+from rclpy.node import Node
+from rclpy.action import ActionServer
+
+############ TO DO LIST ##############
+# 1. Handle LED strip via spi drivers
+# 2. Handle servo movement with FC interface
+# 3. Handle servo with some RPi external libraries
+# 4. 
+######################################
+
 class DroneUtils(Node):
     def __init__(self):
         super().__init__('drone_utils')
         self.vehicle = None
 
-        ## DECLARE PARAMETERS
-        #---------------------'  give here ip to flight controler   '
-        self.declare_parameter('fc_ip', '/dev/ttyACM0')   
+        ## DECLARE HARDWARE PARAMETERS
+
+        # Define RPi USB port where flight controler is plugged 
+        self.declare_parameter('fc_ip', '/dev/ttyACM0') 
+        # Initialize SPI bus
+        spi_bus = board.SPI()
+
+        # Define neo_pixel object
+        pixels = neopixel.NeoPixel_SPI(spi_bus, self.STRIP_LED_NUMBER,pixel_order=neopixel.GRB,auto_write=False)   
+
+        # Define number of LEDs in one strip to control
+        self.STRIP_LED_NUMBER = 5
+
+
+        ## DECLARE VARIABLES
+        self.red_color = [255,0,0]
+        self.green_color = [0,255,0]
+        self.blue_color = [0,0,255]
 
     def __del__(self):
         if self.vehicle:
@@ -40,6 +75,24 @@ class DroneUtils(Node):
         goal_handle.succeed()
         result = Shoot.Result()
         return result
+    
+    def handle_led_strip(self):
+        # Flash LED strip with red, then green, then blue color
+        # Probably there should we use some kind if service to publish colors? maybe we should run drone_utils in separate thread/ service dedicated only for hardware?
+        while True:
+            for i in range(self.STRIP_LED_NUMBER):
+                pixels[i] = self.red_color
+                pixels.show()
+                time.sleep(1)
+            for i in range(self.STRIP_LED_NUMBER):
+                pixels[i] = self.green_color
+                pixels.show()
+                time.sleep(1)
+            for i in range(self.STRIP_LED_NUMBER):
+                pixels[i] = self.blue_color
+                pixels.show()
+                time.sleep(1)
+
 
 def main():
     rclpy.init()
