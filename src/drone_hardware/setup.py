@@ -21,6 +21,7 @@ setup(
     entry_points={
         'console_scripts': [
             "drone_handler=drone_hardware.drone_handler:main"
+            "drone_utils=drone_hardware.drone_handler:main"
         ],
     },
 )
