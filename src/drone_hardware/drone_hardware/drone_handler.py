@@ -151,6 +151,20 @@ class DroneHandler(Node):
         # send command to vehicle
         self.vehicle.send_mavlink(msg)
 
+    def set_velocity(self, vx, vy, vz):
+        type_mask = 0b0000011111111000 # TODO -> set mask to enable only velocity control
+        msg = self.vehicle.message_factory.set_position_target_local_ned_encode(
+            0,       # time_boot_ms (not used)
+            0, 0,    # target system, target component
+            mavutil.mavlink.MAV_FRAME_LOCAL_NED, # frame TODO -> Change do FRD
+            type_mask, # type_mask (only positions enabled)
+            0, 0, 0, # x, y, z positions (or North, East, Down in the MAV_FRAME_BODY_NED frame
+            vx, vy, vz, # x, y, z velocity in m/s  (not used)
+            0, 0, 0, # x, y, z acceleration (not supported yet, ignored in GCS_Mavlink)
+            0, 0)    # yaw, yaw_rate (not supported yet, ignored in GCS_Mavlink)
+        # send command to vehicle
+        self.vehicle.send_mavlink(msg)  
+
     def set_yaw(self, yaw, cw ,relative=False):
         
         yaw = yaw / 3.141592 * 180
