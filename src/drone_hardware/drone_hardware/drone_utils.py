@@ -5,11 +5,14 @@ from pymavlink import mavutil
 import time
 
 # LED control imports
-import neopixel_spi as neopixel
-import board
+# import neopixel_spi as neopixel
+# import board
 
 from rclpy.node import Node
 from rclpy.action import ActionServer
+
+from std_msg.msg import ColorRGBA
+from rpi_ws281x import Adafruit_NeoPixel, Color
 
 ############ TO DO LIST ##############
 # 1. Handle LED strip via spi drivers
@@ -28,13 +31,15 @@ class DroneUtils(Node):
         # Define RPi USB port where flight controler is plugged 
         self.declare_parameter('fc_ip', '/dev/ttyACM0') 
         # Initialize SPI bus
-        spi_bus = board.SPI()
+        strip = Adafruit_NeoPixel(STRIP_LED_NUMBER,LED_PIN)
+        strip.begin()
+        strip.show()
 
         # Define neo_pixel object
-        pixels = neopixel.NeoPixel_SPI(spi_bus, self.STRIP_LED_NUMBER,pixel_order=neopixel.GRB,auto_write=False)   
 
         # Define number of LEDs in one strip to control
         self.STRIP_LED_NUMBER = 5
+        self.LED_PIN = 18
 
 
         ## DECLARE VARIABLES
@@ -75,23 +80,28 @@ class DroneUtils(Node):
         goal_handle.succeed()
         result = Shoot.Result()
         return result
+
+    def color_callback(msg):
+        for i in range(STRIP_LED_NUMBER):
+            strip.setPixelColor(i,Color(int(msg.r*255), int(msg.g*255), int(msg.b*255)))
+            strip.show()
     
-    def handle_led_strip(self):
-        # Flash LED strip with red, then green, then blue color
-        # Probably there should we use some kind if service to publish colors? maybe we should run drone_utils in separate thread/ service dedicated only for hardware?
-        while True:
-            for i in range(self.STRIP_LED_NUMBER):
-                pixels[i] = self.red_color
-                pixels.show()
-                time.sleep(1)
-            for i in range(self.STRIP_LED_NUMBER):
-                pixels[i] = self.green_color
-                pixels.show()
-                time.sleep(1)
-            for i in range(self.STRIP_LED_NUMBER):
-                pixels[i] = self.blue_color
-                pixels.show()
-                time.sleep(1)
+    # def handle_led_strip(self):
+        # # Flash LED strip with red, then green, then blue color
+        # # Probably there should we use some kind if service to publish colors? maybe we should run drone_utils in separate thread/ service dedicated only for hardware?
+        # while True:
+        #     for i in range(self.STRIP_LED_NUMBER):
+        #         pixels[i] = self.red_color
+        #         pixels.show()
+        #         time.sleep(1)
+        #     for i in range(self.STRIP_LED_NUMBER):
+        #         pixels[i] = self.green_color
+        #         pixels.show()
+        #         time.sleep(1)
+        #     for i in range(self.STRIP_LED_NUMBER):
+        #         pixels[i] = self.blue_color
+        #         pixels.show()
+        #         time.sleep(1)
 
 
 def main():
@@ -101,8 +111,12 @@ def main():
 
     rclpy.spin(drone)
 
-    drone.destroy_node()
+    subscribtion = node.create_subscribtion(ColorRGBA,'color',color_callback,10)
+    subscribtion
 
+    rclpy.spin(drone)
+
+    drone.destroy_node()
     rclpy.shutdown()
 
 

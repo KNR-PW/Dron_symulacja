@@ -1,10 +1,28 @@
-from dronekit import connect, VehicleMode, LocationLocal, LocationGlobalRelative
+from std_msg.msg import ColorRGBA
+from rpi_ws281x import Adafruit_NeoPixel, Color
+import time
+
+    strip = Adafruit_NeoPixel(STRIP_LED_NUMBER,LED_PIN)
+    strip.begin()
+    strip.show()
+
+    # Define neo_pixel object
+
+    # Define number of LEDs in one strip to control
+    self.STRIP_LED_NUMBER = 5
+    self.LED_PIN = 18
 
 
-connection_string = 'tcp:127.0.0.1:5762'
+    def color_callback(msg):
+    for i in range(STRIP_LED_NUMBER):
+        strip.setPixelColor(i,Color(int(msg.r*255), int(msg.g*255), int(msg.b*255)))
+        strip.show()
 
-vehicle = connect(connection_string, wait_ready=False)
+    def main():
 
-vehicle.mode=VehicleMode("GUIDED")
-vehicle.armed = True
-vehicle.simple_takeoff(2)
+        color_callback()
+        
+
+
+if __name__ == 'main':
+    main()
