@@ -115,6 +115,7 @@ def main(args=None):
     rclpy.init(args=args)
     fly_to_aruco = FlyToAruco()
     fly_to_aruco.fly_to_marker()
+    
     fly_to_aruco.destroy_node()
     rclpy.shutdown()
 

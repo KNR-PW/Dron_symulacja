@@ -1,7 +1,7 @@
 import rclpy  # Python Client Library for ROS 2
 from rclpy.node import Node  # Handles the creation of nodes
 # from detection import Detection
-from drone_interfaces.action import GotoRelative
+from drone_interfaces.srv import GotoRelative
 import time
 from rclpy.action import ActionClient
 
