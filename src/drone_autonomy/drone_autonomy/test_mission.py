@@ -5,7 +5,7 @@ import cv2  # OpenCV library
 import numpy as np
 from dronekit import connect, VehicleMode, LocationGlobal, LocationLocal, LocationGlobalRelative, APIException
 # from detection import Detection
-from drone_interfaces.msg import DetectionMsg, DetectionsList
+from drone_interfaces.msg import DetectionMsg, DetectionsList, Telemetry
 from drone_interfaces.srv import DetectTrees, GetLocationRelative, GetAttitude, SetYaw, SetMode
 from drone_interfaces.action import GotoRelative, GotoGlobal, Shoot, Arm, Takeoff, SetYawAction
 from std_msgs.msg import Int32MultiArray
@@ -50,22 +50,23 @@ class Mission(Node):
         #        "detect_trees service not available, waiting again..."
         #    )
         #self.req = DetectTrees.Request()
+        self.mode_cli = self.create_client(SetMode, 'set_mode')
         self.gps_cli = self.create_client(GetLocationRelative, "get_location_relative")
         while not self.gps_cli.wait_for_service(timeout_sec=1.0):
             self.get_logger().info("GPS service not available, waiting again...")
         self.atti_cli = self.create_client(GetAttitude, "get_attitude")
         while not self.atti_cli.wait_for_service(timeout_sec=1.0):
             self.get_logger().info("attitude service not available, waiting again...")
+        # DECLARE ACTION
         self.goto_rel_action_client = ActionClient(self, GotoRelative, "goto_relative")
         self.goto_glob_action_client = ActionClient(self, GotoGlobal, "goto_global")
         self.shoot_action_client = ActionClient(self, Shoot, "shoot")
         self.takeoff_action_client = ActionClient(self, Takeoff, 'takeoff')
         self.arm_action_client = ActionClient(self, Arm, 'Arm')
         self.yaw_action_client = ActionClient(self, SetYawAction, 'Set_yaw')
-        #self.yaw_cli = self.create_client(SetYaw, "set_yaw")
-        self.mode_cli = self.create_client(SetMode, 'set_mode')
-        #while not self.yaw_cli.wait_for_service(timeout_sec=1.0):
-        #    self.get_logger().info("set yaw service not available, waiting again...")
+        # DECLARE SUBCRIBER
+        self.tlemetry_sub = self.create_subscription(Telemetry, 'telemetry', self.telemetry_callback, 10)
+
         self.get_logger().info("Mission node created")
         self.state = "OK"
         altit = 10
@@ -88,6 +89,9 @@ class Mission(Node):
         self.used_detections = []
         self.brown_report = []
         self.sick_report = []
+
+        self.__voltage_spikes = 0
+        self.__battery_failsafe = False
 
     def set_area_coords(self, coordru, coordrd, coordld, coordlu):
         self.coordlu = coordlu
@@ -513,14 +517,40 @@ class Mission(Node):
 
     def set_yaw_response(self, future):
         self.get_logger().info("Yaw response callback")
-        goal_handle = future.result()
-        self.get_result_future = goal_handle.get_result_async()
+        self._goal_handle = future.result()
+        self.get_result_future = self._goal_handle.get_result_async()
         self.get_result_future.add_done_callback(self.set_yaw_result_callback)
     
     def set_yaw_result_callback(self, kamil):
         self.get_logger().info("Yaw  action finished")
         self.state = "OK"
 
+    def telemetry_callback(self, msg):
+        self.get_logger().info(f"Actual baterry level {msg.battery_percentage},{msg.battery_voltage}")
+        voltage_threshold = 12
+
+        if self.__voltage_spikes >= 5 and not self.__battery_failsafe:
+            future = self._goal_handle.cancel_goal_async()
+            future.add_done_callback(self.emergency_flight)
+            self.__battery_failsafe = True
+
+        if msg.battery_voltage < voltage_threshold and not self.__battery_failsafe:
+            self.__voltage_spikes += 1
+
+    def emergency_flight(self, future):
+        cancel_response = future.result()
+        if len(cancel_response.goals_canceling) > 0:
+            self.get_logger().info('Goal successfully canceled')
+            self.get_logger().info('Start emegrency mission')
+            self.land()
+            rclpy.shutdown()
+
+        else:
+            self.get_logger().info('Goal failed to cancel')
+            future = self._goal_handle.cancel_goal_async()
+            future.add_done_callback(self.emergency_flight)
+        
+        
 def main(args=None):
     rclpy.init(args=args)
     start = time.time()

@@ -7,8 +7,10 @@ import time
 import math
 
 from rclpy.node import Node
-from rclpy.action import ActionServer
+from rclpy.action import ActionServer,  CancelResponse
+from rclpy.executors import MultiThreadedExecutor
 
+from drone_interfaces.msg import Telemetry
 from drone_interfaces.srv import GetAttitude, GetLocationRelative, SetServo, SetYaw, SetMode
 from drone_interfaces.action import GotoRelative, GotoGlobal, Arm, Takeoff, Shoot, SetYawAction
 
@@ -35,8 +37,14 @@ class DroneHandler(Node):
         self.arm = ActionServer(self,Arm, 'Arm',self.arm_callback)
         self.takeoff = ActionServer(self, Takeoff, 'takeoff',self.takeoff_callback)
         self.shoot = ActionServer(self, Shoot, 'shoot', self.shoot_callback)
-        self.yaw = ActionServer(self, SetYawAction, 'Set_yaw', self.yaw_callback)
+        self.yaw = ActionServer(self, SetYawAction, 'Set_yaw', self.yaw_callback, cancel_callback=self.cancel_callback)
 
+        #DECLARE PUBLISHER
+        self.telemetry = self.create_publisher(Telemetry, 'telemetry',10)
+        self.timer = self.create_timer(0.5, self.telemetry_callback)
+
+        # ONLY FOR TEST IF YOU SEE HERE SOMETHING UNCOMMENTED TELL THIS TO HIS CREATOR
+        #self._counter = 0
         ## DRONE MEMBER VARIABLES
         self.state = "BUSY"
         self.__relative = False
@@ -120,7 +128,7 @@ class DroneHandler(Node):
             mavutil.mavlink.MAV_FRAME_LOCAL_NED, # frame
             type_mask, # type_mask (only positions enabled)
             north, east, down, # x, y, z positions (or North, East, Down in the MAV_FRAME_BODY_NED frame
-            5, 5, 5, # x, y, z velocity in m/s  (not used)
+            0, 0, 0, # x, y, z velocity in m/s  (not used)
             0, 0, 0, # x, y, z acceleration (not supported yet, ignored in GCS_Mavlink)
             0, 0)    # yaw, yaw_rate (not supported yet, ignored in GCS_Mavlink)
         # send command to vehicle
@@ -406,7 +414,13 @@ class DroneHandler(Node):
         feefback_msg.angle = self.calc_remaning_yaw(requested_yaw, actual_yaw, cw)
         self.get_logger().info(f"Angle remainig: {feefback_msg.angle}")
 
+        #self._counter += 1
+
         while feefback_msg.angle > 0.5:
+            if goal_handle.is_cancel_requested:
+                goal_handle.canceled()
+                self.get_logger().info('Goal canceled')
+
             feefback_msg.angle = self.calc_remaning_yaw(requested_yaw, actual_yaw, cw)
             actual_yaw = self.vehicle.attitude.yaw
             self.get_logger().info(f"Angle remainig: {feefback_msg.angle}")
@@ -419,13 +433,35 @@ class DroneHandler(Node):
         result.result = 1
 
         return result
+    
+    def cancel_callback(self, goal_handle):
+        """Accept or reject a client request to cancel an action."""
+        self.get_logger().info('Received cancel request')
+        return CancelResponse.ACCEPT
+    
+    def telemetry_callback(self):
+        msg = Telemetry()
+        try:
+            msg.battery_percentage = self.vehicle.battery.level
+            msg.battery_voltage = self.vehicle.battery.voltage
+            msg.battery_current = self.vehicle.battery.current
+            #if self._counter > 0:
+            #    msg.battery_voltage = 11.5
+            self.telemetry.publish(msg)
+            #self._counter += 1
+            self.get_logger().info(f"battery :{self.vehicle.battery}")
+        except:
+            self.get_logger().info(f"ESC is not initializate yet:{self.vehicle.battery}")
 
 def main():
     rclpy.init()
     
     drone = DroneHandler()
 
-    rclpy.spin(drone)
+    #rclpy.spin(drone)
+    executor = MultiThreadedExecutor()
+    executor.add_node(drone)
+    executor.spin()
 
     drone.destroy_node()
 
