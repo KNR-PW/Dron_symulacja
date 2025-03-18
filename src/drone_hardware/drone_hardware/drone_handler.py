@@ -32,10 +32,10 @@ class DroneHandler(Node):
         self.mode = self.create_service(SetMode, 'set_mode',self.set_mode_callback)
         
         ## DECLARE ACTIONS
-        self.goto_rel = ActionServer(self, GotoRelative, 'goto_relative', self.goto_relative_action)
-        self.goto_global = ActionServer(self, GotoGlobal, 'goto_global', self.goto_global_action)
+        self.goto_rel = ActionServer(self, GotoRelative, 'goto_relative', self.goto_relative_action, cancel_callback=self.cancel_callback)
+        self.goto_global = ActionServer(self, GotoGlobal, 'goto_global', self.goto_global_action, cancel_callback=self.cancel_callback)
         self.arm = ActionServer(self,Arm, 'Arm',self.arm_callback)
-        self.takeoff = ActionServer(self, Takeoff, 'takeoff',self.takeoff_callback)
+        self.takeoff = ActionServer(self, Takeoff, 'takeoff',self.takeoff_callback, cancel_callback=self.cancel_callback)
         self.shoot = ActionServer(self, Shoot, 'shoot', self.shoot_callback)
         self.yaw = ActionServer(self, SetYawAction, 'Set_yaw', self.yaw_callback, cancel_callback=self.cancel_callback)
 
@@ -273,6 +273,10 @@ class DroneHandler(Node):
         self.get_logger().info(f"Distance remaining: {feedback_msg.distance} m")
 
         while feedback_msg.distance>0.5:
+            if goal_handle.is_cancel_requested:
+                goal_handle.canceled()
+                self.get_logger().info('Goal canceled')
+
             feedback_msg.distance = self.calculate_remaining_distance_rel(destination)
             # self.get_logger().info(f"Distance remaining: {feedback_msg.distance} m")
             time.sleep(1)
@@ -309,6 +313,10 @@ class DroneHandler(Node):
         self.get_logger().info(f"Distance remaining: {feedback_msg.distance} m")
 
         while feedback_msg.distance>0.5:
+            if goal_handle.is_cancel_requested:
+                goal_handle.canceled()
+                self.get_logger().info('Goal canceled')
+
             feedback_msg.distance = self.get_distance_global(self.vehicle.location.global_relative_frame, destination)
             # self.get_logger().info(f"Distance remaining: {feedback_msg.distance} m")
             time.sleep(1)
@@ -357,6 +365,10 @@ class DroneHandler(Node):
         # Wait until the vehicle reaches a safe height before processing the goto (otherwise the command
         #  after Vehicle.simple_takeoff will execute immediately).
         while self.vehicle.location.global_relative_frame.alt <= goal_handle.request.altitude * 0.80:
+            if goal_handle.is_cancel_requested:
+                goal_handle.canceled()
+                self.get_logger().info('Goal canceled')
+
             feedback_msg.altitude = self.vehicle.location.global_relative_frame.alt
             self.get_logger().info(f"Altitude: {feedback_msg.altitude}")
             time.sleep(1)

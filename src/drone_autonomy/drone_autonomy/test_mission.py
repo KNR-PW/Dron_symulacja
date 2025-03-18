@@ -223,8 +223,8 @@ class Mission(Node):
 
     def goto_rel_response_callback(self, future):
         self.get_logger().info("Goto rel response callback")
-        goal_handle = future.result()
-        self.get_result_future = goal_handle.get_result_async()
+        self._goal_handle = future.result()
+        self.get_result_future = self._goal_handle.get_result_async()
         self.get_result_future.add_done_callback(self.goto_rel_result_callback)
 
     def goto_rel_result_callback(self, future):
@@ -247,8 +247,8 @@ class Mission(Node):
 
     def goto_glob_response_callback(self, future):
         self.get_logger().info("Goto rel response callback")
-        goal_handle = future.result()
-        self.get_result_future = goal_handle.get_result_async()
+        self._goal_handle = future.result()
+        self.get_result_future = self._goal_handle.get_result_async()
         self.get_result_future.add_done_callback(self.goto_glob_result_callback)
 
     def goto_glob_result_callback(self, future):
@@ -432,9 +432,9 @@ class Mission(Node):
         self.state = "OK"
 
     def takeoff_response_callback(self, future):
-        goal_handle = future.result()
         self.get_logger().info('waiting for takeoff response...')
-        self.takeoff_get_result_future = goal_handle.get_result_async()
+        self._goal_handle = future.result()
+        self.takeoff_get_result_future = self._goal_handle.get_result_async()
         self.takeoff_get_result_future.add_done_callback(self.takeoff_get_result_callback)
 
     def takeoff_get_result_callback(self, future):
