@@ -276,6 +276,7 @@ class DroneHandler(Node):
             if goal_handle.is_cancel_requested:
                 goal_handle.canceled()
                 self.get_logger().info('Goal canceled')
+                return GotoRelative.Result()
 
             feedback_msg.distance = self.calculate_remaining_distance_rel(destination)
             # self.get_logger().info(f"Distance remaining: {feedback_msg.distance} m")
@@ -316,6 +317,7 @@ class DroneHandler(Node):
             if goal_handle.is_cancel_requested:
                 goal_handle.canceled()
                 self.get_logger().info('Goal canceled')
+                return GotoGlobal.Result()
 
             feedback_msg.distance = self.get_distance_global(self.vehicle.location.global_relative_frame, destination)
             # self.get_logger().info(f"Distance remaining: {feedback_msg.distance} m")
@@ -368,6 +370,7 @@ class DroneHandler(Node):
             if goal_handle.is_cancel_requested:
                 goal_handle.canceled()
                 self.get_logger().info('Goal canceled')
+                return Takeoff.Result()
 
             feedback_msg.altitude = self.vehicle.location.global_relative_frame.alt
             self.get_logger().info(f"Altitude: {feedback_msg.altitude}")
@@ -432,6 +435,7 @@ class DroneHandler(Node):
             if goal_handle.is_cancel_requested:
                 goal_handle.canceled()
                 self.get_logger().info('Goal canceled')
+                return SetYawAction.Result()
 
             feefback_msg.angle = self.calc_remaning_yaw(requested_yaw, actual_yaw, cw)
             actual_yaw = self.vehicle.attitude.yaw
@@ -461,7 +465,7 @@ class DroneHandler(Node):
             #    msg.battery_voltage = 11.5
             self.telemetry.publish(msg)
             #self._counter += 1
-            self.get_logger().info(f"battery :{self.vehicle.battery}")
+            #self.get_logger().info(f"battery :{self.vehicle.battery}")
         except:
             self.get_logger().info(f"ESC is not initializate yet:{self.vehicle.battery}")
 

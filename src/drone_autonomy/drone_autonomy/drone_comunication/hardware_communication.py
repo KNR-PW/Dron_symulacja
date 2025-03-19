@@ -7,8 +7,8 @@ from drone_interfaces.srv import GetLocationRelative, GetAttitude, SetYaw, SetMo
 from drone_interfaces.action import GotoRelative, GotoGlobal, Shoot, Arm, Takeoff, SetYawAction
 
 class Hardware_com(Node):
-    def __init__(self):
-        super().__init__("mission")
+    def __init__(self, node_name: str):
+        super().__init__(node_name)
 
         # DECLARE service clients
         self.mode_cli = self.create_client(SetMode, 'set_mode')
@@ -33,10 +33,11 @@ class Hardware_com(Node):
         self.tlemetry_sub = self.create_subscription(Telemetry, 'telemetry', self.telemetry_callback, 10)
 
         self.get_logger().info("Mission node created")
+        
         self.__state = "OK"
-
         self.__voltage_spikes = 0
         self.__battery_failsafe = False
+        #self.__emergency_flight_data = self.get_gps()
 
     # DECLARE send mode request functions
 
@@ -49,22 +50,22 @@ class Hardware_com(Node):
         self.get_logger().info("Sending ARM action goal")
 
         goal_msg = Arm.Goal()
-        self.state = "BUSY"
+        self.__state = "BUSY"
         while not self.arm_action_client.wait_for_server():
             self.get_logger().info('waiting for ARM server...')
         self.arm_future = self.arm_action_client.send_goal_async(goal_msg)
-        self.arm_future.add_done_callback(self.arm_response_callback)
+        self.arm_future.add_done_callback(self._arm_response_callback)
         self._wait_busy()
 
-    def arm_response_callback(self, future):
+    def _arm_response_callback(self, future):
         goal_handle = future.result()
         self.get_logger().info('waiting for arm response...')
         self.get_result_future = goal_handle.get_result_async()
-        self.get_result_future.add_done_callback(self.arm_get_result_callback)
+        self.get_result_future.add_done_callback(self._arm_get_result_callback)
 
-    def arm_get_result_callback(self, future):
+    def _arm_get_result_callback(self, future):
         result = future.result().result.result
-        self.state = "OK"
+        self.__state = "OK"
 
     def land(self):
         request = SetMode.Request()
@@ -89,6 +90,7 @@ class Hardware_com(Node):
         else:
             self.get_logger().info("GPS request failed")
             self.drone_amplitude = 0
+            return None
         return [self.north, self.east, self.down]
     
     # DECLARE yaw functions
@@ -102,7 +104,7 @@ class Hardware_com(Node):
         return yaw
     
     def set_yaw_action(self, yaw: float, relative: bool = True):
-        self.state = "BUSY"
+        self.__state = "BUSY"
         self.get_logger().info("Sending set yaw action goal")
         goal_msg = SetYawAction.Goal()
         goal_msg.yaw = yaw
@@ -112,19 +114,19 @@ class Hardware_com(Node):
             self.get_logger().info("waiting for yaw server...")
         
         self.send_goal_future = self.yaw_action_client.send_goal_async(goal_msg)
-        self.send_goal_future.add_done_callback(self.set_yaw_response)
+        self.send_goal_future.add_done_callback(self._set_yaw_response)
         self.get_logger().info("Yaw action sent")
         self._wait_busy()
 
-    def set_yaw_response(self, future):
+    def _set_yaw_response(self, future):
         self.get_logger().info("Yaw response callback")
         self._goal_handle = future.result()
         self.get_result_future = self._goal_handle.get_result_async()
-        self.get_result_future.add_done_callback(self.set_yaw_result_callback)
+        self.get_result_future.add_done_callback(self._set_yaw_result_callback)
     
-    def set_yaw_result_callback(self, kamil):
+    def _set_yaw_result_callback(self, kamil):
         self.get_logger().info("Yaw  action finished")
-        self.state = "OK"
+        self.__state = "OK"
 
     # DECLARE go_to functions
 
@@ -134,48 +136,50 @@ class Hardware_com(Node):
         goal_msg.altitude = height
         while not self.takeoff_action_client.wait_for_server():
             self.get_logger().info('waiting for TAKE-OFF server...')
-        self.state = "BUSY"
+        self.__state = "BUSY"
         self.takeoff_future = self.takeoff_action_client.send_goal_async(goal_msg)
-        self.takeoff_future.add_done_callback(self.takeoff_response_callback)
+        self.takeoff_future.add_done_callback(self._takeoff_response_callback)
         self._wait_busy()
 
-    def takeoff_response_callback(self, future):
+    def _takeoff_response_callback(self, future):
         self.get_logger().info('waiting for takeoff response...')
         self._goal_handle = future.result()
         self.takeoff_get_result_future = self._goal_handle.get_result_async()
-        self.takeoff_get_result_future.add_done_callback(self.takeoff_get_result_callback)
+        self.takeoff_get_result_future.add_done_callback(self._takeoff_get_result_callback)
 
-    def takeoff_get_result_callback(self, future):
+    def _takeoff_get_result_callback(self, future):
         result = future.result().result.result
-        self.state = "OK"
+        self.get_logger().info("Set Takeoff action finished")
+        self.__state = "OK"
 
     def send_goto_relative(self, north: float, east: float, down: float):
-        self.state = "BUSY"
         self.get_logger().info("Sending goto relative action goal")
         goal_msg = GotoRelative.Goal()
         goal_msg.north = north
         goal_msg.east = east
         goal_msg.down = down
+        self.__state = "BUSY"
         
         while not self.goto_rel_action_client.wait_for_server():
             self.get_logger().info("waiting for goto server...")
 
         self.send_goal_future = self.goto_rel_action_client.send_goal_async(goal_msg)
-        self.send_goal_future.add_done_callback(self.goto_rel_response_callback)
+        self.send_goal_future.add_done_callback(self._goto_rel_response_callback)
         self.get_logger().info("Goto action sent")
+        self._wait_busy()
 
-    def goto_rel_response_callback(self, future):
+    def _goto_rel_response_callback(self, future):
         self.get_logger().info("Goto rel response callback")
         self._goal_handle = future.result()
         self.get_result_future = self._goal_handle.get_result_async()
-        self.get_result_future.add_done_callback(self.goto_rel_result_callback)
+        self.get_result_future.add_done_callback(self._goto_rel_result_callback)
 
-    def goto_rel_result_callback(self, future):
+    def _goto_rel_result_callback(self, future):
         self.get_logger().info("Goto rel  action finished")
-        self.state = "OK"
+        self.__state = "OK"
 
     def send_goto_global(self, lat: float, lon: float, alt: float):
-        self.state = "BUSY"
+        self.__state = "BUSY"
         self.get_logger().info("Sending goto global action goal")
         goal_msg = GotoGlobal.Goal()
         goal_msg.lat = lat
@@ -185,44 +189,46 @@ class Hardware_com(Node):
             self.get_logger().info("waiting for goto server...")
 
         self.send_goal_future = self.goto_glob_action_client.send_goal_async(goal_msg)
-        self.send_goal_future.add_done_callback(self.goto_glob_response_callback)
+        self.send_goal_future.add_done_callback(self._goto_glob_response_callback)
         self.get_logger().info("Goto action sent")
+        self._wait_busy()
 
-    def goto_glob_response_callback(self, future):
+    def _goto_glob_response_callback(self, future):
         self.get_logger().info("Goto rel response callback")
         self._goal_handle = future.result()
         self.get_result_future = self._goal_handle.get_result_async()
-        self.get_result_future.add_done_callback(self.goto_glob_result_callback)
+        self.get_result_future.add_done_callback(self._goto_glob_result_callback)
 
-    def goto_glob_result_callback(self, future):
+    def _goto_glob_result_callback(self, future):
         self.get_logger().info("Goto rel  action finished")
-        self.state = "OK"
+        self.__state = "OK"
 
     # DECLARE shoot action
 
     def send_shoot_goal(self, color):
         self.get_logger().info(f"Sending shoot goal, color: {color}")
-        self.state = "BUSY"
+        self.__state = "BUSY"
         goal_msg = Shoot.Goal()
         goal_msg.color = color
         self.send_goal_future = self.shoot_action_client.send_goal_async(goal_msg)
-        self.send_goal_future.add_done_callback(self.shoot_response_callback)
+        self.send_goal_future.add_done_callback(self._shoot_response_callback)
         self.get_logger().info("Shoot action sent")       
+        self._wait_busy()
 
-    def shoot_response_callback(self, future):
+    def _shoot_response_callback(self, future):
         self.get_logger().info("Shoot response callback")
         goal_handle = future.result()
         self.get_result_future = goal_handle.get_result_async()
-        self.get_result_future.add_done_callback(self.shoot_result_callback)
+        self.get_result_future.add_done_callback(self._shoot_result_callback)
 
-    def shoot_result_callback(self, future):
+    def _shoot_result_callback(self, future):
         self.get_logger().info("Shoot action finished")
-        self.state = "OK"
+        self.__state = "OK"
 
     # DECLARE telemetry function
 
     def telemetry_callback(self, msg):
-        self.get_logger().info(f"Actual baterry level {msg.battery_percentage},{msg.battery_voltage}")
+        #self.get_logger().info(f"Actual baterry level {msg.battery_percentage},{msg.battery_voltage}")
         voltage_threshold = 12
 
         if self.__voltage_spikes >= 5 and not self.__battery_failsafe:
@@ -240,6 +246,9 @@ class Hardware_com(Node):
         if len(cancel_response.goals_canceling) > 0:
             self.get_logger().info('Goal successfully canceled')
             self.get_logger().info('Start emegrency mission')
+            #self.send_goto_global(self.__emergency_flight_data[0],
+            #                      self.__emergency_flight_data[1],
+            #                      self.__emergency_flight_data[2])
             self.land()
             rclpy.shutdown()
 
@@ -249,7 +258,7 @@ class Hardware_com(Node):
             future.add_done_callback(self._emergency_flight)
 
     def _wait_busy(self):
-        while self.state == "BUSY":
+        while self.__state == "BUSY":
             rclpy.spin_once(self, timeout_sec=0.05)
 
 if __name__ == "__main__":
