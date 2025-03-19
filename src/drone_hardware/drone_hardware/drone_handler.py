@@ -7,7 +7,7 @@ import time
 import math
 
 from rclpy.node import Node
-from rclpy.action import ActionServer,  CancelResponse
+from rclpy.action import ActionServer,  CancelResponse,  GoalResponse
 from rclpy.executors import MultiThreadedExecutor
 
 from drone_interfaces.msg import Telemetry
@@ -275,7 +275,7 @@ class DroneHandler(Node):
         while feedback_msg.distance>0.5:
             if goal_handle.is_cancel_requested:
                 goal_handle.canceled()
-                self.get_logger().info('Goal canceled')
+                self.get_logger().info('Goal goto rel canceled')
                 return GotoRelative.Result()
 
             feedback_msg.distance = self.calculate_remaining_distance_rel(destination)

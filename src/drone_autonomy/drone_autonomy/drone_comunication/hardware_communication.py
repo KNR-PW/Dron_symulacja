@@ -6,6 +6,7 @@ from drone_interfaces.msg import Telemetry
 from drone_interfaces.srv import GetLocationRelative, GetAttitude, SetYaw, SetMode
 from drone_interfaces.action import GotoRelative, GotoGlobal, Shoot, Arm, Takeoff, SetYawAction
 
+import time
 class Hardware_com(Node):
     def __init__(self, node_name: str):
         super().__init__(node_name)
@@ -37,7 +38,8 @@ class Hardware_com(Node):
         self.__state = "OK"
         self.__voltage_spikes = 0
         self.__battery_failsafe = False
-        #self.__emergency_flight_data = self.get_gps()
+        self.__alarm = False
+        self.__emergency_flight_data = self.get_gps()
 
     # DECLARE send mode request functions
 
@@ -233,7 +235,8 @@ class Hardware_com(Node):
 
         if self.__voltage_spikes >= 5 and not self.__battery_failsafe:
             future = self._goal_handle.cancel_goal_async()
-            future.add_done_callback(self._emergency_flight)
+            future.add_done_callback(self._emergency_flight_request)
+            self.get_logger().info("anuluje")
             self.__battery_failsafe = True
 
         if msg.battery_voltage < voltage_threshold and not self.__battery_failsafe:
@@ -241,25 +244,59 @@ class Hardware_com(Node):
 
     # DECLARE private function
 
-    def _emergency_flight(self, future):
+    def fly_to_base(self, north: float, east: float, down: float):
+        self.get_logger().info("Sending goto relative action goal")
+        goal_msg = GotoRelative.Goal()
+        goal_msg.north = north
+        goal_msg.east = east
+        goal_msg.down = down
+        self.__state = "BUSY"
+        
+        while not self.goto_rel_action_client.wait_for_server():
+            self.get_logger().info("waiting for goto server...")
+
+        send_goal_future = self.goto_rel_action_client.send_goal_async(goal_msg)
+        send_goal_future.add_done_callback(self._fly_to_base_response_callback)
+        self.get_logger().info("Goto action sent")
+        self._wait_busy()
+
+    def _fly_to_base_response_callback(self, future):
+        self.get_logger().info("Goto rel response callback")
+        _goal_handle = future.result()
+        get_result_future = _goal_handle.get_result_async()
+        get_result_future.add_done_callback(self._fly_to_base_result_callback)
+
+    def _fly_to_base_result_callback(self, future):
+        self.get_logger().info("Goto rel  action finished")
+        self.__state = "OK"
+
+    def _emergency_flight_request(self, future):
         cancel_response = future.result()
         if len(cancel_response.goals_canceling) > 0:
             self.get_logger().info('Goal successfully canceled')
             self.get_logger().info('Start emegrency mission')
-            #self.send_goto_global(self.__emergency_flight_data[0],
-            #                      self.__emergency_flight_data[1],
-            #                      self.__emergency_flight_data[2])
-            self.land()
-            rclpy.shutdown()
+           # while self.__state == "BUSY":
+            #    time.sleep(0.1)
+            self.__alarm = True
 
         else:
             self.get_logger().info('Goal failed to cancel')
             future = self._goal_handle.cancel_goal_async()
-            future.add_done_callback(self._emergency_flight)
+            future.add_done_callback(self._emergency_flight_request)
+
+    def _emergency_flight(self):
+        self.__alarm = False
+        self.fly_to_base(self.__emergency_flight_data[0],
+                                  self.__emergency_flight_data[1],
+                                  self.__emergency_flight_data[2])
+        self.land()
+        rclpy.shutdown()
 
     def _wait_busy(self):
         while self.__state == "BUSY":
             rclpy.spin_once(self, timeout_sec=0.05)
+        if self.__alarm:
+            self._emergency_flight()
 
 if __name__ == "__main__":
     print("you shoudn't run this program directly from this file")
