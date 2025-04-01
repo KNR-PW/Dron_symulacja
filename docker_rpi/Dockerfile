@@ -16,8 +16,9 @@ RUN apt update && apt install -y \
     python3-lxml \ 
     python3-pil \ 
     python3-setuptools \ 
-    python3-future \
-    opencv-python
+    python3-future 
+
+RUN apt-get install ros-humble-cv-bridge
 
 RUN pip install \
     empy==3.3.4 \
@@ -25,7 +26,8 @@ RUN pip install \
     lark==1.2.2 \
     MAVProxy==1.8.71 \
     dronekit \
-    haversine
+    haversine \
+    opencv-python
 
 # Fix dronekit
 RUN sed -i 's/collections.MutableMapping/collections.abc.MutableMapping/g' /usr/local/lib/python3.10/dist-packages/dronekit/__init__.py

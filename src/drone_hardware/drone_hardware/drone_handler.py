@@ -21,6 +21,7 @@ class DroneHandler(Node):
         ## DECLARE PARAMETERS
         #---------------------'  give here ip to flight controler   '
         self.declare_parameter('fc_ip', '/dev/ttyACM0')
+        self.declare_parameter('dev', 'false')
 
         ## DECLARE SERVICES
         self.attitude = self.create_service(GetAttitude, 'get_attitude', self.get_attitude_callback)
@@ -40,6 +41,7 @@ class DroneHandler(Node):
         ## DRONE MEMBER VARIABLES
         self.state = "BUSY"
         self.__relative = False
+        self.dev_mode = False
 
         ##CONNECT TO COPTER
         # parser = argparse.ArgumentParser(description='commands')
@@ -54,6 +56,9 @@ class DroneHandler(Node):
         
         # WEBOTS
         connection_string = self.get_parameter('fc_ip').get_parameter_value().string_value
+        dev = self.get_parameter('dev').get_parameter_value().string_value
+        if dev == "true":
+            self.dev_mode = True
         #connection_string = 'tcp:127.0.0.1:5762'
         sitl = None
 
@@ -317,7 +322,7 @@ class DroneHandler(Node):
         self.state = "BUSY"
         feedback_msg = Arm.Feedback()
         
-        while self.vehicle.is_armable==False:
+        while self.vehicle.is_armable==False and not self.dev_mode:
             feedback_msg.feedback = "Waiting for vehicle to become armable..."
             self.get_logger().info(feedback_msg.feedback)
             time.sleep(1)
