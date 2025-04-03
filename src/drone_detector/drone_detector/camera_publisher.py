@@ -24,18 +24,22 @@ class CameraPublisher(Node):
     """
         # Initiate the Node class's constructor and give it a name
         super().__init__('camera_publisher')
+        # define parameter
+        self.declare_parameter('camera', 'udp://172.17.0.1:5000?overrun_nonfatal=1&fifo_size=50000000')
 
         # Create the publisher. This publisher will publish an Image
         # to the video_frames topic. The queue size is 10 messages.
         self.publisher_ = self.create_publisher(Image, 'camera', 10)
-
+        camera_index = self.get_parameter('camera').get_parameter_value().string_value
+        if camera_index == '0':
+            camera_index = 0
         # We will publish a message every 0.1 seconds
         timer_period = 0.1  # seconds
 
         # Create the timer
         self.timer = self.create_timer(timer_period, self.timer_callback)
         try:
-            self.cap = cv2.VideoCapture(0)
+            self.cap = cv2.VideoCapture(camera_index)
         except Exception as e:
             self.get_logger().info(f'Creating camera publisher failed. Camera error: {e}')
             return

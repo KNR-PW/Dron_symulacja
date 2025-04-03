@@ -220,6 +220,7 @@ class Mission(Node):
         self.send_goal_future = self.goto_rel_action_client.send_goal_async(goal_msg)
         self.send_goal_future.add_done_callback(self.goto_rel_response_callback)
         self.get_logger().info("Goto action sent")
+        self.wait_busy()
 
     def goto_rel_response_callback(self, future):
         self.get_logger().info("Goto rel response callback")
@@ -413,7 +414,7 @@ class Mission(Node):
 
         self.get_logger().info("Sending TAKE-OFF action goal")
         goal_msg = Takeoff.Goal()
-        goal_msg.altitude = float(self.scan_altitude)
+        goal_msg.altitude = float(2)
         while not self.takeoff_action_client.wait_for_server():
             self.get_logger().info('waiting for TAKE-OFF server...')
         self.state = "BUSY"
@@ -557,14 +558,10 @@ def main(args=None):
     mission = Mission()
     mission.arm_and_takeoff()
     mission.get_yaw()
-    mission.set_yaw_action(3.14)
-    mission.set_yaw_action(-3.14)
 
-    mission.set_yaw_action(+3.14+3.14/2)
-
-    #mission.set_yaw_action(-3.14-3.14/2)
-
-    #mission.send_set_yaw(3.14)
+   # mission.send_set_yaw(3.14)
+   # mission.set_yaw_action(3.14)
+    mission.send_goto_relative( 2, 0, 0)
    #mission.scan_area()
     #mission.photos_tour()
     mission.land()
