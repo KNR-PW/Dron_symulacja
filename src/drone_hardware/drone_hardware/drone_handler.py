@@ -340,7 +340,10 @@ class DroneHandler(Node):
         self.state = "BUSY"
         feedback_msg = Arm.Feedback()
         
-        while self.vehicle.is_armable==False and not self.dev_mode:
+        while self.vehicle.is_armable==False:
+            if self.dev_mode:
+                self.get_logger().info("DEV MODE is enabled. Skipping armable check.")
+                break
             feedback_msg.feedback = "Waiting for vehicle to become armable..."
             self.get_logger().info(feedback_msg.feedback)
             time.sleep(1)
