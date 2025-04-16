@@ -22,7 +22,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            "app=drone_web.app:main"
+            "app=drone_web.app:main",
+            "mission_website_client=drone_web.mission_website_client:main"
         ],
     },
 )

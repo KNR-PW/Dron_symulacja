@@ -41,8 +41,8 @@ class DroneHandler(Node):
         self.yaw = ActionServer(self, SetYawAction, 'Set_yaw', self.yaw_callback, cancel_callback=self.cancel_callback)
 
         #DECLARE PUBLISHER
-        self.telemetry = self.create_publisher(Telemetry, 'telemetry',10)
-        self.timer = self.create_timer(0.5, self.telemetry_callback)
+        self.telemetry_publisher = self.create_publisher(Telemetry, 'telemetry',10)
+        
 
         # ONLY FOR TEST IF YOU SEE HERE SOMETHING UNCOMMENTED TELL THIS TO HIS CREATOR
         #self._counter = 0
@@ -72,12 +72,13 @@ class DroneHandler(Node):
 
 
         baud_rate = 57600
-        self.get_logger().info(f"Connectiong with copter at {connection_string}...")
+        self.get_logger().info(f"Connecting with copter at {connection_string}...")
         # self.vehicle = connect(connection_string, baud=baud_rate, wait_ready=False) #doesnt work with wait_ready=True
         while self.vehicle is None:
             try:
                 # RPI USB-C
-                self.vehicle = connect(connection_string, baud=115200, wait_ready=True)
+                # self.vehicle = connect(connection_string, baud=115200, wait_ready=True)
+                self.vehicle = connect(connection_string, baud=57600, wait_ready=False)
             except Exception as e:
                 self.get_logger().info(f"Connecting failed with error: {e}")
                 self.get_logger().info("Retrying to connect in {3} seconds...")
@@ -85,6 +86,8 @@ class DroneHandler(Node):
         print(self.vehicle)
         self.state = "OK"
         self.get_logger().info("Copter connected, ready to arm")
+
+        self.timer = self.create_timer(0.5, self.telemetry_callback)
 
     def __del__(self):
         if self.vehicle:
@@ -464,17 +467,28 @@ class DroneHandler(Node):
         return CancelResponse.ACCEPT
     
     def telemetry_callback(self):
+        self.get_logger().info(f"Publishing telemetry...")
         msg = Telemetry()
         try:
+            # Battery
             msg.battery_percentage = self.vehicle.battery.level
             msg.battery_voltage = self.vehicle.battery.voltage
             msg.battery_current = self.vehicle.battery.current
+            # GPS
+            msg.lat = self.vehicle.location.global_relative_frame.lat
+            msg.lon = self.vehicle.location.global_relative_frame.lon
+            msg.alt = self.vehicle.location.global_relative_frame.alt
+            # Flight mode
+            msg.flight_mode = str(self.vehicle.mode)
+            
+            # 
             #if self._counter > 0:
             #    msg.battery_voltage = 11.5
-            self.telemetry.publish(msg)
+            self.telemetry_publisher.publish(msg)
             #self._counter += 1
             #self.get_logger().info(f"battery :{self.vehicle.battery}")
-        except:
+        except Exception as e:
+            self.get_logger().error(f"Error in telemetry callback: {e}")
             self.get_logger().info(f"ESC is not initializate yet:{self.vehicle.battery}")
 
 def main():
