@@ -11,7 +11,7 @@ from rclpy.action import ActionServer,  CancelResponse,  GoalResponse
 from rclpy.executors import MultiThreadedExecutor
 
 from drone_interfaces.msg import Telemetry
-from drone_interfaces.srv import GetAttitude, GetLocationRelative, SetServo, SetYaw, SetMode
+from drone_interfaces.srv import GetAttitude, GetLocationRelative, SetServo, SetYaw, SetMode, SetSpeed
 from drone_interfaces.action import GotoRelative, GotoGlobal, Arm, Takeoff, Shoot, SetYawAction
 
 import haversine as hv
@@ -29,6 +29,7 @@ class DroneHandler(Node):
         self.attitude = self.create_service(GetAttitude, 'get_attitude', self.get_attitude_callback)
         self.gps = self.create_service(GetLocationRelative, 'get_location_relative', self.get_location_relative_callback)
         self.servo = self.create_service(SetServo, 'set_servo', self.set_servo_callback)
+        self.create_service(SetSpeed, 'set_speed', self.set_speed_callback)
         #self.yaw = self.create_service(SetYaw, 'set_yaw', self.set_yaw_callback)
         self.mode = self.create_service(SetMode, 'set_mode',self.set_mode_callback)
         
@@ -86,8 +87,8 @@ class DroneHandler(Node):
         print(self.vehicle)
         self.state = "OK"
         self.get_logger().info("Copter connected, ready to arm")
-
-        self.timer = self.create_timer(0.5, self.telemetry_callback)
+        
+        self.timer = self.create_timer(2.5, self.telemetry_callback)
 
     def __del__(self):
         if self.vehicle:
@@ -466,8 +467,21 @@ class DroneHandler(Node):
         self.get_logger().info('Received cancel request')
         return CancelResponse.ACCEPT
     
+    def set_speed_callback(self, request, response):
+        self.get_logger().info(f'-- Set speed service called --')
+        speed = request.speed
+        self.vehicle.message_factory.command_long_send(
+            0, 0,    # target system/component
+            mavutil.mavlink.MAV_CMD_DO_CHANGE_SPEED,
+            0,       # confirmation
+            1,       # Speed type: 1 = Airspeed or Groundspeed
+            speed,     # Desired speed in m/s
+            -1, 0, 0, 0, 0  # Unused parameters
+        )
+        response = SetMode.Response()
+        return response
+
     def telemetry_callback(self):
-        self.get_logger().info(f"Publishing telemetry...")
         msg = Telemetry()
         try:
             # Battery
@@ -489,7 +503,7 @@ class DroneHandler(Node):
             #self.get_logger().info(f"battery :{self.vehicle.battery}")
         except Exception as e:
             self.get_logger().error(f"Error in telemetry callback: {e}")
-            self.get_logger().info(f"ESC is not initializate yet:{self.vehicle.battery}")
+            self.get_logger().info(f"ESC is not initialized yet:{self.vehicle.battery}")
 
 def main():
     rclpy.init()
