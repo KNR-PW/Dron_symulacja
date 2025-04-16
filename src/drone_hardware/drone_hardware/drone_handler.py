@@ -7,8 +7,10 @@ import time
 import math
 
 from rclpy.node import Node
-from rclpy.action import ActionServer
+from rclpy.action import ActionServer,  CancelResponse,  GoalResponse
+from rclpy.executors import MultiThreadedExecutor
 
+from drone_interfaces.msg import Telemetry
 from drone_interfaces.srv import GetAttitude, GetLocationRelative, SetServo, SetYaw, SetMode
 from drone_interfaces.action import GotoRelative, GotoGlobal, Arm, Takeoff, Shoot, SetYawAction
 
@@ -21,6 +23,7 @@ class DroneHandler(Node):
         ## DECLARE PARAMETERS
         #---------------------'  give here ip to flight controler   '
         self.declare_parameter('fc_ip', '/dev/ttyACM0')
+        self.declare_parameter('dev', 'false')
 
         ## DECLARE SERVICES
         self.attitude = self.create_service(GetAttitude, 'get_attitude', self.get_attitude_callback)
@@ -30,16 +33,23 @@ class DroneHandler(Node):
         self.mode = self.create_service(SetMode, 'set_mode',self.set_mode_callback)
         
         ## DECLARE ACTIONS
-        self.goto_rel = ActionServer(self, GotoRelative, 'goto_relative', self.goto_relative_action)
-        self.goto_global = ActionServer(self, GotoGlobal, 'goto_global', self.goto_global_action)
+        self.goto_rel = ActionServer(self, GotoRelative, 'goto_relative', self.goto_relative_action, cancel_callback=self.cancel_callback)
+        self.goto_global = ActionServer(self, GotoGlobal, 'goto_global', self.goto_global_action, cancel_callback=self.cancel_callback)
         self.arm = ActionServer(self,Arm, 'Arm',self.arm_callback)
-        self.takeoff = ActionServer(self, Takeoff, 'takeoff',self.takeoff_callback)
+        self.takeoff = ActionServer(self, Takeoff, 'takeoff',self.takeoff_callback, cancel_callback=self.cancel_callback)
         self.shoot = ActionServer(self, Shoot, 'shoot', self.shoot_callback)
-        self.yaw = ActionServer(self, SetYawAction, 'Set_yaw', self.yaw_callback)
+        self.yaw = ActionServer(self, SetYawAction, 'Set_yaw', self.yaw_callback, cancel_callback=self.cancel_callback)
 
+        #DECLARE PUBLISHER
+        self.telemetry_publisher = self.create_publisher(Telemetry, 'telemetry',10)
+        
+
+        # ONLY FOR TEST IF YOU SEE HERE SOMETHING UNCOMMENTED TELL THIS TO HIS CREATOR
+        #self._counter = 0
         ## DRONE MEMBER VARIABLES
         self.state = "BUSY"
         self.__relative = False
+        self.dev_mode = False
 
         ##CONNECT TO COPTER
         # parser = argparse.ArgumentParser(description='commands')
@@ -54,17 +64,21 @@ class DroneHandler(Node):
         
         # WEBOTS
         connection_string = self.get_parameter('fc_ip').get_parameter_value().string_value
+        dev = self.get_parameter('dev').get_parameter_value().string_value
+        if dev == "true":
+            self.dev_mode = True
         #connection_string = 'tcp:127.0.0.1:5762'
         sitl = None
 
 
         baud_rate = 57600
-        self.get_logger().info(f"Connectiong with copter at {connection_string}...")
+        self.get_logger().info(f"Connecting with copter at {connection_string}...")
         # self.vehicle = connect(connection_string, baud=baud_rate, wait_ready=False) #doesnt work with wait_ready=True
         while self.vehicle is None:
             try:
                 # RPI USB-C
-                self.vehicle = connect(connection_string, baud=115200, wait_ready=True)
+                # self.vehicle = connect(connection_string, baud=115200, wait_ready=True)
+                self.vehicle = connect(connection_string, baud=57600, wait_ready=False)
             except Exception as e:
                 self.get_logger().info(f"Connecting failed with error: {e}")
                 self.get_logger().info("Retrying to connect in {3} seconds...")
@@ -72,6 +86,8 @@ class DroneHandler(Node):
         print(self.vehicle)
         self.state = "OK"
         self.get_logger().info("Copter connected, ready to arm")
+
+        self.timer = self.create_timer(0.5, self.telemetry_callback)
 
     def __del__(self):
         if self.vehicle:
@@ -120,7 +136,7 @@ class DroneHandler(Node):
             mavutil.mavlink.MAV_FRAME_LOCAL_NED, # frame
             type_mask, # type_mask (only positions enabled)
             north, east, down, # x, y, z positions (or North, East, Down in the MAV_FRAME_BODY_NED frame
-            5, 5, 5, # x, y, z velocity in m/s  (not used)
+            0, 0, 0, # x, y, z velocity in m/s  (not used)
             0, 0, 0, # x, y, z acceleration (not supported yet, ignored in GCS_Mavlink)
             0, 0)    # yaw, yaw_rate (not supported yet, ignored in GCS_Mavlink)
         # send command to vehicle
@@ -265,6 +281,11 @@ class DroneHandler(Node):
         self.get_logger().info(f"Distance remaining: {feedback_msg.distance} m")
 
         while feedback_msg.distance>0.5:
+            if goal_handle.is_cancel_requested:
+                goal_handle.canceled()
+                self.get_logger().info('Goal goto rel canceled')
+                return GotoRelative.Result()
+
             feedback_msg.distance = self.calculate_remaining_distance_rel(destination)
             # self.get_logger().info(f"Distance remaining: {feedback_msg.distance} m")
             time.sleep(1)
@@ -301,6 +322,11 @@ class DroneHandler(Node):
         self.get_logger().info(f"Distance remaining: {feedback_msg.distance} m")
 
         while feedback_msg.distance>0.5:
+            if goal_handle.is_cancel_requested:
+                goal_handle.canceled()
+                self.get_logger().info('Goal canceled')
+                return GotoGlobal.Result()
+
             feedback_msg.distance = self.get_distance_global(self.vehicle.location.global_relative_frame, destination)
             # self.get_logger().info(f"Distance remaining: {feedback_msg.distance} m")
             time.sleep(1)
@@ -318,6 +344,9 @@ class DroneHandler(Node):
         feedback_msg = Arm.Feedback()
         
         while self.vehicle.is_armable==False:
+            if self.dev_mode:
+                self.get_logger().info("DEV MODE is enabled. Skipping armable check.")
+                break
             feedback_msg.feedback = "Waiting for vehicle to become armable..."
             self.get_logger().info(feedback_msg.feedback)
             time.sleep(1)
@@ -349,6 +378,11 @@ class DroneHandler(Node):
         # Wait until the vehicle reaches a safe height before processing the goto (otherwise the command
         #  after Vehicle.simple_takeoff will execute immediately).
         while self.vehicle.location.global_relative_frame.alt <= goal_handle.request.altitude * 0.80:
+            if goal_handle.is_cancel_requested:
+                goal_handle.canceled()
+                self.get_logger().info('Goal canceled')
+                return Takeoff.Result()
+
             feedback_msg.altitude = self.vehicle.location.global_relative_frame.alt
             self.get_logger().info(f"Altitude: {feedback_msg.altitude}")
             time.sleep(1)
@@ -406,7 +440,14 @@ class DroneHandler(Node):
         feefback_msg.angle = self.calc_remaning_yaw(requested_yaw, actual_yaw, cw)
         self.get_logger().info(f"Angle remainig: {feefback_msg.angle}")
 
+        #self._counter += 1
+
         while feefback_msg.angle > 0.5:
+            if goal_handle.is_cancel_requested:
+                goal_handle.canceled()
+                self.get_logger().info('Goal canceled')
+                return SetYawAction.Result()
+
             feefback_msg.angle = self.calc_remaning_yaw(requested_yaw, actual_yaw, cw)
             actual_yaw = self.vehicle.attitude.yaw
             self.get_logger().info(f"Angle remainig: {feefback_msg.angle}")
@@ -419,13 +460,46 @@ class DroneHandler(Node):
         result.result = 1
 
         return result
+    
+    def cancel_callback(self, goal_handle):
+        """Accept or reject a client request to cancel an action."""
+        self.get_logger().info('Received cancel request')
+        return CancelResponse.ACCEPT
+    
+    def telemetry_callback(self):
+        self.get_logger().info(f"Publishing telemetry...")
+        msg = Telemetry()
+        try:
+            # Battery
+            msg.battery_percentage = self.vehicle.battery.level
+            msg.battery_voltage = self.vehicle.battery.voltage
+            msg.battery_current = self.vehicle.battery.current
+            # GPS
+            msg.lat = self.vehicle.location.global_relative_frame.lat
+            msg.lon = self.vehicle.location.global_relative_frame.lon
+            msg.alt = self.vehicle.location.global_relative_frame.alt
+            # Flight mode
+            msg.flight_mode = str(self.vehicle.mode)
+            
+            # 
+            #if self._counter > 0:
+            #    msg.battery_voltage = 11.5
+            self.telemetry_publisher.publish(msg)
+            #self._counter += 1
+            #self.get_logger().info(f"battery :{self.vehicle.battery}")
+        except Exception as e:
+            self.get_logger().error(f"Error in telemetry callback: {e}")
+            self.get_logger().info(f"ESC is not initializate yet:{self.vehicle.battery}")
 
 def main():
     rclpy.init()
     
     drone = DroneHandler()
 
-    rclpy.spin(drone)
+    #rclpy.spin(drone)
+    executor = MultiThreadedExecutor()
+    executor.add_node(drone)
+    executor.spin()
 
     drone.destroy_node()
 
