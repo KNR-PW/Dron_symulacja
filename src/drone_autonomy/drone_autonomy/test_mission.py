@@ -3,7 +3,7 @@ import rclpy
 
 class Mission(Hardware_com):
     def __init__(self):
-
+        pass
         
 def main(args=None):
     rclpy.init(args=args)
