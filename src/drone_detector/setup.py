@@ -33,14 +33,11 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            "image_publisher=drone_detector.image_publisher:main",
-            "image_subscriber=drone_detector.image_subscriber:main",
             "detector=drone_detector.detector:main",
             "detection_subscriber=drone_detector.detection_subscriber:main",
             "detector_server=drone_detector.detector_server:main",
             "detection_client=drone_detector.detection_client:main",
             "aruco_detector=drone_detector.aruco_detector:main",
-            "camera_publisher=drone_detector.camera_publisher:main",
         ],
     },
 )

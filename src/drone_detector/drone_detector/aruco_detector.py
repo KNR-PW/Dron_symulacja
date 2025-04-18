@@ -7,6 +7,7 @@ from cv_bridge import CvBridge
 import cv2
 import cv2.aruco as aruco
 
+# DEPRECATED. WE NOW USE ROS2_ARUCO PACKAGE
 
 class ArucoDetector(Node):
     def __init__(self):

@@ -16,8 +16,7 @@ find_package(geometry_msgs REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/DetectionMsg.msg"
   "msg/DetectionsList.msg"
-  "msg/ArucoMarker.msg"
-  "msg/ArucoMarkersList.msg"
+  "msg/ArucoMarkers.msg"
   "msg/AxisAngle.msg"
   "msg/Telemetry.msg"
   "srv/GetAttitude.srv"
@@ -25,6 +24,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/SetYaw.srv"
   "srv/SetServo.srv"
   "srv/SetMode.srv"
+  "srv/SetSpeed.srv"
   "srv/GetGpsPos.srv"
   "srv/SetRobotPose.srv"
   "srv/SetRobotPoseRelative.srv"

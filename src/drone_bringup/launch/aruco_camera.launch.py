@@ -4,7 +4,7 @@ from launch_ros.actions import Node
 def generate_launch_description():
     return LaunchDescription([
         Node(
-            package='drone_detector',
+            package='drone_camera',
             executable='camera_publisher',
             parameters=[
                 {'camera': '0'}

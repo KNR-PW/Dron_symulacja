@@ -1,1 +1,0 @@
-ArucoMarker[] aruco_markers
