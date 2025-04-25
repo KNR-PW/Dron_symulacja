@@ -233,7 +233,7 @@ class Hardware_com(Node):
         #self.get_logger().info(f"Actual baterry level {msg.battery_percentage},{msg.battery_voltage}")
         voltage_threshold = 12
 
-        if self.__voltage_spikes >= 5 and not self.__battery_failsafe:
+        '''if self.__voltage_spikes >= 5 and not self.__battery_failsafe:
             future = self._goal_handle.cancel_goal_async()
             future.add_done_callback(self._emergency_flight_request)
             self.get_logger().info("anuluje")
@@ -241,6 +241,7 @@ class Hardware_com(Node):
 
         if msg.battery_voltage < voltage_threshold and not self.__battery_failsafe:
             self.__voltage_spikes += 1
+            '''
 
     # DECLARE private function
 

@@ -10,8 +10,8 @@ from rclpy.node import Node
 from rclpy.action import ActionServer,  CancelResponse,  GoalResponse
 from rclpy.executors import MultiThreadedExecutor
 
-from drone_interfaces.msg import Telemetry
-from drone_interfaces.srv import GetAttitude, GetLocationRelative, SetServo, SetYaw, SetMode, SetSpeed
+from drone_interfaces.msg import Telemetry, VelocityVectors
+from drone_interfaces.srv import GetAttitude, GetLocationRelative, SetServo, SetYaw, SetMode, SetSpeed, ToggleVelocityControl
 from drone_interfaces.action import GotoRelative, GotoGlobal, Arm, Takeoff, Shoot, SetYawAction
 
 import haversine as hv
@@ -44,6 +44,10 @@ class DroneHandler(Node):
         #DECLARE PUBLISHER
         self.telemetry_publisher = self.create_publisher(Telemetry, 'telemetry',10)
         
+        #DECLARE VELOCITY CONTROL
+        self.vector_receiver = self.create_subscription(VelocityVectors, 'velocity_vectors', self.velocity_control_callback ,10)
+        self._velocity_control_flag = False
+        self.toggle_velocity_control_srv = self.create_service(ToggleVelocityControl, 'toggle_v_control', self.toggle_velocity_control)
 
         # ONLY FOR TEST IF YOU SEE HERE SOMETHING UNCOMMENTED TELL THIS TO HIS CREATOR
         #self._counter = 0
@@ -504,6 +508,50 @@ class DroneHandler(Node):
         except Exception as e:
             self.get_logger().error(f"Error in telemetry callback: {e}")
             self.get_logger().info(f"ESC is not initialized yet:{self.vehicle.battery}")
+
+    #velocty control definitions
+
+    def send_global_velocity(self,velocity_x, velocity_y, velocity_z):
+        """
+        Move vehicle in direction based on specified velocity vectors.
+        """
+        msg = self.vehicle.message_factory.set_position_target_global_int_encode(
+            0,       # time_boot_ms (not used)
+            0, 0,    # target system, target component
+            mavutil.mavlink.MAV_FRAME_GLOBAL_TERRAIN_ALT   , # frame
+            0b0000111111000111, # type_mask (only speeds enabled)
+            0, # lat_int - X Position in WGS84 frame in 1e7 * meters
+            0, # lon_int - Y Position in WGS84 frame in 1e7 * meters
+            0, # alt - Altitude in meters in AMSL altitude(not WGS84 if absolute or relative)
+            # altitude above terrain if GLOBAL_TERRAIN_ALT_INT
+            velocity_x, # X velocity in NED frame in m/s
+            velocity_y, # Y velocity in NED frame in m/s
+            velocity_z, # Z velocity in NED frame in m/s
+            0, 0, 0, # afx, afy, afz acceleration (not supported yet, ignored in GCS_Mavlink)
+            0, 0)    # yaw, yaw_rate (not supported yet, ignored in GCS_Mavlink)
+
+        # send command to vehicle on 1 Hz cycle
+
+        self.vehicle.send_mavlink(msg)
+
+
+    def velocity_control_callback(self, msg):
+        if self._velocity_control_flag:
+            self.get_logger().info(f"i receive x:{msg.vx} y:{msg.vy} z:{msg.vz}")
+            self.send_global_velocity(msg.vx, msg.vy, msg.vz)
+
+    def toggle_velocity_control(self, request, response):
+
+        self._velocity_control_flag = False if self._velocity_control_flag else True
+
+        """if self._velocity_control_flag:
+            self._velocity_control_flag = False
+        else:
+            self._velocity_control_flag = True
+                    """
+        response.result = self._velocity_control_flag
+
+        return response
 
 def main():
     rclpy.init()
