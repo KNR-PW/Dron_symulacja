@@ -5,6 +5,9 @@ import rclpy
 import time
 
 TIME_STEP = 2
+MAX_OUT = 500
+MIN_OUT = -500
+
 
 class PID:
     def __init__(self,KP,KI,KD):
@@ -23,6 +26,12 @@ class PID:
         self.derivative_error = (self.error - self.error_last) / TIME_STEP
         self.error_last = self.error
         self.output = self.kp*self.error + self.ki*self.integral_error + self.kd*self.derivative_error
+
+        if self.output > MAX_OUT:
+            self.output = MAX_OUT
+
+        if self.output < MIN_OUT:
+            self.output = MIN_OUT
 
         return self.output
 		
@@ -46,7 +55,7 @@ class Mission(Hardware_com):
 
     
     def point_of_aruco(self, msg):
-        self.get_logger().info(f"Point of middle [{msg.x}, {msg.y}]")
+        #self.get_logger().info(f"Point of middle [{msg.x}, {msg.y}]")
         self.middle_of_aruco = [msg.x, msg.y]
 
     def send_vectors(self, vx, vy, vz):
@@ -91,12 +100,53 @@ class Mission(Hardware_com):
             self._timer.cancel()
             self.state = "OK"
         self.i += 1
-        
+
+    def first_test_of_pid_y(self):
+        self.state = "BUSY"
+        self.i = 0
+        self.get_logger().info("wlaczam pida")
+        self.pid = PID(2,0.2,2)
+        self._timer = self.create_timer(TIME_STEP, self.pid_callback_y)
+        self.wait_busy()
+    
+    def pid_callback_y(self):
+        error = 220-self.middle_of_aruco[1]
+        if error < 10:
+            self.get_logger().info("osiagnieto sukces")
+            self._timer.cancel()
+            self.state = "OK"
+            del self.pid
+        else:
+            vy = self.pid.compute(error)
+            vy = vy/1000
+            self.send_vectors(vy,0,0)
+    
+    def first_test_of_pid_x(self):
+        self.state = "BUSY"
+        self.i = 0
+        self.get_logger().info("wlaczam pida")
+        self.pid = PID(2,0.2,2)
+        self._timer = self.create_timer(TIME_STEP, self.pid_callback_x)
+        self.wait_busy()
+    
+    def pid_callback_x(self):
+        error = -(320-self.middle_of_aruco[0])
+        if error < 5:
+            self.get_logger().info("osiagnieto sukces")
+            self._timer.cancel()
+            self.state = "OK"
+            del self.pid
+        else:
+            vx = self.pid.compute(error)
+            vx = vx/1000
+            self.send_vectors(0,vx,0)
+
     
     def wait_busy(self):
         self.get_logger().info("busy")
         while self.state == "BUSY":
-            #self.pid.compute(self.)
+            #out = self.pid.compute(220-self.middle_of_aruco[1])
+            #self.get_logger().info(f"output of pid: {out}")
             rclpy.spin_once(self, timeout_sec=0.05)
     
 def main(args=None):
@@ -105,9 +155,11 @@ def main(args=None):
     mission.arm()
     mission.takeoff(5.0)
 
-    #mission.send_goto_relative( 8.0, 0.0, 0.0)
+    mission.send_goto_relative( 8.0, 0.0, 0.0)
     mission.toggle_control()
-    mission.fly_in_square()
+    mission.first_test_of_pid_y()
+    mission.first_test_of_pid_x()
+    #mission.fly_in_square()
     #mission.send_vectors(0.5,0.5,0)
     #time.sleep(1)
     #mission.send_vectors(0,0,0)
