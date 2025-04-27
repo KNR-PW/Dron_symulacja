@@ -5,12 +5,13 @@ from cv_bridge import CvBridge  # Package to convert between ROS and OpenCV Imag
 import cv2  # OpenCV library
 import numpy as np
 from drone_interfaces.msg import Telemetry
+from drone_interfaces.srv import PostLog
 import requests
 import time
 from datetime import datetime
 import io
 
-class MissionWebsiteClient(Node):
+class RosMissionWebsite(Node):
 
     def __init__(self):
         super().__init__('mission_website_client')
@@ -25,6 +26,8 @@ class MissionWebsiteClient(Node):
             'camera',
             self.image_callback,
             10)
+
+        self.post_log_service = self.create_service(PostLog, 'post_log_to_web', self.handle_post_log_request)
 
         self.br = CvBridge()
 
@@ -106,12 +109,34 @@ class MissionWebsiteClient(Node):
             self.post_image_to_server() 
         self.get_logger().info('Posted all data to server')
 
+    def handle_post_log_request(self, request, response):
+        payload = {
+            "message": request.message,
+            "level": request.level if request.level else "info"
+        }
+
+        try:
+            res = requests.post(f"{self.web_app_base_url}/api/log", json=payload)
+            if res.status_code == 200:
+                response.result = 1
+                response.error_message = ""
+                self.get_logger().info(f"Successfully posted log: {payload}")
+            else:
+                response.result = 0
+                response.error_message = f"Server error: {res.status_code}"
+                self.get_logger().warn(f"Failed to post log, status code: {res.status_code}")
+        except Exception as e:
+            response.result = 0
+            response.error_message = str(e)
+            self.get_logger().warn(f"❌ Failed to post log to server: {e}")
+
+        return response
 
 
 def main(args=None):
     rclpy.init(args=args)
 
-    mission_website_client = MissionWebsiteClient()
+    mission_website_client = RosMissionWebsite()
 
     rclpy.spin(mission_website_client)
 

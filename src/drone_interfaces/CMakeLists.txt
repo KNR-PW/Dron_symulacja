@@ -32,6 +32,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/SetCylinderParameters.srv"
   "srv/SetBoxParameters.srv"
   "srv/SetSphereParameters.srv"
+  "srv/PostLog.srv"
   "action/GotoRelative.action"
   "action/GotoGlobal.action"
   "action/Arm.action"
