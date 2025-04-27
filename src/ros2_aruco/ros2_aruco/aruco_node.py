@@ -47,7 +47,7 @@ class ArucoNode(rclpy.node.Node):
         # Declare and read parameters
         self.declare_parameter(
             name="marker_size",
-            value=0.0625,
+            value=0.1,
             descriptor=ParameterDescriptor(
                 type=ParameterType.PARAMETER_DOUBLE,
                 description="Size of the markers in meters.",
@@ -75,7 +75,7 @@ class ArucoNode(rclpy.node.Node):
 
         self.declare_parameter(
             name="intrinsic_matrix",
-            value=[1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
+            value=[1.0, 0.0, 320.0, 0.0, 1.0, -240.0, 0.0, 0.0, 1.0],
             descriptor=ParameterDescriptor(
                 type=ParameterType.PARAMETER_DOUBLE_ARRAY,
                 description="Camera intrinsic matrix.",

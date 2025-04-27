@@ -34,20 +34,25 @@ def generate_launch_description():
             parameters=[
                 {'fc_ip': 'tcp:127.0.0.1:5762'}
             ]
+        )
 
+    aruco_node = Node(
+            package='ros2_aruco',
+            executable='aruco_node',
         )
 
     # Delay running drone_handler to wain for  webots init
     drone_handler_node_action = TimerAction(
             period=5.0,  # Delay of 5 seconds
             actions=[
-                drone_handler_node
+                drone_handler_node,
+                aruco_node
             ]
         )
     return LaunchDescription([
         DeclareLaunchArgument(
             'world',
-            default_value='mars_mines_2.wbt',
+            default_value='aruco_tests.wbt',
             description='Choose one of the world files from `/webots_simulation/resource/worlds` directory'
         ),
         webots,
