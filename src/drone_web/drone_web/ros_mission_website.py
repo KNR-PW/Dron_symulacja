@@ -119,15 +119,12 @@ class RosMissionWebsite(Node):
             res = requests.post(f"{self.web_app_base_url}/api/log", json=payload)
             if res.status_code == 200:
                 response.result = 1
-                response.error_message = ""
                 self.get_logger().info(f"Successfully posted log: {payload}")
             else:
                 response.result = 0
-                response.error_message = f"Server error: {res.status_code}"
                 self.get_logger().warn(f"Failed to post log, status code: {res.status_code}")
         except Exception as e:
             response.result = 0
-            response.error_message = str(e)
             self.get_logger().warn(f"❌ Failed to post log to server: {e}")
 
         return response
