@@ -50,7 +50,7 @@ class ArucoMissionNode(DroneController):
         )
         # Delay mission start by 1s to allow connections
         # self._mission_timer = self.create_timer(1.0, self._mission_entry)
-        self.web_logger = WebLogger()
+        # self.web_logger = WebLogger()
         self.web_logger.log("Aruco mission node started", "info")
         self._mission_started = False
         self.i = 0
