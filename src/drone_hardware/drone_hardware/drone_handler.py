@@ -474,7 +474,7 @@ class DroneHandler(Node):
         self.get_logger().info(f"Speed: {speed} m/s")
         
         self.vehicle.groundspeed = speed
-        
+        self.get_logger().info(f"Speed set to: {self.vehicle.groundspeed} m/s")
         response = SetSpeed.Response()
         return response
 

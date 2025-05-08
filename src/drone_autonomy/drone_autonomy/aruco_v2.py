@@ -1,5 +1,6 @@
 import threading
 import time
+import asyncio
 
 import rclpy
 from rclpy.executors import MultiThreadedExecutor
@@ -26,7 +27,7 @@ class WebLogger(Node):
         rclpy.spin_until_future_complete(self, future)
 
         if future.result() is not None:
-            if future.result().success:
+            if future.result().result:
                 self.get_logger().info('Successfully posted web log')
             else:
                 self.get_logger().warn(f"Failed to post log")
@@ -50,7 +51,7 @@ class ArucoMissionNode(DroneController):
         # Delay mission start by 1s to allow connections
         # self._mission_timer = self.create_timer(1.0, self._mission_entry)
         self.web_logger = WebLogger()
-        # self.web_logger.log("Aruco mission node started", "info")
+        self.web_logger.log("Aruco mission node started", "info")
         self._mission_started = False
         self.i = 0
 
@@ -94,14 +95,14 @@ class ArucoMissionNode(DroneController):
             return
 
         # 4. Navigate to marker (horizontal only)
-        time.sleep(1)
-        if not self.set_speed(0.1):
+        # idk why but speed change works only after the first goto
+        self.send_goto_relative(0.0, 0.0, 0.0)
+        if not self.set_speed(0.3):
             self.get_logger().error('Failed to set speed. Aborting.')
             return
-        time.sleep(1)
         pos = self._marker_pose.position
         self.get_logger().info(f'Navigating to marker: x={pos.x:.2f}, y={pos.y:.2f}')
-        if not self.send_goto_relative(pos.x, pos.y, 0.0):
+        if not self.send_goto_relative(-pos.y, pos.x, 0.0):
             self.get_logger().error('Goto marker failed. Aborting.')
             rclpy.shutdown(); return
 
@@ -134,30 +135,73 @@ class ArucoMissionNode(DroneController):
         self.land()
         self.get_logger().info('Mission complete.')
 
+    async def mission_async(self):
+        if self._mission_task is not None:
+            return  # Mission already running
+        self.get_logger().info('Mission starting...')
+        
+        home = self.get_gps()
+        if not home:
+            self.get_logger().error('Unable to fetch home GPS. Aborting.')
+            return
+        self.get_logger().info(f'Home GPS: {home}')
+
+        if not self.arm():
+            self.get_logger().error('Arm failed.')
+            return
+        if not self.takeoff(5.0):
+            self.get_logger().error('Takeoff failed.')
+            return
+
+        # ✨ Here we "pause" for 5 seconds without blocking
+        await self.pause(5.0)
+
+        # Wait for marker
+        self.get_logger().info('Waiting for marker...')
+        while not self._marker_received:
+            await asyncio.sleep(0.1)  # Yield control to executor
+
+        self.get_logger().info('Marker detected, proceeding!')
+
+        # continue mission...
+
+    async def pause(self, seconds: float):
+        """Non-blocking sleep helper."""
+        await asyncio.sleep(seconds)
+
+    def start_mission_async(self):
+        """Launch the mission as a background task."""
+        self._mission_task = asyncio.create_task(self.mission_async())
+
+    def _marker_callback_2(self, msg):
+        if msg.marker_ids:
+            self._marker_received = True
+            # handle marker
+
 
 def main(args=None):
     rclpy.init(args=args)
 
     node = ArucoMissionNode()
 
-    # Spin node in a separate thread to get subscription callbacks
+    # # Spin node in a separate thread to get subscription callbacks
     executor = MultiThreadedExecutor(num_threads=2)
     executor.add_node(node)
     spin_thread = threading.Thread(target=executor.spin, daemon=True)
     spin_thread.start()
     
-    # node.arm()
-    
+    # # node.arm()
+
     node.start_mission()
-    # node.set_speed(0.5)
+
+
     # node.arm()
     # node.takeoff(5.0)
-
+    # node.send_goto_relative(0.0, 0.0, 0.0)
+    # node.set_speed(0.5)
     # node.send_goto_relative(0.0, 5.0, 0.0)
     # node.set_speed(0.5)
     # node.send_goto_relative(0.0, 5.0, 0.0)
-    # print(node.get_gps())
-    # print(node.get_yaw())
     # node.set_speed(0.8)
     # node.send_goto_relative(0.0, 5.0, 0.0)
     # time.sleep(3)
@@ -170,6 +214,26 @@ def main(args=None):
     # node.send_set_yaw(2.0)
     node.land()
     # print(node.i)
+
+# ASYNC
+    # executor = MultiThreadedExecutor()
+    # executor.add_node(node)
+
+    # # Start the asyncio event loop manually
+    # async def run_async():
+    #     node.start_mission_async()
+    #     while rclpy.ok():
+    #         rclpy.spin_once(node, timeout_sec=0.1)
+    #         await asyncio.sleep(0.01)  # Yield control to asyncio
+
+    # try:
+    #     asyncio.run(run_async())
+    # finally:
+    #     node.destroy_node()
+    #     rclpy.shutdown()
+
+
+
     # Shut down the executor and node
     # This is important to ensure all threads are cleaned up properly
     executor.shutdown()

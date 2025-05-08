@@ -166,6 +166,7 @@ class DroneController(Node):
         return fut.result().yaw
 
     def _telemetry_cb(self, msg: Telemetry):
+        print("TELE")
         if msg.battery_voltage < self._voltage_threshold:
             self._voltage_spikes += 1
         else:

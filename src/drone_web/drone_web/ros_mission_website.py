@@ -33,19 +33,19 @@ class RosMissionWebsite(Node):
 
         self.current_image = None
         self.current_telemetry = {
-        "altitude": -1,
-        "speed": -1,
-        "battery": -1,
-        "gps": "-1,-1",
-        "signal_strength": -1,
+        "altitude": 0,
+        "speed": 0,
+        "battery": 0,
+        "gps": "0, 0",
+        "signal_strength": 0,
         "flight_mode": "DISCONNECTED",
-        "temperature": -1
+        "temperature": 0
     }
 
         self.web_app_base_url = "http://localhost:5000"
 
         # Post data to website with specified time interval
-        post_interval = 2.0
+        post_interval = 0.5
         self.timer = self.create_timer(post_interval, self.post_all_to_server)
         self.get_logger().info('MissionWebsiteClient node created')
         self.test_server_connection()
