@@ -41,6 +41,10 @@ def generate_launch_description():
             executable='aruco_node',
         )
 
+    healthcheck = Node(
+            package='drone_hardware',
+            executable='healthcheck',
+        )
     # Delay running drone_handler to wain for  webots init
     drone_handler_node_action = TimerAction(
             period=5.0,  # Delay of 5 seconds
@@ -49,6 +53,14 @@ def generate_launch_description():
                 aruco_node
             ]
         )
+
+    healthcheck_action = TimerAction(
+            period=12.0,
+            actions=[
+                healthcheck
+            ]
+        )
+
     return LaunchDescription([
         DeclareLaunchArgument(
             'world',
@@ -59,6 +71,7 @@ def generate_launch_description():
         webots._supervisor,
         ros2_webots_sim_manager,
         drone_handler_node_action,
+        healthcheck_action,
 
         # This action will kill all nodes once the Webots simulation has exited
         launch.actions.RegisterEventHandler(
