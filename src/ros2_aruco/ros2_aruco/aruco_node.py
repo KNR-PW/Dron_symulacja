@@ -1,28 +1,7 @@
 """
 This node locates Aruco AR markers in images and publishes their ids and poses.
 
-Subscriptions:
-   /camera/image_raw (sensor_msgs.msg.Image)
-   /camera/camera_info (sensor_msgs.msg.CameraInfo)
-   /camera/camera_info (sensor_msgs.msg.CameraInfo)
-
-Published Topics:
-    /aruco_poses (geometry_msgs.msg.PoseArray)
-       Pose of all detected markers (suitable for rviz visualization)
-
-    /aruco_markers (ros2_aruco_interfaces.msg.ArucoMarkers)
-       Provides an array of all poses along with the corresponding
-       marker ids.
-
-Parameters:
-    marker_size - size of the markers in meters (default .0625)
-    aruco_dictionary_id - dictionary that was used to generate markers
-                          (default DICT_5X5_250)
-    image_topic - image topic to subscribe to (default /camera/image_raw)
-    camera_info_topic - camera info topic to subscribe to
-                         (default /camera/camera_info)
-
-Author: Nathan Sprague
+Author: Nathan Sprague modified by Stanislaw Kolodziejczyk
 Version: 10/26/2020
 
 """
@@ -47,7 +26,7 @@ class ArucoNode(rclpy.node.Node):
         # Declare and read parameters
         self.declare_parameter(
             name="marker_size",
-            value=0.0625,
+            value=0.1,
             descriptor=ParameterDescriptor(
                 type=ParameterType.PARAMETER_DOUBLE,
                 description="Size of the markers in meters.",
@@ -75,7 +54,7 @@ class ArucoNode(rclpy.node.Node):
 
         self.declare_parameter(
             name="intrinsic_matrix",
-            value=[1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
+            value=[1.0, 0.0, 320.0, 0.0, 1.0, 240.0, 0.0, 0.0, 1.0],
             descriptor=ParameterDescriptor(
                 type=ParameterType.PARAMETER_DOUBLE_ARRAY,
                 description="Camera intrinsic matrix.",

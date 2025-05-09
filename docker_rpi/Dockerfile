@@ -16,7 +16,8 @@ RUN apt update && apt install -y \
     python3-lxml \ 
     python3-pil \ 
     python3-setuptools \ 
-    python3-future 
+    python3-future \
+    ros-humble-tf-transformations
 
 RUN apt-get install ros-humble-cv-bridge
 
@@ -27,7 +28,11 @@ RUN pip install \
     MAVProxy==1.8.71 \
     dronekit \
     haversine \
-    opencv-python
+    opencv-python \
+    transforms3d \
+    colorama \
+    tabulate
+
 
 # Fix dronekit
 RUN sed -i 's/collections.MutableMapping/collections.abc.MutableMapping/g' /usr/local/lib/python3.10/dist-packages/dronekit/__init__.py

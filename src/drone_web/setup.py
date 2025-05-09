@@ -23,7 +23,7 @@ setup(
     entry_points={
         'console_scripts': [
             "app=drone_web.app:main",
-            "mission_website_client=drone_web.mission_website_client:main"
+            "ros_mission_website=drone_web.ros_mission_website:main"
         ],
     },
 )

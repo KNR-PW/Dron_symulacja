@@ -5,12 +5,13 @@ from cv_bridge import CvBridge  # Package to convert between ROS and OpenCV Imag
 import cv2  # OpenCV library
 import numpy as np
 from drone_interfaces.msg import Telemetry
+from drone_interfaces.srv import PostLog
 import requests
 import time
 from datetime import datetime
 import io
 
-class MissionWebsiteClient(Node):
+class RosMissionWebsite(Node):
 
     def __init__(self):
         super().__init__('mission_website_client')
@@ -26,23 +27,25 @@ class MissionWebsiteClient(Node):
             self.image_callback,
             10)
 
+        self.post_log_service = self.create_service(PostLog, 'post_log_to_web', self.handle_post_log_request)
+
         self.br = CvBridge()
 
         self.current_image = None
         self.current_telemetry = {
-        "altitude": -1,
-        "speed": -1,
-        "battery": -1,
-        "gps": "-1,-1",
-        "signal_strength": -1,
+        "altitude": 0,
+        "speed": 0,
+        "battery": 0,
+        "gps": "0, 0",
+        "signal_strength": 0,
         "flight_mode": "DISCONNECTED",
-        "temperature": -1
+        "temperature": 0
     }
 
         self.web_app_base_url = "http://localhost:5000"
 
         # Post data to website with specified time interval
-        post_interval = 2.0
+        post_interval = 0.5
         self.timer = self.create_timer(post_interval, self.post_all_to_server)
         self.get_logger().info('MissionWebsiteClient node created')
         self.test_server_connection()
@@ -106,12 +109,31 @@ class MissionWebsiteClient(Node):
             self.post_image_to_server() 
         self.get_logger().info('Posted all data to server')
 
+    def handle_post_log_request(self, request, response):
+        payload = {
+            "message": request.message,
+            "level": request.level if request.level else "info"
+        }
+
+        try:
+            res = requests.post(f"{self.web_app_base_url}/api/log", json=payload)
+            if res.status_code == 200:
+                response.result = 1
+                self.get_logger().info(f"Successfully posted log: {payload}")
+            else:
+                response.result = 0
+                self.get_logger().warn(f"Failed to post log, status code: {res.status_code}")
+        except Exception as e:
+            response.result = 0
+            self.get_logger().warn(f"❌ Failed to post log to server: {e}")
+
+        return response
 
 
 def main(args=None):
     rclpy.init(args=args)
 
-    mission_website_client = MissionWebsiteClient()
+    mission_website_client = RosMissionWebsite()
 
     rclpy.spin(mission_website_client)
 

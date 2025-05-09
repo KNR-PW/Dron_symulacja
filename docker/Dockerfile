@@ -41,7 +41,8 @@ RUN apt update && apt install -y \
     python3-pil \ 
     python3-setuptools \ 
     python3-future \ 
-    ros-humble-webots-ros2-driver
+    ros-humble-webots-ros2-driver \
+    ros-humble-tf-transformations
 
 RUN pip install \
     empy==3.3.4 \
@@ -49,7 +50,10 @@ RUN pip install \
     lark==1.2.2 \
     MAVProxy==1.8.71 \
     dronekit \
-    haversine
+    haversine \
+    transforms3d \
+    colorama \
+    tabulate
 
 # Fix dronekit
 RUN sed -i 's/collections.MutableMapping/collections.abc.MutableMapping/g' /usr/local/lib/python3.10/dist-packages/dronekit/__init__.py

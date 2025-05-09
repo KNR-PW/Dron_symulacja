@@ -238,10 +238,10 @@ class DroneHandler(Node):
         response.north = temp.north or 0.0
         response.east = temp.east or 0.0
         response.down = temp.down or 0.0
-        # self.get_logger().info(f"-- Get location relative service called --")
-        # self.get_logger().info(f"North: {response.north}")
-        # self.get_logger().info(f"East: {response.east}")
-        # self.get_logger().info(f"Down: {response.down}")
+        self.get_logger().info(f"-- Get location relative service called --")
+        self.get_logger().info(f"North: {response.north}")
+        self.get_logger().info(f"East: {response.east}")
+        self.get_logger().info(f"Down: {response.down}")
         return response
     
     def set_yaw_callback(self, request, response):
@@ -469,16 +469,13 @@ class DroneHandler(Node):
     
     def set_speed_callback(self, request, response):
         self.get_logger().info(f'-- Set speed service called --')
+    
         speed = request.speed
-        self.vehicle.message_factory.command_long_send(
-            0, 0,    # target system/component
-            mavutil.mavlink.MAV_CMD_DO_CHANGE_SPEED,
-            0,       # confirmation
-            1,       # Speed type: 1 = Airspeed or Groundspeed
-            speed,     # Desired speed in m/s
-            -1, 0, 0, 0, 0  # Unused parameters
-        )
-        response = SetMode.Response()
+        self.get_logger().info(f"Speed: {speed} m/s")
+        
+        self.vehicle.groundspeed = speed
+        self.get_logger().info(f"Speed set to: {self.vehicle.groundspeed} m/s")
+        response = SetSpeed.Response()
         return response
 
     def telemetry_callback(self):
@@ -510,7 +507,7 @@ def main():
     
     drone = DroneHandler()
 
-    #rclpy.spin(drone)
+    # rclpy.spin(drone)
     executor = MultiThreadedExecutor()
     executor.add_node(drone)
     executor.spin()

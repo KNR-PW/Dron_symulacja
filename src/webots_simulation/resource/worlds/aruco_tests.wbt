@@ -1,0 +1,85 @@
+#VRML_SIM R2025a utf8
+
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackground.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/floors/protos/Floor.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/appearances/protos/Grass.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/factory/pipes/protos/PipeSection.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/factory/manhole/protos/SquareManhole.proto"
+IMPORTABLE EXTERNPROTO "../protos/Iris.proto"
+IMPORTABLE EXTERNPROTO "../protos/ArucoMarker.proto"
+
+WorldInfo {
+  title "Iris Mines"
+  basicTimeStep 2
+  FPS 20
+}
+Viewpoint {
+  orientation 0.05280260066923654 -0.9877365367746125 -0.14692998088565712 5.585293485834154
+  position -25.946702586105573 -9.421907584826007 17.820333643237973
+  follow "Iris"
+  followSmoothness 0.01
+}
+TexturedBackground {
+}
+TexturedBackgroundLight {
+}
+Floor {
+  size 1000 1000
+  appearance Grass {
+  }
+}
+SquareManhole {
+  translation -6.5 -6.5 0
+  name "drone takeoff(1)"
+  size 0.5 0.5 0.1
+}
+PipeSection {
+  translation 0 20 0.3
+  radius 0.2
+  subdivision 20
+  appearance PBRAppearance {
+    baseColor 0 0 1
+    roughness 1
+    metalness 0
+  }
+}
+Robot {
+  name "ros2_sim_manager"
+  controller "<extern>"
+  supervisor TRUE
+}
+DEF Iris Iris {
+  translation -6.487827768237703 -6.526218029207014 0.24921128539324167
+  rotation 0.6848507679009512 0.7285065937432305 0.01604894320862275 5.588330225563798e-18
+  controller "ardupilot_sitl_controller"
+  controllerArgs [
+    "--motors"
+    "m1_motor, m2_motor, m3_motor, m4_motor"
+    "--camera"
+    "camera"
+    "--camera-port"
+    "5599"
+  ]
+  extensionSlot [
+    DEF camera Camera {
+      translation 0.05 0 -0.05
+      rotation 0 1 0 1.57
+      width 640
+      height 480
+    }
+  ]
+}
+ArucoMarker {
+  translation -5.5 -7.5 0
+}
+ArucoMarker {
+  translation -5.5 -10.5 0
+  name "aruco(1)"
+  markerId "1"
+}
+ArucoMarker {
+  translation -2 -10.5 0
+  name "aruco(2)"
+  markerId "2"
+}

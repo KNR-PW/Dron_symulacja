@@ -82,7 +82,7 @@ class Hardware_com(Node):
         self.get_logger().info("Sending GPS request")
         request_gps = GetLocationRelative.Request()
         gps_future = self.gps_cli.call_async(request_gps)
-        rclpy.spin_until_future_complete(self, gps_future, timeout_sec=5)
+        rclpy.spin_until_future_complete(self, gps_future, timeout_sec=10)
         if gps_future.result() is not None:
             self.north = gps_future.result().north
             self.east = gps_future.result().east
@@ -187,7 +187,7 @@ class Hardware_com(Node):
         goal_msg.lat = lat
         goal_msg.lon = lon
         goal_msg.alt = alt
-        while not self.goto_rel_action_client.wait_for_server():
+        while not self.goto_glob_action_client.wait_for_server():
             self.get_logger().info("waiting for goto server...")
 
         self.send_goal_future = self.goto_glob_action_client.send_goal_async(goal_msg)
