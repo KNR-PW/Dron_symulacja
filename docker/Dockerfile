@@ -51,7 +51,9 @@ RUN pip install \
     MAVProxy==1.8.71 \
     dronekit \
     haversine \
-    transforms3d
+    transforms3d \
+    colorama \
+    tabulate
 
 # Fix dronekit
 RUN sed -i 's/collections.MutableMapping/collections.abc.MutableMapping/g' /usr/local/lib/python3.10/dist-packages/dronekit/__init__.py
