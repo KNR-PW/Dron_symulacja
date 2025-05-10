@@ -35,9 +35,9 @@ class WebLogger(Node):
             self.get_logger().error('Service call failed')
             
 
-class ArucoMissionNode(DroneController):
+class ArucoMissionNode(Node):
     def __init__(self):
-        super().__init__()
+        super().__init__("aruco")
 
         # Marker reception
         self._marker_pose = None
@@ -51,7 +51,7 @@ class ArucoMissionNode(DroneController):
         # Delay mission start by 1s to allow connections
         # self._mission_timer = self.create_timer(1.0, self._mission_entry)
         # self.web_logger = WebLogger()
-        self.web_logger.log("Aruco mission node started", "info")
+        #self.web_logger.log("Aruco mission node started", "info")
         self._mission_started = False
         self.i = 0
 
@@ -243,4 +243,10 @@ def main(args=None):
 
 
 if __name__ == '__main__':
-    main()
+    #main()
+    rclpy.init()
+    node = ArucoMissionNode()
+    rclpy.spin(node)
+
+    node.destroy_node()
+    rclpy.shutdown()

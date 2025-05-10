@@ -8,8 +8,8 @@ from drone_interfaces.action import GotoRelative, GotoGlobal, Shoot, Arm, Takeof
 
 import time
 class Hardware_com(Node):
-    def __init__(self, node_name: str):
-        super().__init__(node_name)
+    def __init__(self):
+        super().__init__("test")
 
         # DECLARE service clients
         self.mode_cli = self.create_client(SetMode, 'set_mode')

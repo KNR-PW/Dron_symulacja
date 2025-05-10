@@ -15,6 +15,7 @@ find_package(geometry_msgs REQUIRED)
 # find_package(<dependency> REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/DetectionMsg.msg"
+  "msg/MiddleofAruco.msg"
   "msg/DetectionsList.msg"
   "msg/ArucoMarkers.msg"
   "msg/AxisAngle.msg"

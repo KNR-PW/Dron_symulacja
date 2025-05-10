@@ -15,7 +15,21 @@ def generate_launch_description():
             ]
         ),
         Node(
+            package='camera_ros',
+            executable='camera_node',
+            parameters=[
+                {'format': 'RGB888'}
+            ]
+        ),
+        Node(
             package='drone_camera',
-            executable='camera_publisher'
+            executable='images_recorder',
+            parameters=[
+                {'camera_topic': 'camera/image_raw'}
+            ]
+        ),
+        Node(
+            package='drone_detector',
+            executable='aruco_detector',
         )
     ])
