@@ -68,6 +68,7 @@ class DroneHandler(Node):
         dev = self.get_parameter('dev').get_parameter_value().string_value
         if dev == "true":
             self.dev_mode = True
+            self.get_logger().warn("DEV MODE is enabled.")
         #connection_string = 'tcp:127.0.0.1:5762'
         sitl = None
 
@@ -84,12 +85,26 @@ class DroneHandler(Node):
                 self.get_logger().info(f"Connecting failed with error: {e}")
                 self.get_logger().info("Retrying to connect in {3} seconds...")
                 time.sleep(3)
-        print(self.vehicle)
+        if not self.dev_mode:
+            self.wait_fc_ready()
         self.state = "OK"
         self.get_logger().info("Copter connected, ready to arm")
         
-        self.timer = self.create_timer(2.5, self.telemetry_callback)
+        self.timer = self.create_timer(.1, self.telemetry_callback)
 
+    def wait_fc_ready(self):
+        fc_ready = False
+        while not fc_ready:
+            try:
+                self.get_logger().info("Waiting for FC to be ready...")
+                if self.vehicle.is_armable:
+                    fc_ready = True
+                    self.get_logger().info("FC is ready")
+                else:
+                    time.sleep(1)
+            except Exception as e:
+                self.get_logger().info(f"Error while waiting for FC to be ready: {e}")
+                time.sleep(1)
     def __del__(self):
         if self.vehicle:
             self.vehicle.mode=VehicleMode("RTL")

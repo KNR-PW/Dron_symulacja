@@ -30,7 +30,7 @@ class DroneHealthCheck(Node):
         # Subscribe to camera topic
         self.camera_subscription = self.create_subscription(
             Image,
-            'camera',
+            self.camera_topic,
             self.camera_callback,
             10
         )
