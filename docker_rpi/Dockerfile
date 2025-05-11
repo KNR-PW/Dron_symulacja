@@ -19,7 +19,7 @@ RUN apt update && apt install -y \
     python3-future \
     ros-humble-tf-transformations
 
-RUN apt-get install ros-humble-cv-bridge
+RUN apt-get install -y ros-humble-cv-bridge
 
 RUN pip install \
     empy==3.3.4 \
