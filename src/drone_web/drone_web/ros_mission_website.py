@@ -14,7 +14,11 @@ import io
 class RosMissionWebsite(Node):
 
     def __init__(self):
-        super().__init__('mission_website_client')
+        super().__init__('ros_mission_website')
+
+        self.declare_parameter('base_url', 'http://localhost:5000')
+        self.web_app_base_url = self.get_parameter('base_url').get_parameter_value().string_value
+
         self.report_subscription = self.create_subscription(
             Telemetry, 
             'telemetry',
@@ -38,11 +42,12 @@ class RosMissionWebsite(Node):
         "battery": 0,
         "gps": "0, 0",
         "signal_strength": 0,
-        "flight_mode": "DISCONNECTED",
+        "flight_mode": "NONE",
         "temperature": 0
     }
 
-        self.web_app_base_url = "http://localhost:5000"
+        # self.web_app_base_url = "http://localhost:5000"
+        # self.web_app_base_url = "https://osadniik.pythonanywhere.com/"
 
         # Post data to website with specified time interval
         post_interval = 0.5
