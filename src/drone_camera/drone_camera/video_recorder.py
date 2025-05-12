@@ -59,30 +59,23 @@ class VideoRecorder(Node):
 
     def start_video_callback(self, request, response):
         self.video_name += 1
-        width = self.current_frame.get(3)
-        height = self.current_frame.get(4)
-        size = (width, height)
-        self.result = cv2.VideoWriter("video"+str(self.video_name)+".mp4", cv2.VideoWriter_fourcc(*'MJPG'), 10, size) 
+        height ,width , c = self.current_frame.shape
+        size = (int(width), int(height))
+        self.result = cv2.VideoWriter(self.save_directory+"/video"+str(self.video_name)+".avi", cv2.VideoWriter_fourcc(*'MJPG'), 10, size) 
         self._start_video_flag = True
         response.error = False
+        self.get_logger().info('Start making video')
+
         return response
     
     def stop_video_callback(self, request, response):
         self._start_video_flag = False
         self.result.release()
         response.error = False
+        self.get_logger().info('Stop making')
+
         return response
 
-
-    def save_frame(self):
-        if hasattr(self, 'current_frame'):
-            # Save the current frame to a file
-            filename = f'frame_{self.get_clock().now().nanoseconds}.jpg'
-            filepath = os.path.join(self.save_directory, filename)
-            cv2.imwrite(filepath, self.current_frame)
-            self.get_logger().info(f'Saved frame: {filepath}')
-        else:
-            self.get_logger().warn('No frame to save yet')
 def main(args=None):
     rclpy.init(args=args)
 
