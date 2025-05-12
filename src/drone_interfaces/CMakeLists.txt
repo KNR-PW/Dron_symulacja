@@ -33,6 +33,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/SetBoxParameters.srv"
   "srv/SetSphereParameters.srv"
   "srv/PostLog.srv"
+  "srv/TurnOnVideo.srv"
+  "srv/TurnOffVideo.srv"
   "action/GotoRelative.action"
   "action/GotoGlobal.action"
   "action/Arm.action"
