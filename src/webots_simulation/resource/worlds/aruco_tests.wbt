@@ -8,6 +8,7 @@ EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/project
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/factory/manhole/protos/SquareManhole.proto"
 IMPORTABLE EXTERNPROTO "../protos/Iris.proto"
 IMPORTABLE EXTERNPROTO "../protos/ArucoMarker.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/factory/containers/protos/PlasticCrate.proto"
 
 WorldInfo {
   title "Iris Mines"
@@ -15,8 +16,8 @@ WorldInfo {
   FPS 20
 }
 Viewpoint {
-  orientation 0.05280260066923654 -0.9877365367746125 -0.14692998088565712 5.585293485834154
-  position -25.946702586105573 -9.421907584826007 17.820333643237973
+  orientation 0.08408955303340973 -0.7383008945474104 -0.6692090377312121 5.946025917849594
+  position -18.398069387013738 -11.161460846208925 4.491862781852888
   follow "Iris"
   followSmoothness 0.01
 }
@@ -82,4 +83,24 @@ ArucoMarker {
   translation -2 -10.5 0
   name "aruco(2)"
   markerId "2"
+}
+PlasticCrate {
+  translation -4 -5 0
+  size 1 1 0.4
+}
+Solid {
+  translation -8 -9 0
+  children [
+    Shape {
+      appearance Appearance {
+        material Material {
+          diffuseColor 0 0.3 1
+        }
+      }
+      geometry Cylinder {
+        height 0.2
+        radius 0.5
+      }
+    }
+  ]
 }
