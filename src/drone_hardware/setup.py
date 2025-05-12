@@ -22,6 +22,8 @@ setup(
         'console_scripts': [
             "drone_handler=drone_hardware.drone_handler:main"
             "drone_utils=drone_hardware.drone_handler:main"
+            "led_strip_node=drone_hardware.led_strip_node:main"
+            "led_strip_node=drone_hardware.led_strip_node:main"
         ],
     },
 )
