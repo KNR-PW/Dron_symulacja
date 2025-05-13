@@ -48,6 +48,14 @@ def generate_launch_description():
             ]
         ),
         Node(
+            package='drone_camera',
+            executable='video_recorder',
+            parameters=[
+                {'camera_topic': 'camera/image_raw'}
+                # {'camera_topic': 'camera'}
+            ]
+        ),
+        Node(
             package='ros2_aruco',
             executable='aruco_node',
             parameters=[
