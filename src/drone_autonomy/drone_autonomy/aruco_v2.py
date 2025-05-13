@@ -192,18 +192,18 @@ def main(args=None):
     
     # # node.arm()
 
-    node.start_mission()
+    # node.start_mission()
+    node.start_video()
 
-
-    # node.arm()
-    # node.takeoff(5.0)
-    # node.send_goto_relative(0.0, 0.0, 0.0)
+    node.arm()
+    node.takeoff(5.0)
+    node.send_goto_relative(0.0, 0.0, 0.0)
+    node.set_speed(0.5)
+    node.send_goto_relative(3.0, 0.0, 0.0)
     # node.set_speed(0.5)
-    # node.send_goto_relative(0.0, 5.0, 0.0)
-    # node.set_speed(0.5)
-    # node.send_goto_relative(0.0, 5.0, 0.0)
+    node.send_goto_relative(0.0, 3.0, 0.0)
     # node.set_speed(0.8)
-    # node.send_goto_relative(0.0, 5.0, 0.0)
+    node.send_goto_relative(-3.0, -3.0, 0.0)
     # time.sleep(3)
     # node.set_speed(0.03)
     # node.send_goto_relative(0.0, 5.0, 0.0)
@@ -213,6 +213,7 @@ def main(args=None):
     # node.send_goto_relative(0.0, 0.0, 0.0)
     # node.send_set_yaw(2.0)
     node.land()
+    node.stop_video()
     # print(node.i)
 
 # ASYNC
