@@ -1,7 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionClient
-
+from drone_interfaces.srv import TurnOnVideo, TurnOffVideo
 from drone_interfaces.srv import (
     GetLocationRelative,
     GetAttitude,
@@ -27,10 +27,15 @@ class DroneController(Node):
         self._gps_client  = self.create_client(GetLocationRelative, 'get_location_relative')
         self._atti_client = self.create_client(GetAttitude, 'get_attitude')
         self._speed_client = self.create_client(SetSpeed, 'set_speed')
+        self._start_video_client = self.create_client(TurnOnVideo, 'turn_on_video')
+        self._stop_video_client = self.create_client(TurnOffVideo, 'turn_off_video')
         self._wait_for_service(self._mode_client, 'set_mode')
         self._wait_for_service(self._gps_client, 'get_location_relative')
         self._wait_for_service(self._atti_client, 'get_attitude')
         self._wait_for_service(self._speed_client, 'set_speed')
+        self._wait_for_service(self._start_video_client, 'turn_on_video')
+        self._wait_for_service(self._stop_video_client, 'turn_off_video')
+
 
         # --- Action clients ---
         self._arm_client    = ActionClient(self, Arm, 'Arm')
@@ -166,7 +171,7 @@ class DroneController(Node):
         return fut.result().yaw
 
     def _telemetry_cb(self, msg: Telemetry):
-        print("TELE")
+        #print("TELE") czemu stasiu.....
         if msg.battery_voltage < self._voltage_threshold:
             self._voltage_spikes += 1
         else:
@@ -176,3 +181,23 @@ class DroneController(Node):
             self._alarm = True
     def destroy_node(self):
         super().destroy_node()
+
+    def start_video(self):
+        req = TurnOnVideo.Request()
+        fut = self._start_video_client.call_async(req)
+        rclpy.spin_until_future_complete(self, fut, timeout_sec=2.0)
+        if fut.result() is None:
+            self.get_logger().error('Failed to start video')
+            return False
+        self.get_logger().info(f'Start video')
+        return True
+    
+    def stop_video(self):
+        req = TurnOffVideo.Request()
+        fut = self._stop_video_client.call_async(req)
+        rclpy.spin_until_future_complete(self, fut, timeout_sec=2.0)
+        if fut.result() is None:
+            self.get_logger().error('Failed to stop video')
+            return False
+        self.get_logger().info(f'Stop video')
+        return True

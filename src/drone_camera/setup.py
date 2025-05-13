@@ -27,6 +27,7 @@ setup(
             "image_publisher=drone_camera.image_publisher:main",
             "image_subscriber=drone_camera.image_subscriber:main",
             "images_recorder=drone_camera.images_recorder:main",
+            "video_recorder=drone_camera.video_recorder:main",
         ],
     },
 )
