@@ -34,9 +34,9 @@ class PoolDetector(Node):
         if self.frame is not None:
             contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
             area = cv2.contourArea(cnt)
-                if area > 200:
-                    x, y, w, h = cv2.boundingRect(cnt)
-                    self.get_logger().info(f"Detected pool at x: {x}, y: {y}, w: {w}, h: {h}")
+            if area > 200:
+                x, y, w, h = cv2.boundingRect(cnt)
+                self.get_logger().info(f"Detected pool at x: {x}, y: {y}, w: {w}, h: {h}")
 
 def main(args=None):
     rclpy.init(args=args)
