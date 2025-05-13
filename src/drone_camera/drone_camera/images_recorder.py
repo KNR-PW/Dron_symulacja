@@ -44,6 +44,7 @@ class ImagesRecorder(Node):
         self.br = CvBridge()
 
         self.get_logger().info('video_recorder node created')
+        self.get_logger().info(f'Recording images to directory: {self.save_directory}')
 
     def listener_callback(self, data):
         self.current_frame = self.br.imgmsg_to_cv2(data)
@@ -54,7 +55,7 @@ class ImagesRecorder(Node):
             filename = f'frame_{self.get_clock().now().nanoseconds}.jpg'
             filepath = os.path.join(self.save_directory, filename)
             cv2.imwrite(filepath, self.current_frame)
-            self.get_logger().info(f'Saved frame: {filepath}')
+            # self.get_logger().info(f'Saved frame: {filepath}')
         else:
             self.get_logger().warn('No frame to save yet')
 def main(args=None):

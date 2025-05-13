@@ -8,6 +8,7 @@ EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/project
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/factory/manhole/protos/SquareManhole.proto"
 IMPORTABLE EXTERNPROTO "../protos/Iris.proto"
 IMPORTABLE EXTERNPROTO "../protos/ArucoMarker.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/factory/containers/protos/PlasticCrate.proto"
 
 WorldInfo {
   title "Iris Mines"
@@ -15,8 +16,8 @@ WorldInfo {
   FPS 20
 }
 Viewpoint {
-  orientation 0.05280260066923654 -0.9877365367746125 -0.14692998088565712 5.585293485834154
-  position -25.946702586105573 -9.421907584826007 17.820333643237973
+  orientation 0.01337616361221954 -0.9976144202808228 -0.06772404812750664 5.892276250263881
+  position -12.812244349403272 -7.181814853420726 3.256337504782789
   follow "Iris"
   followSmoothness 0.01
 }
@@ -50,8 +51,8 @@ Robot {
   supervisor TRUE
 }
 DEF Iris Iris {
-  translation -6.487827768237703 -6.526218029207014 0.24921128539324167
-  rotation 0.6848507679009512 0.7285065937432305 0.01604894320862275 5.588330225563798e-18
+  translation -6.487827768237703 -6.52620899786315 0.10496319054102854
+  rotation 1 8.793701711218406e-14 5.79831125758576e-13 3.91809723316936e-06
   controller "ardupilot_sitl_controller"
   controllerArgs [
     "--motors"
@@ -82,4 +83,24 @@ ArucoMarker {
   translation -2 -10.5 0
   name "aruco(2)"
   markerId "2"
+}
+PlasticCrate {
+  translation -4 -5 0
+  size 1 1 0.4
+}
+Solid {
+  translation -8 -9 0
+  children [
+    Shape {
+      appearance Appearance {
+        material Material {
+          diffuseColor 0 0.3 1
+        }
+      }
+      geometry Cylinder {
+        height 0.2
+        radius 0.5
+      }
+    }
+  ]
 }

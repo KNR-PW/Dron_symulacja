@@ -28,7 +28,7 @@ class ImageSubscriber(Node):
         # from the video_frames topic. The queue size is 10 messages.
         self.subscription = self.create_subscription(
             Image,
-            'camera',
+            '/camera/image_raw',
             self.listener_callback,
             10)
         # Used to convert between ROS and OpenCV images
