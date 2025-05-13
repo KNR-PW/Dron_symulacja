@@ -1,4 +1,6 @@
-from drone_comunication import Hardware_com
+from drone_comunication.drone_controller import DroneController
+
+
 import rclpy
 from drone_interfaces.srv import Dropper
 import time
@@ -20,15 +22,16 @@ class Mission(Hardware_com):
         time.sleep(1.5)
         self.get_logger().info(f'beacon sucsefully drop')
         return True
-        
+  
 def main(args=None):
     rclpy.init(args=args)
     mission = Mission()
     mission.arm()
     mission.takeoff(2.0)
+    mission.start_video()
 
-    mission.send_goto_relative( 2, 0, 0)
-
+    mission.send_goto_relative( 1.0, 1.0, 0.0)
+    mission.stop_video()
     mission.land()
     mission.destroy_node()
     rclpy.shutdown()
