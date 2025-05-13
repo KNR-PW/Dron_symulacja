@@ -135,7 +135,7 @@ class ArucoNode(rclpy.node.Node):
         self.markers_pub = self.create_publisher(ArucoMarkers, "aruco_markers", 10)
 
 
-        self.aruco_dictionary = cv2.aruco.Dictionary(dictionary_id, self.marker_size)
+        self.aruco_dictionary = cv2.aruco.Dictionary(dictionary_id, int(self.marker_size))
         self.aruco_parameters = cv2.aruco.DetectorParameters_create()
         self.bridge = CvBridge()
 
