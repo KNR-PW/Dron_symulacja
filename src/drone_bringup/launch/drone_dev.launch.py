@@ -32,13 +32,13 @@ def generate_launch_description():
                 {'dev': 'true'}
             ]
         ),
-        Node(
-            package='camera_ros',
-            executable='camera_node',
-            parameters=[
-                {'format': 'RGB888'}
-            ]
-        ),
+        # Node(
+        #     package='camera_ros',
+        #     executable='camera_node',
+        #     parameters=[
+        #         {'format': 'RGB888'}
+        #     ]
+        # ),
         Node(
             package='drone_camera',
             executable='images_recorder',
