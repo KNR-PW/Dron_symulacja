@@ -19,6 +19,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/ArucoMarkers.msg"
   "msg/AxisAngle.msg"
   "msg/Telemetry.msg"
+  "srv/Dropper.srv"
   "srv/GetAttitude.srv"
   "srv/GetLocationRelative.srv"
   "srv/SetYaw.srv"
