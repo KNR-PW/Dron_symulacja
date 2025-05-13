@@ -136,7 +136,7 @@ class ArucoNode(rclpy.node.Node):
 
 
         self.aruco_dictionary = cv2.aruco.Dictionary(dictionary_id, int(self.marker_size))
-        self.aruco_parameters = cv2.aruco.DetectorParameters_create()
+        self.aruco_parameters = cv2.aruco.DetectorParameters()
         self.bridge = CvBridge()
 
     def image_callback(self, img_msg):
