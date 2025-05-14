@@ -1,0 +1,286 @@
+#VRML_SIM R2025a utf8
+
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/backgrounds/protos/TexturedBackground.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/floors/protos/Floor.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/appearances/protos/Parquetry.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/humans/pedestrian/protos/Pedestrian.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/factory/containers/protos/WoodenBox.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/factory/containers/protos/CardboardBox.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/street_furniture/protos/ElectricalCabinet.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/cabinet/protos/Cabinet.proto"
+
+WorldInfo {
+  info [
+    ""
+  ]
+}
+Viewpoint {
+  orientation -0.3407142142786206 -0.12074899791985146 0.9323805573315298 4.372552145437962
+  position 14.179656615458299 40.29564343376439 16.77492159390561
+}
+TexturedBackground {
+}
+TexturedBackgroundLight {
+}
+Pose {
+  translation 0 0.01 0
+  rotation 1 0 0 -1.5708
+  children [
+    Shape {
+      appearance Appearance {
+        material Material {
+          diffuseColor 0.2 0.3 0.2
+        }
+      }
+      geometry IndexedFaceSet {
+        coord Coordinate {
+          point [
+            0 0 0
+            20.45 0 0
+            20.45 0 0
+            19.4 0 21.56
+            -4.41 0 21.6
+            -3.41 0 12.8
+            0.59 0 12.46
+            0 0 0
+            0 0 0
+            0 -1 0
+            0 0 0
+            0 0 0
+            0 0 0
+            0 0 0
+            0 0 0
+          ]
+        }
+        coordIndex [
+          0, 1, 2, 3, 4, 5, 6, 0, -1
+        ]
+      }
+    }
+  ]
+}
+Floor {
+  translation 0 0 -0.007
+  size 100 100
+  appearance Parquetry {
+    type "chequered"
+    colorOverride 0.1 0.2 0.2
+  }
+}
+Pedestrian {
+  translation -1.27 17.49 1.27
+  rotation -4.34837e-07 2.18965e-07 -1 -2.617985307179586
+  name "pedestrian(2)"
+}
+Pedestrian {
+  translation 5.8 12.71 1.27
+  rotation 1 0 0 4.692820414042842e-06
+}
+Pedestrian {
+  translation 17.7959 19.715 1.26
+  rotation -6.287189999981451e-07 -2.346409999993077e-06 0.9999999999970497 -2.6179953071795863
+  name "pedestrian(1)"
+}
+WoodenBox {
+  translation 16.76 15.38 0.3
+}
+WoodenBox {
+  translation 5.91 20.44 0.3
+  rotation 0 0 1 -0.523595307179586
+  name "wooden box(1)"
+}
+CardboardBox {
+  translation 2.67 13.26 0.3
+}
+CardboardBox {
+  translation 17.3381 19.165 0.3
+  rotation 0 0 -1 -0.7854053071795866
+  name "cardboard box(1)"
+}
+Pose {
+  translation 5.85 12.7151 1.78479
+  rotation 0 0 1 -1.57
+  children [
+    Shape {
+      appearance Appearance {
+        material Material {
+          diffuseColor 0.8 0.2 0.2
+        }
+      }
+      geometry Mesh {
+        url [
+          "Helmet.stl"
+        ]
+      }
+    }
+  ]
+}
+Pose {
+  translation 15.1545 12.3014 1.78479
+  rotation 0 0 1 -2.3553953071795863
+  children [
+    Shape {
+      appearance Appearance {
+        material Material {
+          diffuseColor 0.8 0.2 0.2
+        }
+      }
+      geometry Mesh {
+        url [
+          "Helmet.stl"
+        ]
+      }
+    }
+  ]
+}
+Pose {
+  translation 17.7455 19.6922 1.74479
+  rotation 0 0 1 2.09519
+  children [
+    Shape {
+      appearance Appearance {
+        material Material {
+          diffuseColor 0.8 0.2 0.2
+        }
+      }
+      geometry Mesh {
+        url [
+          "Helmet.stl"
+        ]
+      }
+    }
+  ]
+}
+Transform {
+  translation 12.6388 2.86749 0.495246
+  rotation 3.7616199999730087e-06 0.9999999999928246 -4.486319999967809e-07 -1.5708053071795867
+  scale 0.01 0.01 0.01
+  children [
+    Shape {
+      appearance Appearance {
+        material Material {
+          diffuseColor 1 0.5 0.2
+        }
+      }
+      geometry Mesh {
+        url [
+          "rura2.stl"
+        ]
+      }
+    }
+  ]
+}
+Transform {
+  translation 2.6988 2.86749 0.495186
+  rotation 0.5773479358540498 0.5773519358536053 0.5773509358537164 -2.094405307179586
+  scale 0.01 0.01 0.01
+  children [
+    Shape {
+      appearance Appearance {
+        material Material {
+          diffuseColor 1 0.5 0.2
+        }
+      }
+      geometry Mesh {
+        url [
+          "rura2.stl"
+        ]
+      }
+    }
+  ]
+}
+Transform {
+  translation 12.7388 2.86749 0.495222
+  rotation 0.5773479358540498 0.5773519358536053 0.5773509358537164 -2.094405307179586
+  scale 0.01 0.01 0.005
+  children [
+    Shape {
+      appearance Appearance {
+        material Material {
+          diffuseColor 1 0.5 0.2
+        }
+      }
+      geometry Mesh {
+        url [
+          "rura2.stl"
+        ]
+      }
+    }
+  ]
+}
+Transform {
+  translation 12.7388 7.75749 -0.42479
+  rotation 2.5956799999213812e-06 -7.33749999977776e-06 -0.9999999999697118 1.5708
+  scale 0.01 0.01 0.001
+  children [
+    Shape {
+      appearance Appearance {
+        material Material {
+          diffuseColor 1 0.5 0.2
+        }
+      }
+      geometry Mesh {
+        url [
+          "rura2.stl"
+        ]
+      }
+    }
+  ]
+}
+ElectricalCabinet {
+  translation 0.53 0.99 0.02
+}
+Cabinet {
+  hidden position_6_0 1.2799597575712204e-05
+  hidden translation_7 -2.54711991749718e-06 -1.6301071603663786e-11 0
+  hidden rotation_7 0 0 1 1.279960306356277e-05
+  hidden position_10_0 -1.0881583667737868e-05
+  hidden translation_11 -1.840619877361536e-06 1.0014461482299453e-11 0
+  hidden rotation_11 0 0 -1 1.0881602932447668e-05
+  translation 18.7475 8.80088 0
+  rotation 0 0 1 2.35619
+}
+Pedestrian {
+  translation 15.0967 12.3433 1.27
+  rotation 0 0 -1 0.785395
+  name "pedestrian(3)"
+}
+Transform {
+  translation 15.5018 12.4497 0.83521
+  rotation -0.2810860238048953 0.6786010574700474 0.6785950574695392 -2.593575307179586
+  scale 0.001 0.001 0.001
+  children [
+    Shape {
+      appearance Appearance {
+        material Material {
+          diffuseColor 1 0.5 0.2
+        }
+      }
+      geometry Mesh {
+        url [
+          "kamizelka.stl"
+        ]
+      }
+    }
+  ]
+}
+Transform {
+  translation 5.56451 12.3396 0.805141
+  rotation 0.5773486025216047 0.5773496025209163 0.5773526025188509 2.09438
+  scale 0.001 0.001 0.001
+  children [
+    Shape {
+      appearance Appearance {
+        material Material {
+          diffuseColor 1 0.5 0.2
+        }
+      }
+      geometry Mesh {
+        url [
+          "kamizelka.stl"
+        ]
+      }
+    }
+  ]
+}
