@@ -11,7 +11,7 @@ from rclpy.action import ActionServer,  CancelResponse,  GoalResponse
 from rclpy.executors import MultiThreadedExecutor
 
 from drone_interfaces.msg import Telemetry
-from drone_interfaces.srv import GetAttitude, GetLocationRelative, SetServo, SetYaw, SetMode, SetSpeed
+from drone_interfaces.srv import GetAttitude, GetLocationRelative, SetServo, SetYaw, SetMode, SetSpeed, GetGpsPos
 from drone_interfaces.action import GotoRelative, GotoGlobal, Arm, Takeoff, Shoot, SetYawAction
 
 import haversine as hv
@@ -28,6 +28,7 @@ class DroneHandler(Node):
         ## DECLARE SERVICES
         self.attitude = self.create_service(GetAttitude, 'get_attitude', self.get_attitude_callback)
         self.gps = self.create_service(GetLocationRelative, 'get_location_relative', self.get_location_relative_callback)
+        self.gps_abs = self.create_service(GetGpsPos, 'get_gps', self.get_gps_callback)
         self.servo = self.create_service(SetServo, 'set_servo', self.set_servo_callback)
         self.create_service(SetSpeed, 'set_speed', self.set_speed_callback)
         #self.yaw = self.create_service(SetYaw, 'set_yaw', self.set_yaw_callback)
@@ -183,6 +184,24 @@ class DroneHandler(Node):
         # send command to vehicle
         self.vehicle.send_mavlink(msg)
 
+    def get_gps_callback(self, request, response):
+        self.get_logger().info(f"-- Get GPS service called --")
+        try:
+            if self.vehicle.location.global_frame:
+                lat = self.vehicle.location.global_frame.lat
+                lon = self.vehicle.location.global_frame.lon
+                alt = self.vehicle.location.global_frame.alt
+        except Exception as e:
+            self.get_logger().error(f"Error in get_gps_callback: {e}")
+            lat = 0
+            lon = 0
+            alt = 0
+        response.lat = float(lat)
+        response.lon = float(lon)
+        response.alt = float(alt)
+        return response
+
+        
     def set_yaw(self, yaw, cw ,relative=False):
         
         yaw = yaw / 3.141592 * 180
