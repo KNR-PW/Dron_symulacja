@@ -82,13 +82,13 @@ class DroneHandler(Node):
                 # self.vehicle = connect(connection_string, baud=115200, wait_ready=True)
                 self.vehicle = connect(connection_string, baud=57600, wait_ready=False)
             except Exception as e:
-                self.get_logger().info(f"Connecting failed with error: {e}")
+                self.get_logger().error(f"Connecting failed with error: {e}")
                 self.get_logger().info("Retrying to connect in {3} seconds...")
                 time.sleep(3)
         if not self.dev_mode:
             self.wait_fc_ready()
         self.state = "OK"
-        self.get_logger().info("Copter connected, ready to arm")
+        self.get_logger().info("\033[92mCopter connected, ready to arm")
         
         self.timer = self.create_timer(.1, self.telemetry_callback)
 
@@ -99,7 +99,7 @@ class DroneHandler(Node):
                 self.get_logger().info("Waiting for FC to be ready...")
                 if self.vehicle.is_armable:
                     fc_ready = True
-                    self.get_logger().info("FC is ready")
+                    self.get_logger().info("\033[92mFC is ready")
                 else:
                     time.sleep(1)
             except Exception as e:

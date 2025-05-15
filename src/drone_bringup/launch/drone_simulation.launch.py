@@ -64,7 +64,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
             'world',
-            default_value='aruco_tests.wbt',
+            default_value='2_cameras.wbt',
             description='Choose one of the world files from `/webots_simulation/resource/worlds` directory'
         ),
         webots,
