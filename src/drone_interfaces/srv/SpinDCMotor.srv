@@ -1,0 +1,4 @@
+bool spin_motor
+float time
+---
+int8 result

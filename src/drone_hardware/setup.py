@@ -22,7 +22,9 @@ setup(
         'console_scripts': [
             "drone_handler=drone_hardware.drone_handler:main",
             "healthcheck=drone_hardware.healthcheck:main",
-            "host_bridge=drone_hardware.host_hardware:main"
+            "host_bridge=drone_hardware.host_hardware:main",
+            "uart_bridge = drone_hardware.uartbridge:main",
+            "hbridge = drone_hardware.hbridge:main",
         ],
     },
 )
