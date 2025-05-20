@@ -33,6 +33,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/SetCylinderParameters.srv"
   "srv/SetBoxParameters.srv"
   "srv/SetSphereParameters.srv"
+  "srv/SpinDCMotor.srv"
   "srv/PostLog.srv"
   "srv/TurnOnVideo.srv"
   "srv/TurnOffVideo.srv"

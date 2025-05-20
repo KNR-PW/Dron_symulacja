@@ -1,4 +1,5 @@
 bool spin_motor
-float time
+float32 time
 ---
-int8 result
+bool result
+string message
