@@ -18,16 +18,6 @@ def generate_launch_description():
         ros2_supervisor=True
     )
 
-
-    sim_manager_description_path = os.path.join(sim_package_dir, 'resource', 'webots_sim_manager.urdf')
-    ros2_webots_sim_manager = WebotsController(
-        robot_name='ros2_sim_manager',
-        parameters=[
-            {'robot_description': sim_manager_description_path},
-        ],
-        respawn=True
-    )
-
     drone_handler_node = Node(
             package='drone_hardware',
             executable='drone_handler',
@@ -69,7 +59,6 @@ def generate_launch_description():
         ),
         webots,
         webots._supervisor,
-        ros2_webots_sim_manager,
         drone_handler_node_action,
         healthcheck_action,
 

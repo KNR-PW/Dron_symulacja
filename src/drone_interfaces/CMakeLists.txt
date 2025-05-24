@@ -28,6 +28,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/PostLog.srv"
   "srv/TurnOnVideo.srv"
   "srv/TurnOffVideo.srv"
+  "srv/CreateReport.srv"
+  "srv/UpdateReport.srv"
   "action/GotoRelative.action"
   "action/GotoGlobal.action"
   "action/Arm.action"

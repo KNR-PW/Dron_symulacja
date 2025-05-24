@@ -52,7 +52,7 @@ class RosMissionWebsite(Node):
         # Post data to website with specified time interval
         post_interval = 0.5
         self.timer = self.create_timer(post_interval, self.post_all_to_server)
-        self.get_logger().info('MissionWebsiteClient node created')
+        self.get_logger().info('RosMissionWebsite client node created')
         self.test_server_connection()
 
 
