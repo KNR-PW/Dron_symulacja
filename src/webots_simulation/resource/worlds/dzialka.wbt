@@ -3,12 +3,14 @@
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/backgrounds/protos/TexturedBackground.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/floors/protos/Floor.proto"
-EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/appearances/protos/Parquetry.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/humans/pedestrian/protos/Pedestrian.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/factory/containers/protos/WoodenBox.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/factory/containers/protos/CardboardBox.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/street_furniture/protos/ElectricalCabinet.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/cabinet/protos/Cabinet.proto"
+IMPORTABLE EXTERNPROTO "../protos/Iris.proto"
+IMPORTABLE EXTERNPROTO "../protos/ArucoMarker.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/appearances/protos/Grass.proto"
 
 WorldInfo {
   info [
@@ -16,56 +18,17 @@ WorldInfo {
   ]
 }
 Viewpoint {
-  orientation -0.3407142142786206 -0.12074899791985146 0.9323805573315298 4.372552145437962
-  position 14.179656615458299 40.29564343376439 16.77492159390561
+  orientation -0.42771915967106083 -0.10495426026624652 0.897797818944915 4.009256027769927
+  position 16.139123624025302 26.07455668852868 5.7277280456515856
 }
 TexturedBackground {
 }
 TexturedBackgroundLight {
 }
-Pose {
-  translation 0 0.01 0
-  rotation 1 0 0 -1.5708
-  children [
-    Shape {
-      appearance Appearance {
-        material Material {
-          diffuseColor 0.2 0.3 0.2
-        }
-      }
-      geometry IndexedFaceSet {
-        coord Coordinate {
-          point [
-            0 0 0
-            20.45 0 0
-            20.45 0 0
-            19.4 0 21.56
-            -4.41 0 21.6
-            -3.41 0 12.8
-            0.59 0 12.46
-            0 0 0
-            0 0 0
-            0 -1 0
-            0 0 0
-            0 0 0
-            0 0 0
-            0 0 0
-            0 0 0
-          ]
-        }
-        coordIndex [
-          0, 1, 2, 3, 4, 5, 6, 0, -1
-        ]
-      }
-    }
-  ]
-}
 Floor {
   translation 0 0 -0.007
   size 100 100
-  appearance Parquetry {
-    type "chequered"
-    colorOverride 0.1 0.2 0.2
+  appearance Grass {
   }
 }
 Pedestrian {
@@ -228,16 +191,41 @@ Transform {
     }
   ]
 }
+Robot {
+  name "ros2_sim_manager"
+  controller "<extern>"
+  supervisor TRUE
+}
+SquareManhole {
+  translation -6.5 -6.5 0
+  name "drone takeoff(1)"
+  size 0.5 0.5 0.1
+}
+DEF Iris Iris {
+  translation -6.487827768237703 -6.52620899786315 0.10496319054102854
+  rotation 1 8.793701711218406e-14 5.79831125758576e-13 3.91809723316936e-06
+  controller "ardupilot_sitl_controller"
+  controllerArgs [
+    "--motors"
+    "m1_motor, m2_motor, m3_motor, m4_motor"
+    "--camera"
+    "camera"
+    "--camera-port"
+    "5599"
+  ]
+  extensionSlot [
+    DEF camera Camera {
+      translation 0.05 0 -0.05
+      rotation 0 1 0 1.57
+      width 640
+      height 480
+    }
+  ]
+}
 ElectricalCabinet {
   translation 0.53 0.99 0.02
 }
 Cabinet {
-  hidden position_6_0 1.2799597575712204e-05
-  hidden translation_7 -2.54711991749718e-06 -1.6301071603663786e-11 0
-  hidden rotation_7 0 0 1 1.279960306356277e-05
-  hidden position_10_0 -1.0881583667737868e-05
-  hidden translation_11 -1.840619877361536e-06 1.0014461482299453e-11 0
-  hidden rotation_11 0 0 -1 1.0881602932447668e-05
   translation 18.7475 8.80088 0
   rotation 0 0 1 2.35619
 }

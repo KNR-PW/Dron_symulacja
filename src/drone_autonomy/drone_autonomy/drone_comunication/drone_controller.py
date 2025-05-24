@@ -33,8 +33,8 @@ class DroneController(Node):
         self._wait_for_service(self._gps_client, 'get_location_relative')
         self._wait_for_service(self._atti_client, 'get_attitude')
         self._wait_for_service(self._speed_client, 'set_speed')
-        self._wait_for_service(self._start_video_client, 'turn_on_video')
-        self._wait_for_service(self._stop_video_client, 'turn_off_video')
+        # self._wait_for_service(self._start_video_client, 'turn_on_video')
+        # self._wait_for_service(self._stop_video_client, 'turn_off_video')
 
 
         # --- Action clients ---
@@ -91,6 +91,12 @@ class DroneController(Node):
         if not self._set_mode('LAND'):
             return False
         self.get_logger().info('Landing drone...')
+        return True
+
+    def rtl(self) -> bool:
+        if not self._set_mode('RTL'):
+            return False
+        self.get_logger().info('RTL mode...')
         return True
 
     def takeoff(self, altitude: float) -> bool:

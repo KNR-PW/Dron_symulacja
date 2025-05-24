@@ -10,6 +10,7 @@ import requests
 import time
 from datetime import datetime
 import io
+from rclpy.logging import LoggingSeverity
 
 class RosMissionWebsite(Node):
 
@@ -55,7 +56,6 @@ class RosMissionWebsite(Node):
         self.get_logger().info('MissionWebsiteClient node created')
         self.test_server_connection()
 
-
     def test_server_connection(self):
         try:
             response = requests.get(self.web_app_base_url)
@@ -80,7 +80,6 @@ class RosMissionWebsite(Node):
         return json_msg
 
     def telemetry_callback(self, msg):
-        self.get_logger().warn("UPDATE TELE")
         self.current_telemetry = self.telemetry_msg_to_json(msg)
 
     def image_callback(self, msg):
@@ -97,22 +96,22 @@ class RosMissionWebsite(Node):
         # Send the POST request
         try:
             response = requests.post(f"{self.web_app_base_url}/api/image", files=files)
-            self.get_logger().info(f"Status image post: {response.status_code}")
+            self.get_logger().debug(f"Status image post: {response.status_code}")
         except Exception as e:
             self.get_logger().warn(f"❌ Failed to post image. Server is not available: {e}")
 
     def post_telemetry_to_server(self):
         try:
             response = requests.post(f"{self.web_app_base_url}/api/status", json=self.current_telemetry)
-            self.get_logger().info(f"Status telemetry post: {response.status_code}")
+            self.get_logger().debug(f"Status telemetry post: {response.status_code}")
         except Exception as e:
             self.get_logger().warn(f"❌ Failed to post telemetry. Server is not available: {e}")
 
     def post_all_to_server(self):
+        self.get_logger().debug('Posting telemetry and image to server')
         self.post_telemetry_to_server()
         if self.current_image is not None:
             self.post_image_to_server() 
-        self.get_logger().info('Posted all data to server')
 
     def handle_post_log_request(self, request, response):
         payload = {

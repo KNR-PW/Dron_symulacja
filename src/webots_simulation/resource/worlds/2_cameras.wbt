@@ -8,7 +8,9 @@ EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/project
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/factory/manhole/protos/SquareManhole.proto"
 IMPORTABLE EXTERNPROTO "../protos/Iris.proto"
 IMPORTABLE EXTERNPROTO "../protos/ArucoMarker.proto"
-EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/factory/containers/protos/PlasticCrate.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/humans/pedestrian/protos/Pedestrian.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/vehicles/protos/bmw/BmwX5.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/Barn.proto"
 
 WorldInfo {
   title "Iris Mines"
@@ -16,8 +18,8 @@ WorldInfo {
   FPS 20
 }
 Viewpoint {
-  orientation 0.01337616361221954 -0.9976144202808228 -0.06772404812750664 5.892276250263881
-  position -12.812244349403272 -7.181814853420726 3.256337504782789
+  orientation 0.15766792259415036 -0.2923102925246394 -0.9432367248305193 5.244264932109073
+  position -31.564909622155792 -44.087811024606786 20.821395239137644
   follow "Iris"
   followSmoothness 0.01
 }
@@ -66,41 +68,29 @@ DEF Iris Iris {
     DEF camera Camera {
       translation 0.05 0 -0.05
       rotation 0 1 0 1.57
-      width 640
-      height 480
+      width 320
+      height 240
+    }
+    DEF camera_2 Camera {
+      translation 0.05 0 -0.05
+      rotation 0 1 0 0.6537003061004253
+      name "camera_2"
+      width 320
+      height 240
     }
   ]
 }
-ArucoMarker {
-  translation -5.5 -7.5 0
+Pedestrian {
 }
-ArucoMarker {
-  translation -5.5 -10.5 0
-  name "aruco(1)"
-  markerId "1"
+Pedestrian {
+  translation -1.9 3 1.37
+  rotation 0 0 1 -0.6544996938995746
+  name "pedestrian(1)"
 }
-ArucoMarker {
-  translation -2 -10.5 0
-  name "aruco(2)"
-  markerId "2"
+BmwX5 {
+  translation 5 -7 0.4
+  rotation 0 0 1 1.3089996938995747
 }
-PlasticCrate {
-  translation -4 -5 0
-  size 1 1 0.4
-}
-Solid {
-  translation -8 -9 0
-  children [
-    Shape {
-      appearance Appearance {
-        material Material {
-          diffuseColor 0 0.3 1
-        }
-      }
-      geometry Cylinder {
-        height 0.2
-        radius 0.5
-      }
-    }
-  ]
+Barn {
+  translation 15 8 0
 }

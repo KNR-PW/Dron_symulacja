@@ -51,7 +51,7 @@ class ArucoMissionNode(DroneController):
         # Delay mission start by 1s to allow connections
         # self._mission_timer = self.create_timer(1.0, self._mission_entry)
         # self.web_logger = WebLogger()
-        self.web_logger.log("Aruco mission node started", "info")
+        # self.web_logger.log("Aruco mission node started", "info")
         self._mission_started = False
         self.i = 0
 
@@ -192,18 +192,19 @@ def main(args=None):
     
     # # node.arm()
 
-    node.start_mission()
+    # node.start_mission()
 
 
-    # node.arm()
-    # node.takeoff(5.0)
-    # node.send_goto_relative(0.0, 0.0, 0.0)
+    node.arm()
+    node.takeoff(10.0)
+    node.send_goto_relative(0.0, 0.0, 0.0)
+    node.set_speed(0.8)
+    node.send_goto_relative(0.0, -5.0, 0.0)
     # node.set_speed(0.5)
-    # node.send_goto_relative(0.0, 5.0, 0.0)
-    # node.set_speed(0.5)
-    # node.send_goto_relative(0.0, 5.0, 0.0)
+    # node.rtl()
+    node.send_goto_relative(5.0, 0.0, 0.0)
     # node.set_speed(0.8)
-    # node.send_goto_relative(0.0, 5.0, 0.0)
+    node.send_goto_relative(5.0, 5.0, 0.0)
     # time.sleep(3)
     # node.set_speed(0.03)
     # node.send_goto_relative(0.0, 5.0, 0.0)
@@ -212,7 +213,8 @@ def main(args=None):
     # node.send_goto_relative(0.0, 2.0, 0.0)
     # node.send_goto_relative(0.0, 0.0, 0.0)
     # node.send_set_yaw(2.0)
-    node.land()
+    node.rtl()
+    # node.land()
     # print(node.i)
 
 # ASYNC

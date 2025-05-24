@@ -1,0 +1,248 @@
+1747295565.2184601 [INFO] [launch]: All log files can be found below /home/stas/KNR/Dron_symulacja/mission_lig/2025-05-15-09-52-45-217523-stas-Legion-Y540-15IRH-PG0-11088
+1747295565.2185974 [INFO] [launch]: Default logging verbosity is set to INFO
+1747295565.2717991 [INFO] [drone_handler-1]: process started with pid [11089]
+1747295565.2720246 [INFO] [camera_node-2]: process started with pid [11091]
+1747295565.2721665 [INFO] [images_recorder-3]: process started with pid [11093]
+1747295565.2722867 [INFO] [aruco_node-4]: process started with pid [11095]
+1747295565.2724051 [INFO] [ros_mission_website-5]: process started with pid [11097]
+1747295565.4659438 [camera_node-2] [0:45:52.577130626] [11091] [1;32m INFO [1;37mCamera [1;34mcamera_manager.cpp:284 [0mlibcamera v0.1.0
+1747295565.5647295 [camera_node-2] [INFO] [1747295565.564331885] [camera]: 
+1747295565.5659995 [camera_node-2] >> cameras:
+1747295565.5664103 [camera_node-2]    0: Integrated Camera: Integrated C (\_SB_.PCI0.XHC_.RHUB.HS06-6:1.0-5986:2113)
+1747295565.5667870 [camera_node-2] [WARN] [1747295565.564484952] [camera]: no camera selected, using default: "\_SB_.PCI0.XHC_.RHUB.HS06-6:1.0-5986:2113"
+1747295565.5676572 [camera_node-2] [WARN] [1747295565.564511588] [camera]: set parameter 'camera' to silence this warning
+1747295565.5788810 [camera_node-2] [INFO] [1747295565.577790261] [camera]: 
+1747295565.5791051 [camera_node-2] >> stream formats:
+1747295565.5792394 [camera_node-2]    - MJPEG (320x180 - 1280x720)
+1747295565.5793660 [camera_node-2]    - YUYV (320x180 - 1280x720)
+1747295565.5794983 [camera_node-2] terminate called after throwing an instance of 'std::runtime_error'
+1747295565.5796194 [camera_node-2]   what():  unsupported pixel format "RGB888"
+1747295566.0773368 [images_recorder-3] [INFO] [1747295566.077022606] [images_recorder]: camera_topic: camera/image_raw
+1747295566.1185148 [images_recorder-3] [INFO] [1747295566.118246301] [images_recorder]: Saving images to saved_images/5
+1747295566.1193168 [images_recorder-3] [INFO] [1747295566.119054214] [images_recorder]: video_recorder node created
+1747295566.1200058 [images_recorder-3] [INFO] [1747295566.119859164] [images_recorder]: Recording images to directory: saved_images/5
+1747295566.1479247 [drone_handler-1] [WARN] [1747295566.147693554] [drone_handler]: DEV MODE is enabled.
+1747295566.1482689 [drone_handler-1] [INFO] [1747295566.148067003] [drone_handler]: Connecting with copter at /dev/ttyACM0...
+1747295566.1519043 [drone_handler-1] [ERROR] [1747295566.151587403] [drone_handler]: Connecting failed with error: [Errno 2] could not open port /dev/ttyACM0: [Errno 2] No such file or directory: '/dev/ttyACM0'
+1747295566.1526339 [drone_handler-1] [INFO] [1747295566.152420711] [drone_handler]: Retrying to connect in {3} seconds...
+1747295566.1632304 [aruco_node-4] [INFO] [1747295566.163016347] [aruco_node]: Marker size: 0.1
+1747295566.1636684 [aruco_node-4] [INFO] [1747295566.163530452] [aruco_node]: Marker type: DICT_4X4_100
+1747295566.1642537 [aruco_node-4] [INFO] [1747295566.164144653] [aruco_node]: Image topic: camera/image_raw
+1747295566.1652706 [aruco_node-4] [INFO] [1747295566.165068280] [aruco_node]: Intrinsic matrix: [[  1.   0. 320.]
+1747295566.1654067 [aruco_node-4]  [  0.   1. 240.]
+1747295566.1655161 [aruco_node-4]  [  0.   0.   1.]]
+1747295566.1661019 [aruco_node-4] [INFO] [1747295566.165937957] [aruco_node]: Distortion: [0. 0. 0. 0.]
+1747295566.2376785 [ros_mission_website-5] [INFO] [1747295566.237483494] [ros_mission_website]: MissionWebsiteClient node created
+1747295566.7636721 [ERROR] [camera_node-2]: process has died [pid 11091, exit code -6, cmd '/opt/ros/humble/lib/camera_ros/camera_node --ros-args --params-file /tmp/launch_params_qtdfg5ry'].
+1747295566.8400049 [ros_mission_website-5] [INFO] [1747295566.839784637] [ros_mission_website]: ✅ Server is available.
+1747295567.1195202 [images_recorder-3] [WARN] [1747295567.119257547] [images_recorder]: No frame to save yet
+1747295567.4288232 [ros_mission_website-5] [INFO] [1747295567.428607811] [ros_mission_website]: Status telemetry post: 200
+1747295567.9688542 [ros_mission_website-5] [INFO] [1747295567.968644286] [ros_mission_website]: Status telemetry post: 200
+1747295568.1192734 [images_recorder-3] [WARN] [1747295568.119047762] [images_recorder]: No frame to save yet
+1747295568.4238431 [ros_mission_website-5] [INFO] [1747295568.423632255] [ros_mission_website]: Status telemetry post: 200
+1747295568.8682094 [ros_mission_website-5] [INFO] [1747295568.867997332] [ros_mission_website]: Status telemetry post: 200
+1747295569.1198649 [images_recorder-3] [WARN] [1747295569.119625353] [images_recorder]: No frame to save yet
+1747295569.1568618 [drone_handler-1] [ERROR] [1747295569.156599251] [drone_handler]: Connecting failed with error: [Errno 2] could not open port /dev/ttyACM0: [Errno 2] No such file or directory: '/dev/ttyACM0'
+1747295569.1572130 [drone_handler-1] [INFO] [1747295569.157034787] [drone_handler]: Retrying to connect in {3} seconds...
+1747295569.4982119 [ros_mission_website-5] [INFO] [1747295569.497992894] [ros_mission_website]: Status telemetry post: 200
+1747295570.0982175 [ros_mission_website-5] [INFO] [1747295570.098005689] [ros_mission_website]: Status telemetry post: 200
+1747295570.1195407 [images_recorder-3] [WARN] [1747295570.119250846] [images_recorder]: No frame to save yet
+1747295570.7087004 [ros_mission_website-5] [INFO] [1747295570.708438016] [ros_mission_website]: Status telemetry post: 200
+1747295571.1192622 [images_recorder-3] [WARN] [1747295571.119047701] [images_recorder]: No frame to save yet
+1747295571.2454147 [ros_mission_website-5] [INFO] [1747295571.245148643] [ros_mission_website]: Status telemetry post: 200
+1747295571.8291600 [ros_mission_website-5] [INFO] [1747295571.828936910] [ros_mission_website]: Status telemetry post: 200
+1747295572.1194968 [images_recorder-3] [WARN] [1747295572.119244002] [images_recorder]: No frame to save yet
+1747295572.1603978 [drone_handler-1] [ERROR] [1747295572.160164352] [drone_handler]: Connecting failed with error: [Errno 2] could not open port /dev/ttyACM0: [Errno 2] No such file or directory: '/dev/ttyACM0'
+1747295572.1606863 [drone_handler-1] [INFO] [1747295572.160506059] [drone_handler]: Retrying to connect in {3} seconds...
+1747295572.4428463 [ros_mission_website-5] [INFO] [1747295572.442626332] [ros_mission_website]: Status telemetry post: 200
+1747295572.9849911 [ros_mission_website-5] [INFO] [1747295572.984772455] [ros_mission_website]: Status telemetry post: 200
+1747295573.1192787 [images_recorder-3] [WARN] [1747295573.119053773] [images_recorder]: No frame to save yet
+1747295573.5782945 [ros_mission_website-5] [INFO] [1747295573.578097296] [ros_mission_website]: Status telemetry post: 200
+1747295574.1192458 [images_recorder-3] [WARN] [1747295574.118997626] [images_recorder]: No frame to save yet
+1747295574.2091229 [ros_mission_website-5] [INFO] [1747295574.208901953] [ros_mission_website]: Status telemetry post: 200
+1747295574.8357911 [ros_mission_website-5] [INFO] [1747295574.835533585] [ros_mission_website]: Status telemetry post: 200
+1747295575.1194806 [images_recorder-3] [WARN] [1747295575.119224138] [images_recorder]: No frame to save yet
+1747295575.1644359 [drone_handler-1] [ERROR] [1747295575.164208088] [drone_handler]: Connecting failed with error: [Errno 2] could not open port /dev/ttyACM0: [Errno 2] No such file or directory: '/dev/ttyACM0'
+1747295575.1647334 [drone_handler-1] [INFO] [1747295575.164588979] [drone_handler]: Retrying to connect in {3} seconds...
+1747295575.4129844 [ros_mission_website-5] [INFO] [1747295575.412779076] [ros_mission_website]: Status telemetry post: 200
+1747295575.9592431 [ros_mission_website-5] [INFO] [1747295575.958941156] [ros_mission_website]: Status telemetry post: 200
+1747295576.1223598 [images_recorder-3] [WARN] [1747295576.121447031] [images_recorder]: No frame to save yet
+1747295576.5412624 [ros_mission_website-5] [INFO] [1747295576.541041229] [ros_mission_website]: Status telemetry post: 200
+1747295577.1195109 [images_recorder-3] [WARN] [1747295577.119252881] [images_recorder]: No frame to save yet
+1747295577.1719503 [ros_mission_website-5] [INFO] [1747295577.171722765] [ros_mission_website]: Status telemetry post: 200
+1747295577.2749219 [INFO] [healthcheck-6]: process started with pid [11198]
+1747295577.7385302 [healthcheck-6] [INFO] [1747295577.738300464] [drone_healthcheck]: Checking drone_handler services...
+1747295577.8048515 [ros_mission_website-5] [INFO] [1747295577.804632329] [ros_mission_website]: Status telemetry post: 200
+1747295578.1192207 [images_recorder-3] [WARN] [1747295578.118999258] [images_recorder]: No frame to save yet
+1747295578.1684344 [drone_handler-1] [ERROR] [1747295578.168197380] [drone_handler]: Connecting failed with error: [Errno 2] could not open port /dev/ttyACM0: [Errno 2] No such file or directory: '/dev/ttyACM0'
+1747295578.1687276 [drone_handler-1] [INFO] [1747295578.168585584] [drone_handler]: Retrying to connect in {3} seconds...
+1747295578.2802718 [ros_mission_website-5] [INFO] [1747295578.280051402] [ros_mission_website]: Status telemetry post: 200
+1747295578.9773192 [ros_mission_website-5] [INFO] [1747295578.977110229] [ros_mission_website]: Status telemetry post: 200
+1747295579.1192515 [images_recorder-3] [WARN] [1747295579.119019596] [images_recorder]: No frame to save yet
+1747295579.5090179 [ros_mission_website-5] [INFO] [1747295579.508809541] [ros_mission_website]: Status telemetry post: 200
+1747295580.1191907 [images_recorder-3] [WARN] [1747295580.118968593] [images_recorder]: No frame to save yet
+1747295580.1329157 [ros_mission_website-5] [INFO] [1747295580.132701880] [ros_mission_website]: Status telemetry post: 200
+1747295580.9967170 [ros_mission_website-5] [INFO] [1747295580.996503171] [ros_mission_website]: Status telemetry post: 200
+1747295581.1194847 [images_recorder-3] [WARN] [1747295581.119206079] [images_recorder]: No frame to save yet
+1747295581.1723177 [drone_handler-1] [ERROR] [1747295581.172086598] [drone_handler]: Connecting failed with error: [Errno 2] could not open port /dev/ttyACM0: [Errno 2] No such file or directory: '/dev/ttyACM0'
+1747295581.1726060 [drone_handler-1] [INFO] [1747295581.172413746] [drone_handler]: Retrying to connect in {3} seconds...
+1747295581.5724769 [ros_mission_website-5] [INFO] [1747295581.572256625] [ros_mission_website]: Status telemetry post: 200
+1747295581.8185811 [WARNING] [launch]: user interrupted with ctrl-c (SIGINT)
+1747295581.8224843 [drone_handler-1] Traceback (most recent call last):
+1747295581.8229458 [drone_handler-1]   File "/home/stas/.local/lib/python3.10/site-packages/serial/serialposix.py", line 322, in open
+1747295581.8233140 [drone_handler-1]     self.fd = os.open(self.portstr, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
+1747295581.8236051 [drone_handler-1] FileNotFoundError: [Errno 2] No such file or directory: '/dev/ttyACM0'
+1747295581.8237081 [drone_handler-1] 
+1747295581.8237832 [drone_handler-1] During handling of the above exception, another exception occurred:
+1747295581.8238556 [drone_handler-1] 
+1747295581.8239217 [drone_handler-1] Traceback (most recent call last):
+1747295581.8240073 [drone_handler-1]   File "/home/stas/KNR/Dron_symulacja/install/drone_hardware/lib/python3.10/site-packages/drone_hardware/drone_handler.py", line 83, in __init__
+1747295581.8240762 [drone_handler-1]     self.vehicle = connect(connection_string, baud=57600, wait_ready=False)
+1747295581.8241456 [drone_handler-1]   File "/usr/local/lib/python3.10/dist-packages/dronekit/__init__.py", line 3159, in connect
+1747295581.8242290 [drone_handler-1]     handler = MAVConnection(ip, baud=baud, source_system=source_system, source_component=source_component, use_native=use_native)
+1747295581.8243024 [drone_handler-1]   File "/usr/local/lib/python3.10/dist-packages/dronekit/mavlink.py", line 130, in __init__
+1747295581.8243752 [drone_handler-1]     self.master = mavutil.mavlink_connection(ip, baud=baud, source_system=source_system, source_component=source_component)
+1747295581.8244469 [drone_handler-1]   File "/home/stas/.local/lib/python3.10/site-packages/pymavlink/mavutil.py", line 1823, in mavlink_connection
+1747295581.8245337 [drone_handler-1]     return mavserial(device,
+1747295581.8246241 [drone_handler-1]   File "/home/stas/.local/lib/python3.10/site-packages/pymavlink/mavutil.py", line 971, in __init__
+1747295581.8246946 [drone_handler-1]     raise e
+1747295581.8247807 [drone_handler-1]   File "/home/stas/.local/lib/python3.10/site-packages/pymavlink/mavutil.py", line 967, in __init__
+1747295581.8248527 [drone_handler-1]     self.port = serial.Serial(self.device, 1200, timeout=0,
+1747295581.8249249 [drone_handler-1]   File "/home/stas/.local/lib/python3.10/site-packages/serial/serialutil.py", line 244, in __init__
+1747295581.8249960 [drone_handler-1]     self.open()
+1747295581.8250709 [drone_handler-1]   File "/home/stas/.local/lib/python3.10/site-packages/serial/serialposix.py", line 325, in open
+1747295581.8251448 [drone_handler-1]     raise SerialException(msg.errno, "could not open port {}: {}".format(self._port, msg))
+1747295581.8252137 [drone_handler-1] serial.serialutil.SerialException: [Errno 2] could not open port /dev/ttyACM0: [Errno 2] No such file or directory: '/dev/ttyACM0'
+1747295581.8252850 [drone_handler-1] 
+1747295581.8253543 [drone_handler-1] During handling of the above exception, another exception occurred:
+1747295581.8254228 [drone_handler-1] 
+1747295581.8255346 [drone_handler-1] Traceback (most recent call last):
+1747295581.8256090 [drone_handler-1]   File "/home/stas/KNR/Dron_symulacja/install/drone_hardware/lib/drone_hardware/drone_handler", line 33, in <module>
+1747295581.8256836 [drone_handler-1]     sys.exit(load_entry_point('drone-hardware==0.0.0', 'console_scripts', 'drone_handler')())
+1747295581.8257570 [drone_handler-1]   File "/home/stas/KNR/Dron_symulacja/install/drone_hardware/lib/python3.10/site-packages/drone_hardware/drone_handler.py", line 523, in main
+1747295581.8258309 [drone_handler-1]     drone = DroneHandler()
+1747295581.8259020 [drone_handler-1]   File "/home/stas/KNR/Dron_symulacja/install/drone_hardware/lib/python3.10/site-packages/drone_hardware/drone_handler.py", line 87, in __init__
+1747295581.8259752 [drone_handler-1]     time.sleep(3)
+1747295581.8260484 [drone_handler-1] KeyboardInterrupt
+1747295581.8264129 [aruco_node-4] Traceback (most recent call last):
+1747295581.8265293 [aruco_node-4]   File "/home/stas/KNR/Dron_symulacja/install/ros2_aruco/lib/ros2_aruco/aruco_node", line 33, in <module>
+1747295581.8266129 [aruco_node-4]     sys.exit(load_entry_point('ros2-aruco==0.1.0', 'console_scripts', 'aruco_node')())
+1747295581.8266902 [aruco_node-4]   File "/home/stas/KNR/Dron_symulacja/install/ros2_aruco/lib/python3.10/site-packages/ros2_aruco/aruco_node.py", line 193, in main
+1747295581.8267655 [aruco_node-4]     rclpy.spin(node)
+1747295581.8268404 [aruco_node-4]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 226, in spin
+1747295581.8269145 [aruco_node-4]     executor.spin_once()
+1747295581.8269882 [aruco_node-4]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 751, in spin_once
+1747295581.8270602 [aruco_node-4]     self._spin_once_impl(timeout_sec)
+1747295581.8271315 [aruco_node-4]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 740, in _spin_once_impl
+1747295581.8272171 [aruco_node-4]     handler, entity, node = self.wait_for_ready_callbacks(timeout_sec=timeout_sec)
+1747295581.8272913 [aruco_node-4]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 723, in wait_for_ready_callbacks
+1747295581.8273671 [aruco_node-4]     return next(self._cb_iter)
+1747295581.8274400 [aruco_node-4]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 620, in _wait_for_ready_callbacks
+1747295581.8275337 [aruco_node-4]     wait_set.wait(timeout_nsec)
+1747295581.8276076 [aruco_node-4] KeyboardInterrupt
+1747295581.8280203 [ros_mission_website-5] Traceback (most recent call last):
+1747295581.8281271 [ros_mission_website-5]   File "/home/stas/KNR/Dron_symulacja/install/drone_web/lib/drone_web/ros_mission_website", line 33, in <module>
+1747295581.8282266 [ros_mission_website-5]     sys.exit(load_entry_point('drone-web==0.0.0', 'console_scripts', 'ros_mission_website')())
+1747295581.8283231 [ros_mission_website-5]   File "/home/stas/KNR/Dron_symulacja/install/drone_web/lib/python3.10/site-packages/drone_web/ros_mission_website.py", line 142, in main
+1747295581.8284004 [ros_mission_website-5]     rclpy.spin(mission_website_client)
+1747295581.8284919 [ros_mission_website-5]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 226, in spin
+1747295581.8285701 [ros_mission_website-5]     executor.spin_once()
+1747295581.8286445 [ros_mission_website-5]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 751, in spin_once
+1747295581.8287148 [ros_mission_website-5]     self._spin_once_impl(timeout_sec)
+1747295581.8287878 [ros_mission_website-5]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 746, in _spin_once_impl
+1747295581.8288581 [ros_mission_website-5]     handler()
+1747295581.8289287 [ros_mission_website-5]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/task.py", line 254, in __call__
+1747295581.8289959 [ros_mission_website-5]     self._handler.send(None)
+1747295581.8290763 [ros_mission_website-5]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 447, in handler
+1747295581.8291466 [ros_mission_website-5]     await call_coroutine(entity, arg)
+1747295581.8292356 [ros_mission_website-5]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 361, in _execute_timer
+1747295581.8293071 [ros_mission_website-5]     await await_or_execute(tmr.callback)
+1747295581.8293798 [ros_mission_website-5]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 107, in await_or_execute
+1747295581.8294597 [ros_mission_website-5]     return callback(*args)
+1747295581.8295400 [ros_mission_website-5]   File "/home/stas/KNR/Dron_symulacja/install/drone_web/lib/python3.10/site-packages/drone_web/ros_mission_website.py", line 112, in post_all_to_server
+1747295581.8296142 [ros_mission_website-5]     self.post_telemetry_to_server()
+1747295581.8296852 [ros_mission_website-5]   File "/home/stas/KNR/Dron_symulacja/install/drone_web/lib/python3.10/site-packages/drone_web/ros_mission_website.py", line 105, in post_telemetry_to_server
+1747295581.8297563 [ros_mission_website-5]     response = requests.post(f"{self.web_app_base_url}/api/status", json=self.current_telemetry)
+1747295581.8298280 [ros_mission_website-5]   File "/usr/lib/python3/dist-packages/requests/api.py", line 119, in post
+1747295581.8299010 [ros_mission_website-5]     return request('post', url, data=data, json=json, **kwargs)
+1747295581.8299735 [ros_mission_website-5]   File "/usr/lib/python3/dist-packages/requests/api.py", line 61, in request
+1747295581.8300455 [ros_mission_website-5]     return session.request(method=method, url=url, **kwargs)
+1747295581.8301177 [ros_mission_website-5]   File "/usr/lib/python3/dist-packages/requests/sessions.py", line 544, in request
+1747295581.8301890 [ros_mission_website-5]     resp = self.send(prep, **send_kwargs)
+1747295581.8302610 [ros_mission_website-5]   File "/usr/lib/python3/dist-packages/requests/sessions.py", line 657, in send
+1747295581.8303397 [ros_mission_website-5]     r = adapter.send(request, **kwargs)
+1747295581.8304217 [ros_mission_website-5]   File "/usr/lib/python3/dist-packages/requests/adapters.py", line 439, in send
+1747295581.8305166 [ros_mission_website-5]     resp = conn.urlopen(
+1747295581.8305950 [ros_mission_website-5]   File "/usr/lib/python3/dist-packages/urllib3/connectionpool.py", line 700, in urlopen
+1747295581.8306727 [ros_mission_website-5]     httplib_response = self._make_request(
+1747295581.8307476 [ros_mission_website-5]   File "/usr/lib/python3/dist-packages/urllib3/connectionpool.py", line 383, in _make_request
+1747295581.8308246 [ros_mission_website-5]     self._validate_conn(conn)
+1747295581.8309009 [ros_mission_website-5]   File "/usr/lib/python3/dist-packages/urllib3/connectionpool.py", line 1017, in _validate_conn
+1747295581.8313429 [images_recorder-3] Traceback (most recent call last):
+1747295581.8314643 [images_recorder-3]   File "/home/stas/KNR/Dron_symulacja/install/drone_camera/lib/drone_camera/images_recorder", line 33, in <module>
+1747295581.8315556 [images_recorder-3]     sys.exit(load_entry_point('drone-camera==0.0.0', 'console_scripts', 'images_recorder')())
+1747295581.8316345 [images_recorder-3]   File "/home/stas/KNR/Dron_symulacja/install/drone_camera/lib/python3.10/site-packages/drone_camera/images_recorder.py", line 66, in main
+1747295581.8317094 [images_recorder-3]     rclpy.spin(images_recorder)
+1747295581.8317814 [images_recorder-3]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 226, in spin
+1747295581.8318522 [images_recorder-3]     executor.spin_once()
+1747295581.8319235 [images_recorder-3]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 751, in spin_once
+1747295581.8320043 [images_recorder-3]     self._spin_once_impl(timeout_sec)
+1747295581.8320851 [images_recorder-3]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 740, in _spin_once_impl
+1747295581.8321543 [images_recorder-3]     handler, entity, node = self.wait_for_ready_callbacks(timeout_sec=timeout_sec)
+1747295581.8322403 [images_recorder-3]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 723, in wait_for_ready_callbacks
+1747295581.8323114 [images_recorder-3]     return next(self._cb_iter)
+1747295581.8323827 [images_recorder-3]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 620, in _wait_for_ready_callbacks
+1747295581.8327334 [images_recorder-3]     wait_set.wait(timeout_nsec)
+1747295581.8328319 [images_recorder-3] KeyboardInterrupt
+1747295581.8332255 [ros_mission_website-5]     conn.connect()
+1747295581.8333244 [ros_mission_website-5]   File "/usr/lib/python3/dist-packages/urllib3/connection.py", line 411, in connect
+1747295581.8334074 [ros_mission_website-5]     self.sock = ssl_wrap_socket(
+1747295581.8334990 [ros_mission_website-5]   File "/usr/lib/python3/dist-packages/urllib3/util/ssl_.py", line 449, in ssl_wrap_socket
+1747295581.8335764 [ros_mission_website-5]     ssl_sock = _ssl_wrap_socket_impl(
+1747295581.8336525 [ros_mission_website-5]   File "/usr/lib/python3/dist-packages/urllib3/util/ssl_.py", line 493, in _ssl_wrap_socket_impl
+1747295581.8337269 [ros_mission_website-5]     return ssl_context.wrap_socket(sock, server_hostname=server_hostname)
+1747295581.8338008 [ros_mission_website-5]   File "/usr/lib/python3.10/ssl.py", line 513, in wrap_socket
+1747295581.8338804 [ros_mission_website-5]     return self.sslsocket_class._create(
+1747295581.8339584 [ros_mission_website-5]   File "/usr/lib/python3.10/ssl.py", line 1100, in _create
+1747295581.8340356 [ros_mission_website-5]     self.do_handshake()
+1747295581.8341131 [ros_mission_website-5]   File "/usr/lib/python3.10/ssl.py", line 1371, in do_handshake
+1747295581.8341908 [ros_mission_website-5]     self._sslobj.do_handshake()
+1747295581.8342764 [ros_mission_website-5] KeyboardInterrupt
+1747295581.8497088 [healthcheck-6] Traceback (most recent call last):
+1747295581.8499091 [healthcheck-6]   File "/home/stas/KNR/Dron_symulacja/install/drone_hardware/lib/python3.10/site-packages/drone_hardware/healthcheck.py", line 160, in main
+1747295581.8503344 [healthcheck-6]     healthcheck_node.check_drone_handler_services()
+1747295581.8504455 [healthcheck-6]   File "/home/stas/KNR/Dron_symulacja/install/drone_hardware/lib/python3.10/site-packages/drone_hardware/healthcheck.py", line 65, in check_drone_handler_services
+1747295581.8505449 [healthcheck-6]     rclpy.spin_until_future_complete(self, future, timeout_sec=5.0)
+1747295581.8506181 [healthcheck-6]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 253, in spin_until_future_complete
+1747295581.8509369 [healthcheck-6]     executor.spin_until_future_complete(future, timeout_sec)
+1747295581.8510315 [healthcheck-6]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 320, in spin_until_future_complete
+1747295581.8511267 [healthcheck-6]     self.spin_once_until_future_complete(future, timeout_left)
+1747295581.8512301 [healthcheck-6]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 758, in spin_once_until_future_complete
+1747295581.8513174 [healthcheck-6]     self._spin_once_impl(timeout_sec)
+1747295581.8514075 [healthcheck-6]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 740, in _spin_once_impl
+1747295581.8515220 [healthcheck-6]     handler, entity, node = self.wait_for_ready_callbacks(timeout_sec=timeout_sec)
+1747295581.8516097 [healthcheck-6]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 723, in wait_for_ready_callbacks
+1747295581.8519611 [healthcheck-6]     return next(self._cb_iter)
+1747295581.8520737 [healthcheck-6]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/executors.py", line 620, in _wait_for_ready_callbacks
+1747295581.8521695 [healthcheck-6]     wait_set.wait(timeout_nsec)
+1747295581.8522615 [healthcheck-6] KeyboardInterrupt
+1747295581.8523431 [healthcheck-6] 
+1747295581.8524058 [healthcheck-6] During handling of the above exception, another exception occurred:
+1747295581.8529582 [healthcheck-6] 
+1747295581.8530474 [healthcheck-6] Traceback (most recent call last):
+1747295581.8531170 [healthcheck-6]   File "/home/stas/KNR/Dron_symulacja/install/drone_hardware/lib/drone_hardware/healthcheck", line 33, in <module>
+1747295581.8531783 [healthcheck-6]     sys.exit(load_entry_point('drone-hardware==0.0.0', 'console_scripts', 'healthcheck')())
+1747295581.8532674 [healthcheck-6]   File "/home/stas/KNR/Dron_symulacja/install/drone_hardware/lib/python3.10/site-packages/drone_hardware/healthcheck.py", line 168, in main
+1747295581.8533478 [healthcheck-6]     rclpy.shutdown()
+1747295581.8534193 [healthcheck-6]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/__init__.py", line 130, in shutdown
+1747295581.8535161 [healthcheck-6]     _shutdown(context=context)
+1747295581.8535872 [healthcheck-6]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/utilities.py", line 58, in shutdown
+1747295581.8536644 [healthcheck-6]     return context.shutdown()
+1747295581.8537326 [healthcheck-6]   File "/opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/context.py", line 102, in shutdown
+1747295581.8538032 [healthcheck-6]     self.__context.shutdown()
+1747295581.8538852 [healthcheck-6] rclpy._rclpy_pybind11.RCLError: failed to shutdown: rcl_shutdown already called on the given context, at ./src/rcl/init.c:241
+1747295581.9025006 [ERROR] [images_recorder-3]: process has died [pid 11093, exit code -2, cmd '/home/stas/KNR/Dron_symulacja/install/drone_camera/lib/drone_camera/images_recorder --ros-args --params-file /tmp/launch_params_46p97rid'].
+1747295581.9034045 [ERROR] [aruco_node-4]: process has died [pid 11095, exit code -2, cmd '/home/stas/KNR/Dron_symulacja/install/ros2_aruco/lib/ros2_aruco/aruco_node --ros-args --params-file /tmp/launch_params_w52iv791'].
+1747295581.9155555 [ERROR] [ros_mission_website-5]: process has died [pid 11097, exit code -2, cmd '/home/stas/KNR/Dron_symulacja/install/drone_web/lib/drone_web/ros_mission_website --ros-args --params-file /tmp/launch_params_ayvej1z6'].
+1747295581.9252629 [ERROR] [drone_handler-1]: process has died [pid 11089, exit code -2, cmd '/home/stas/KNR/Dron_symulacja/install/drone_hardware/lib/drone_hardware/drone_handler --ros-args --params-file /tmp/launch_params_nz9xhwbv'].
+1747295582.0246701 [ERROR] [healthcheck-6]: process has died [pid 11198, exit code 1, cmd '/home/stas/KNR/Dron_symulacja/install/drone_hardware/lib/drone_hardware/healthcheck --ros-args --params-file /tmp/launch_params_ljs_hye6 --params-file /tmp/launch_params_rb95o3r2'].
