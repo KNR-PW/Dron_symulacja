@@ -12,7 +12,7 @@ from rclpy.executors import MultiThreadedExecutor
 
 from drone_interfaces.msg import Telemetry
 from drone_interfaces.srv import GetAttitude, GetLocationRelative, SetServo, SetYaw, SetMode, SetSpeed
-from drone_interfaces.action import GotoRelative, GotoGlobal, Arm, Takeoff, Shoot, SetYawAction
+from drone_interfaces.action import GotoRelative, GotoGlobal, Arm, Takeoff, SetYawAction
 
 import haversine as hv
 class DroneHandler(Node):
@@ -38,7 +38,7 @@ class DroneHandler(Node):
         self.goto_global = ActionServer(self, GotoGlobal, 'goto_global', self.goto_global_action, cancel_callback=self.cancel_callback)
         self.arm = ActionServer(self,Arm, 'Arm',self.arm_callback)
         self.takeoff = ActionServer(self, Takeoff, 'takeoff',self.takeoff_callback, cancel_callback=self.cancel_callback)
-        self.shoot = ActionServer(self, Shoot, 'shoot', self.shoot_callback)
+        # self.shoot = ActionServer(self, Shoot, 'shoot', self.shoot_callback)
         self.yaw = ActionServer(self, SetYawAction, 'Set_yaw', self.yaw_callback, cancel_callback=self.cancel_callback)
 
         #DECLARE PUBLISHER
@@ -109,35 +109,36 @@ class DroneHandler(Node):
         if self.vehicle:
             self.vehicle.mode=VehicleMode("RTL")
 
-    def shoot_callback(self, goal_handle):
-        self.get_logger().info(f"Incoming shoot goal for color: {goal_handle.request.color}")
-        stop = 1000
-        shoot = 1200
-        load =1500
+    # DEPRECATED SHOOT ACTION
+    # def shoot_callback(self, goal_handle):
+    #     self.get_logger().info(f"Incoming shoot goal for color: {goal_handle.request.color}")
+    #     stop = 1000
+    #     shoot = 1200
+    #     load =1500
 
-        left = 2000
-        mid = 1400
-        right = 800
+    #     left = 2000
+    #     mid = 1400
+    #     right = 800
 
-        self.set_servo(10,stop)
-        self.set_servo(11,stop)
-        time.sleep(1)
-        self.set_servo(9,left if goal_handle.request.color == 'yellow' else right)
-        self.set_servo(10,load)
-        self.set_servo(11,load)
-        time.sleep(2)
-        self.set_servo(10,shoot)
-        self.set_servo(11,shoot)
-        self.set_servo(9,mid - 300 if goal_handle.request.color == 'yellow' else mid+300)
-        time.sleep(1)
-        self.set_servo(10,stop)
-        self.set_servo(11,stop)
-        self.set_servo(9,mid)
+    #     self.set_servo(10,stop)
+    #     self.set_servo(11,stop)
+    #     time.sleep(1)
+    #     self.set_servo(9,left if goal_handle.request.color == 'yellow' else right)
+    #     self.set_servo(10,load)
+    #     self.set_servo(11,load)
+    #     time.sleep(2)
+    #     self.set_servo(10,shoot)
+    #     self.set_servo(11,shoot)
+    #     self.set_servo(9,mid - 300 if goal_handle.request.color == 'yellow' else mid+300)
+    #     time.sleep(1)
+    #     self.set_servo(10,stop)
+    #     self.set_servo(11,stop)
+    #     self.set_servo(9,mid)
 
-        self.get_logger().info("Shoot action completed:" + goal_handle.request.color)
-        goal_handle.succeed()
-        result = Shoot.Result()
-        return result
+    #     self.get_logger().info("Shoot action completed:" + goal_handle.request.color)
+    #     goal_handle.succeed()
+    #     result = Shoot.Result()
+    #     return result
 
     ## INTERNAL HELPER METHODS
     def goto_position_target_local_ned( self, north, east, down=-1):

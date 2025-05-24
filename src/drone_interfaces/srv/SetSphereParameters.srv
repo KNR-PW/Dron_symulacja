@@ -1,7 +1,0 @@
-string sphere_def
-geometry_msgs/Point translation
-float32 radius
-int32 subdivision
-bool ico
----
-int8 result

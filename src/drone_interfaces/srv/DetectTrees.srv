@@ -1,5 +1,0 @@
-int32 request_info
-float32[] gps
-float32 yaw
----
-DetectionsList detections_list
