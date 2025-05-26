@@ -171,7 +171,14 @@ class DroneController(Node):
         return fut.result().yaw
 
     def _telemetry_cb(self, msg: Telemetry):
-        #print("TELE") czemu stasiu.....
+        # Unpack telemetry message and save as attributes
+        self.battery_percentage = msg.battery_percentage
+        self.battery_voltage = msg.battery_voltage
+        self.battery_current = msg.battery_current
+        self.lat = msg.lat
+        self.lon = msg.lon
+        self.alt = msg.alt
+        self.flight_mode = msg.flight_mode
         if msg.battery_voltage < self._voltage_threshold:
             self._voltage_spikes += 1
         else:

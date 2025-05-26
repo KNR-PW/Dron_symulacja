@@ -35,11 +35,27 @@ def telemetry():
     if gps is None:
         return jsonify({'error': 'Failed to get telemetry'}), 500
 
+    # Get additional telemetry values from the drone object
+    battery_percentage = getattr(drone, 'battery_percentage', None)
+    battery_voltage = getattr(drone, 'battery_voltage', None)
+    battery_current = getattr(drone, 'battery_current', None)
+    lat = getattr(drone, 'lat', None)
+    lon = getattr(drone, 'lon', None)
+    alt = getattr(drone, 'alt', None)
+    flight_mode = getattr(drone, 'flight_mode', None)
+
     return jsonify({
         'north': gps[0],
         'east': gps[1],
         'down': gps[2],
-        'yaw': yaw
+        'yaw': yaw,
+        'battery_percentage': battery_percentage,
+        'battery_voltage': battery_voltage,
+        'battery_current': battery_current,
+        'lat': lat,
+        'lon': lon,
+        'alt': alt,
+        'flight_mode': flight_mode
     })
 
 def ros_spin_thread():
