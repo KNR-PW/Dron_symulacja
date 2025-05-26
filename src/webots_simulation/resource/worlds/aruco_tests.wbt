@@ -45,11 +45,6 @@ PipeSection {
     metalness 0
   }
 }
-Robot {
-  name "ros2_sim_manager"
-  controller "<extern>"
-  supervisor TRUE
-}
 DEF Iris Iris {
   translation -6.487827768237703 -6.52620899786315 0.10496319054102854
   rotation 1 8.793701711218406e-14 5.79831125758576e-13 3.91809723316936e-06

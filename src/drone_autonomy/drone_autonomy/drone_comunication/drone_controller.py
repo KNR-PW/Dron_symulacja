@@ -14,7 +14,6 @@ from drone_interfaces.action import (
     Takeoff,
     GotoRelative,
     GotoGlobal,
-    Shoot,
     SetYawAction
 )
 
@@ -42,7 +41,6 @@ class DroneController(Node):
         self._takeoff_client = ActionClient(self, Takeoff, 'takeoff')
         self._goto_rel_client = ActionClient(self, GotoRelative, 'goto_relative')
         self._goto_glob_client = ActionClient(self, GotoGlobal, 'goto_global')
-        self._shoot_client   = ActionClient(self, Shoot, 'shoot')
         self._yaw_client     = ActionClient(self, SetYawAction, 'Set_yaw')
 
         # --- Telemetry subscriber ---
