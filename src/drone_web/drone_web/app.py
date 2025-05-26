@@ -1,121 +1,59 @@
-from flask import Flask, render_template, request
-import datetime
-import cv2
-import os
-import rclpy  # Python Client Library for ROS 2
-from rclpy.node import Node  # Handles the creation of nodes
-from sensor_msgs.msg import Image  # Image is the message type
-from cv_bridge import CvBridge  # Package to convert between ROS and OpenCV Images
-import os
-from threading import Event
-from drone_interfaces.msg import DetectionMsg, DetectionsList
+import threading
+import time
+from flask import Flask, request, jsonify
 
-dir_path = os.path.dirname(__file__)
+import rclpy
+from rclpy.executors import MultiThreadedExecutor
 
-
-class CameraNode(Node):
-    """
-    Create an ImagePublisher class, which is a subclass of the Node class.
-    """
-
-    def __init__(self):
-        super().__init__('web_camera')
-        self.image_subscription = self.create_subscription(
-            Image,
-            'camera',
-            self.image_callback,
-            10)
-        self.detection_subscription = self.create_subscription(
-            DetectionsList,
-            'detections',
-            self.detection_callback,
-            10)
-        self.br = CvBridge()
-        self.detections = []
-        self.frame = 0
-        self.detections_list = []
-        self.get_logger().info('Web Camera node created')
-
-    def image_callback(self, frame):
-        print("clncdj")
-        # Convert ROS Image message to OpenCV image
-        frame = self.br.imgmsg_to_cv2(frame)
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        frame = cv2.resize(frame, (640, 480), interpolation=cv2.INTER_AREA)
-
-        if os.path.exists(dir_path + "/static/ros_frame.jpg"):
-            os.remove(dir_path + "/static/ros_frame.jpg")
-        cv2.imwrite(dir_path + "/static/ros_frame.jpg", frame)
-        self.frame = frame
-
-    def detection_callback(self, detections):
-        self.detections_list = detections.detections_list
-        for det in detections.detections_list:
-            x, y, w, h = det.bounding_box
-            cv2.rectangle(self.frame, (x, y),
-                          (x + h, y + w),
-                          (0, 255, 0), 5)
-        if os.path.exists(dir_path + "/static/ros_det_frame.jpg"):
-            os.remove(dir_path + "/static/ros_det_frame.jpg")
-        if len(detections.detections_list):
-            cv2.imwrite(dir_path + "/static/ros_det_frame.jpg", self.frame)
-
-    def get_detections_strings(self):
-        # Function returns list of string descriptions of detections
-        det_num = 1
-        detections_strings = []
-        for det in self.detections_list:
-            det_str = "Det " + str(det_num) + ":         "
-            temp = "Color: " + str(det.color_name) + ",  " + "Bounding Box: " + str(
-                det.bounding_box) + " , " + "GPS Position: " + str(det.gps_position)
-            det_str += temp
-            detections_strings.append(det_str)
-            det_num += 1
-        return detections_strings
-
-    def get_frame(self):
-        return self.frame
-
-
-rclpy.init(args=None)
-event = Event()
-ros_node = CameraNode()
+from drone_comunication.drone_controller import DroneController  # adjust import if needed
 
 app = Flask(__name__)
+drone = None
 
+@app.route('/takeoff', methods=['POST'])
+def takeoff():
+    data = request.get_json()
+    altitude = data.get('altitude', 2.0)  # default to 2m if not provided
 
-@app.route('/')
-@app.route('/index.html')
-def index():
-    now = datetime.datetime.now()
-    timeString = now.strftime("%Y-%m-%d %H:%M:%S")
-    return render_template('index.html')
+    success = drone.arm() and drone.takeoff(altitude)
+    return jsonify({'success': success}), (200 if success else 500)
 
+@app.route('/goto_relative', methods=['POST'])
+def goto_relative():
+    data = request.get_json()
+    north = data.get('north', 0.0)
+    east = data.get('east', 0.0)
+    down = data.get('down', 0.0)
 
-@app.route('/detector.html', methods=['GET', 'POST'])
-def detector():
-    img_path = ""
-    detections_strings = ["No detections"]
-    if request.method == 'POST':
-        rclpy.spin_once(ros_node, timeout_sec=1)
+    success = drone.send_goto_relative(north, east, down)
+    return jsonify({'success': success}), (200 if success else 500)
 
-        button_name = request.form.get("button_name")
-        if button_name == 'img_button':
-            img_path = "./static/ros_frame.jpg"
+@app.route('/telemetry', methods=['GET'])
+def telemetry():
+    gps = drone.get_gps()
+    yaw = drone.get_yaw()
+    if gps is None:
+        return jsonify({'error': 'Failed to get telemetry'}), 500
 
-        if button_name == 'img_det_button':
-            img_path = "./static/ros_det_frame.jpg"
+    return jsonify({
+        'north': gps[0],
+        'east': gps[1],
+        'down': gps[2],
+        'yaw': yaw
+    })
 
-        if button_name == 'load_detections':
-            detections_strings = ros_node.get_detections_strings()
-
-    return render_template('detector.html', img_jpg=img_path, detections_strings=detections_strings)
-
-
-def main():
-    print(os.path.dirname(__file__))
-    app.run(debug=True, host='0.0.0.0')
-
+def ros_spin_thread():
+    rclpy.init()
+    global drone
+    drone = DroneController()
+    executor = MultiThreadedExecutor()
+    executor.add_node(drone)
+    executor.spin()
+    drone.destroy_node()
+    rclpy.shutdown()
 
 if __name__ == '__main__':
-    main()
+    thread = threading.Thread(target=ros_spin_thread, daemon=True)
+    thread.start()
+    time.sleep(2)  # Give time to initialize ROS 2 node
+    app.run(host='0.0.0.0', port=5000)
