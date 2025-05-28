@@ -42,13 +42,13 @@ Once executed, you will be attached to the newly created Docker container.
 
 > **Note:**  
 > In some cases, the provided setup scripts may not work correctly and the container might not mount the `src` directory as expected (for example, you see an empty container after running `ls`).  
-> If this happens, you can start the container manually with the following command (replace the source path with the full path to your `src` directory on your machine):
+> If this happens, you can start the container manually with the following command (replace `/absolute/path/to/Dron_symulacja/src` with the full path to your `src` directory on your machine):
 > ```bash
-> docker run --gpus all -it --name knr_drone -v C:/Users/pc/Dron_symulacja/src:/root/ros_ws/src staskolo/knr-drone-sim:latest
+> docker run --gpus all -it --name knr_drone -v /absolute/path/to/Dron_symulacja/src:/root/ros_ws/src staskolo/knr-drone-sim:latest
 > ```
 > For systems without NVIDIA GPU, remove the `--gpus all` flag:
 > ```bash
-> docker run -it --name knr_drone -v C:/Users/pc/Dron_symulacja/src:/root/ros_ws/src staskolo/knr-drone-sim:latest
+> docker run -it --name knr_drone -v /absolute/path/to/Dron_symulacja/src:/root/ros_ws/src staskolo/knr-drone-sim:latest
 > ```
 
 ### 5. ROS2 Workspace and Build Process
