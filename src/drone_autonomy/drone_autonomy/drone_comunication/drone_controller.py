@@ -32,8 +32,8 @@ class DroneController(Node):
         self._wait_for_service(self._gps_client, 'get_location_relative')
         self._wait_for_service(self._atti_client, 'get_attitude')
         self._wait_for_service(self._speed_client, 'set_speed')
-        self._wait_for_service(self._start_video_client, 'turn_on_video')
-        self._wait_for_service(self._stop_video_client, 'turn_off_video')
+        # self._wait_for_service(self._start_video_client, 'turn_on_video')
+        # self._wait_for_service(self._stop_video_client, 'turn_off_video')
 
 
         # --- Action clients ---
@@ -107,10 +107,10 @@ class DroneController(Node):
         goal = GotoGlobal.Goal(lat=lat, lon=lon, alt=alt)
         return self._send_action(self._goto_glob_client, goal)
 
-    def send_shoot(self, color: str) -> bool:
-        self.get_logger().info(f'Shooting color {color}')
-        goal = Shoot.Goal(color=color)
-        return self._send_action(self._shoot_client, goal)
+    # def send_shoot(self, color: str) -> bool:
+    #     self.get_logger().info(f'Shooting color {color}')
+    #     goal = Shoot.Goal(color=color)
+    #     return self._send_action(self._shoot_client, goal)
 
     def send_set_yaw(self, yaw: float, relative: bool = True) -> bool:
         self.get_logger().info(f'Setting yaw to {yaw} rad, relative={relative}')

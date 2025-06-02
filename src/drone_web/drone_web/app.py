@@ -2,7 +2,8 @@ import threading
 import time
 from flask import Flask, request, jsonify
 from rclpy.executors import MultiThreadedExecutor
-
+from sensor_msgs.msg import Image  # Image is the message type
+from cv_bridge import CvBridge
 import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionClient
@@ -14,6 +15,10 @@ from drone_interfaces.srv import (
     SetSpeed,
 )
 from drone_interfaces.msg import Telemetry
+import cv2
+import numpy as np
+import io
+from flask import Response
 from drone_interfaces.action import (
     Arm,
     Takeoff,
@@ -50,7 +55,10 @@ class DroneController(Node):
 
         # --- Telemetry subscriber ---
         self.create_subscription(Telemetry, 'telemetry', self._telemetry_cb, 10)
+        # Removed image_subscription from DroneController
+        self.br = CvBridge()
 
+        self.current_image = None
         # --- State & fail‑safe ---
         self._busy = False
         self._alarm = False
@@ -212,10 +220,26 @@ class DroneController(Node):
         self.get_logger().info(f'Stop video')
         return True
 
+# --- Camera Node ---
+class CameraImageNode(Node):
+    def __init__(self):
+        super().__init__('camera_image_node')
+        self.br = CvBridge()
+        self.current_image = None
+        self.create_subscription(
+            Image,
+            'camera',
+            self.image_callback,
+            10
+        )
+
+    def image_callback(self, msg):
+        self.current_image = self.br.imgmsg_to_cv2(msg)
 
 
 app = Flask(__name__)
 drone = None
+camera_node = None
 
 @app.route('/takeoff', methods=['POST'])
 def takeoff():
@@ -268,17 +292,32 @@ def telemetry():
         'flight_mode': flight_mode
     })
 
+@app.route('/camera_image', methods=['GET'])
+def camera_image():
+    if camera_node is None or camera_node.current_image is None:
+        return jsonify({'error': 'No image available'}), 404
+    ret, jpeg = cv2.imencode('.jpg', camera_node.current_image)
+    if not ret:
+        return jsonify({'error': 'Failed to encode image'}), 500
+    return Response(jpeg.tobytes(), mimetype='image/jpeg')
+        
 def ros_spin_thread():
     rclpy.init()
-    global drone
+    global camera_node, drone
     drone = DroneController()
+    
+    camera_node = CameraImageNode()
     executor = MultiThreadedExecutor()
-    executor.add_node(drone)
+    # executor.add_node(drone)
+    executor.add_node(camera_node)
     executor.spin()
-    drone.destroy_node()
+    # drone.destroy_node()
+    camera_node.destroy_node()
     rclpy.shutdown()
 
 if __name__ == '__main__':
+    
+    
     thread = threading.Thread(target=ros_spin_thread, daemon=True)
     thread.start()
     time.sleep(2)  # Give time to initialize ROS 2 node

@@ -35,3 +35,8 @@ test_dir
 #ros package files
 /src/*/*/install/
 /src/*/*/log/
+
+drone_data.db*
+.pytest_cache/
+
+
