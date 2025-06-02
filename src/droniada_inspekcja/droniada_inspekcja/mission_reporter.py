@@ -33,7 +33,7 @@ class MissionReporter(Node):
         self.last_published_mission_id = None
 
         # Timer: call every 60 seconds (adjust as needed)
-        timer_period_sec = 4.0
+        timer_period_sec = 15.0
         self.create_timer(timer_period_sec, self.timer_callback)
 
         self.get_logger().info(f'MissionReporter will poll every {timer_period_sec} seconds.')
@@ -54,6 +54,9 @@ class MissionReporter(Node):
                 # No missions in the DB yet
                 self.get_logger().debug("No missions found in database.")
                 return
+
+            self.get_logger().info(f"Latest mission ID in DB: {latest_id}")
+            self.get_logger().info(f"Latest published mission ID: {self.last_published_mission_id}")
 
             # 2) If we have never published any mission before, or we have a new mission:
             if self.last_published_mission_id is None or latest_id != self.last_published_mission_id:

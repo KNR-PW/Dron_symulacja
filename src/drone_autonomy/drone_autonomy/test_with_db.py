@@ -32,6 +32,8 @@ from drone_interfaces.action import Arm, Takeoff, GotoRelative, GotoGlobal, SetY
 from droniada_inspekcja.inspekcja_db import DroneDB  # Adjust if module path differs
 from drone_comunication.drone_controller import DroneController  # Adjust import to your package structure
 
+import cv2
+import os
 
 class MissionRunner(DroneController):
     def __init__(self, waypoints):
@@ -51,6 +53,18 @@ class MissionRunner(DroneController):
         self._marker_event = threading.Event()
         self._marker_pose = None
         self._marker_id = None
+
+        # --- Camera image state ---
+        self._latest_image = None
+        from sensor_msgs.msg import Image
+        from cv_bridge import CvBridge
+        self._cv_bridge = CvBridge()
+        self.create_subscription(
+            Image,
+            'camera',
+            self._camera_callback,
+            10
+        )
 
         # Subscribe to ArUco marker topic
         self.create_subscription(
@@ -84,6 +98,53 @@ class MissionRunner(DroneController):
                 f"Detected ArUco marker {self._marker_id} at x={self._marker_pose.position.x:.2f}, "
                 f"y={self._marker_pose.position.y:.2f}, z={self._marker_pose.position.z:.2f}"
             )
+            # --- Save camera image ---
+            try:
+                img = self.get_camera_image()  # Implement this method to get latest camera image (cv2 image)
+                if img is not None:
+                    img_path = os.path.abspath(f"./aruco_{self._marker_id}_{int(time.time())}.jpg")
+                    # img_path = f"./aruco_{self._marker_id}_{int(time.time())}.jpg"
+                    # --- Crop image around ArUco marker ---
+                    # Get marker center in image coordinates
+                    # Ensure marker_pose.position.x/y are pixel coordinates; if not, conversion is needed
+                    x = int(round(self._marker_pose.position.x))
+                    y = int(round(self._marker_pose.position.y))
+                    # Debug: Save full image with marker center drawn for verification
+                    debug_img = img.copy()
+                    cv2.circle(debug_img, (x, y), 20, (0, 0, 255), 3)
+                    debug_img_path = os.path.abspath(f"./aruco_{self._marker_id}_{int(time.time())}_debug.jpg")
+                    cv2.imwrite(debug_img_path, debug_img)
+                    self.get_logger().info(f"Saved debug image with marker center to {debug_img_path}")
+
+                    # Define padding (in pixels) around marker
+                    padding = 120  # Increased padding for better visibility
+                    # Estimate marker size (if available), else use default
+                    marker_size = 180  # Increased marker size for larger crop
+                    # Compute crop boundaries and ensure they are within image bounds
+                    # Reverse vertical axis (y) if needed: OpenCV images have (0,0) at top-left,
+                    # but if marker y is from bottom, flip it.
+                    x1 = max(x - marker_size // 2 - padding, 0)
+                    # Revert vertical axis: OpenCV (0,0) is top-left, but if marker y is from bottom, flip it
+                    y_img = img.shape[0] - int(round(self._marker_pose.position.y))
+                    y1 = max(y_img - marker_size // 2 - padding, 0)
+                    x2 = min(x + marker_size // 2 + padding, img.shape[1])
+                    y2 = min(y + marker_size // 2 + padding, img.shape[0])
+                    # Ensure x1 < x2 and y1 < y2
+                    if x2 > x1 and y2 > y1:
+                        cropped_img = img[y1:y2, x1:x2]
+                    else:
+                        cropped_img = img
+                        self.get_logger().warn("Invalid crop region, saving full image.")
+                    cv2.imwrite(img_path, cropped_img)
+                    # cv2.imwrite(img_path, img)
+                    self._marker_image_path = img_path
+                    self.get_logger().info(f"Saved marker image to {img_path}")
+                else:
+                    self._marker_image_path = ""
+                    self.get_logger().warn("No camera image available to save.")
+            except Exception as e:
+                self._marker_image_path = ""
+                self.get_logger().error(f"Failed to save marker image: {e}")
             self._marker_event.set()
 
     def _create_mission_row(self):
@@ -176,7 +237,7 @@ class MissionRunner(DroneController):
                                 f"z={self._marker_pose.position.z:.2f}",
                     "location_changed": "Nie",
                     "content_changed": "Nie",
-                    "image": "",   # No image at this time
+                    "image": getattr(self, '_marker_image_path', ""),
                     "jury": "None"
                 }
                 try:
@@ -202,6 +263,20 @@ class MissionRunner(DroneController):
         self.get_logger().info("MissionRunner: Shutting down node.")
         # Signal ROS shutdown
         rclpy.shutdown()
+
+    def _camera_callback(self, msg):
+        try:
+            # If encoding is already 8UC3, use 'passthrough', else use 'bgr8'
+            encoding = 'passthrough' if msg.encoding == '8UC3' else 'bgr8'
+            self._latest_image = self._cv_bridge.imgmsg_to_cv2(msg, desired_encoding=encoding)
+        except Exception as e:
+            self.get_logger().error(f"Failed to convert camera image: {e}")
+
+    def get_camera_image(self):
+        """
+        Returns the latest camera image as a numpy array (cv2 image), or None if not available.
+        """
+        return self._latest_image
 
 
 def main(args=None):

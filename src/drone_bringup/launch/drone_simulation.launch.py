@@ -37,7 +37,7 @@ def generate_launch_description():
         )
     # Delay running drone_handler to wain for  webots init
     drone_handler_node_action = TimerAction(
-            period=5.0,  # Delay of 5 seconds
+            period=5.0,
             actions=[
                 drone_handler_node,
                 aruco_node
@@ -45,7 +45,7 @@ def generate_launch_description():
         )
 
     healthcheck_action = TimerAction(
-            period=12.0,
+            period=16.0,
             actions=[
                 healthcheck
             ]

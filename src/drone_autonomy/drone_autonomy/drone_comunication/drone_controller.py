@@ -184,6 +184,7 @@ class DroneController(Node):
         if self._voltage_spikes >= 5 and not self._alarm:
             self.get_logger().warn('Low battery detected, emergency return')
             self._alarm = True
+
     def destroy_node(self):
         super().destroy_node()
 
