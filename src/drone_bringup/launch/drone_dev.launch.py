@@ -36,9 +36,9 @@ def generate_launch_description():
          Node(
              package='camera_ros',
              executable='camera_node',
-             parameters=[
-                 {'format': 'RGB888'}
-             ]
+            #  parameters=[
+            #      {'format': 'RGB888'}
+            #  ]
          ),
         Node(
             package='drone_camera',
