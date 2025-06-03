@@ -49,6 +49,22 @@ class RosReportWebsite(Node):
             response.message = str(e)
         return response
 
+    def post_images_to_server(self, images_list):
+        for image in images_list:
+            _, buffer = cv2.imencode('.jpg', self.image)  # Encode as JPEG (or PNG)
+            file_bytes = io.BytesIO(buffer.tobytes())  # Wrap in a file-like object
+
+            files = {
+                'image': ('image.jpg', file_bytes, 'image/jpeg')  # filename, fileobj, MIME type
+            }
+
+            # Send the POST request
+            try:
+                response = requests.post(f"{self.web_app_base_url}/api/report/image", files=files)
+                self.get_logger().debug(f"Status image post: {response.status_code}")
+            except Exception as e:
+                self.get_logger().warn(f"❌ Failed to post image. Server is not available: {e}")
+
 def main(args=None):
     rclpy.init(args=args)
     node = RosReportWebsite()
