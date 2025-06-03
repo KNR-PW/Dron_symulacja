@@ -11,7 +11,7 @@ from rclpy.action import ActionServer,  CancelResponse,  GoalResponse
 from rclpy.executors import MultiThreadedExecutor
 
 from drone_interfaces.msg import Telemetry
-from drone_interfaces.srv import GetAttitude, GetLocationRelative, SetServo, SetYaw, SetMode, SetSpeed
+from drone_interfaces.srv import GetAttitude, GetLocationRelative, SetServo, SetYaw, SetMode, SetSpeed, GetGpsPos
 from drone_interfaces.action import GotoRelative, GotoGlobal, Arm, Takeoff, SetYawAction
 
 import haversine as hv
@@ -524,9 +524,23 @@ class DroneHandler(Node):
             msg.lat = self.vehicle.location.global_relative_frame.lat
             msg.lon = self.vehicle.location.global_relative_frame.lon
             msg.alt = self.vehicle.location.global_relative_frame.alt
+
             # Flight mode
             msg.flight_mode = str(self.vehicle.mode)
             
+            msg.speed = float(self.vehicle.groundspeed)  
+
+            gf = self.vehicle.location.global_frame
+            if gf:  # check that GPS is valid
+                msg.global_lat = float(gf.lat)
+                msg.global_lon = float(gf.lon)
+                msg.global_alt = float(gf.alt)
+            else:
+                # If no GPS fix, default to zeros
+                msg.global_lat = 0.0
+                msg.global_lon = 0.0
+                msg.global_alt = 0.0
+
             # 
             #if self._counter > 0:
             #    msg.battery_voltage = 11.5

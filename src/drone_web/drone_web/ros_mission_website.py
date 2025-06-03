@@ -69,12 +69,12 @@ class RosMissionWebsite(Node):
     def telemetry_msg_to_json(self, telemetry_msg):
         json_msg = {
             "altitude": telemetry_msg.alt,
-            "speed": -1,
-            "battery": telemetry_msg.battery_percentage,
-            "gps": f"{telemetry_msg.lat},{telemetry_msg.lon}",
-            "signal_strength": -1,
+            "speed":  telemetry_msg.speed,
+            "battery_percent": telemetry_msg.battery_percentage,
+            "gps_relative": f"{telemetry_msg.global_lat},{telemetry_msg.global_lon}",
+            "gps_global": f"{telemetry_msg.global_lat},{telemetry_msg.global_lon}",
             "flight_mode": telemetry_msg.flight_mode,
-            "temperature": -1
+            "battery_voltage": telemetry_msg.battery_voltage
         }
 
         return json_msg

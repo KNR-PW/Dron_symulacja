@@ -37,7 +37,7 @@ def generate_launch_description():
         )
     # Delay running drone_handler to wain for  webots init
     drone_handler_node_action = TimerAction(
-            period=5.0,
+            period=10.0,
             actions=[
                 drone_handler_node,
                 aruco_node
@@ -54,7 +54,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
             'world',
-            default_value='2_cameras.wbt',
+            default_value='aruco_tests.wbt',
             description='Choose one of the world files from `/webots_simulation/resource/worlds` directory'
         ),
         webots,
