@@ -51,6 +51,15 @@ def generate_launch_description():
             ]
         )
 
+    web_telemetry = Node(
+           package='drone_web',
+           executable='ros_mission_website',
+           parameters=[
+               {'base_url': 'https://telemetria-osadniik.pythonanywhere.com/',
+                "camera_topic": 'camera',}
+           ]
+        )
+
     return LaunchDescription([
         DeclareLaunchArgument(
             'world',
@@ -60,6 +69,7 @@ def generate_launch_description():
         webots,
         webots._supervisor,
         drone_handler_node_action,
+        web_telemetry,
         healthcheck_action,
 
         # This action will kill all nodes once the Webots simulation has exited

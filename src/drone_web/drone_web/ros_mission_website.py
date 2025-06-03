@@ -18,7 +18,9 @@ class RosMissionWebsite(Node):
         super().__init__('ros_mission_website')
 
         self.declare_parameter('base_url', 'http://localhost:5000')
+        self.declare_parameter('camera_topic', '/camera/image_raw')
         self.web_app_base_url = self.get_parameter('base_url').get_parameter_value().string_value
+        self.camera_topic = self.get_parameter('camera_topic').get_parameter_value().string_value
 
         self.report_subscription = self.create_subscription(
             Telemetry, 
@@ -28,7 +30,7 @@ class RosMissionWebsite(Node):
         
         self.image_subscription = self.create_subscription(
             Image,
-            'camera',
+            self.camera_topic,
             self.image_callback,
             10)
 
@@ -40,18 +42,18 @@ class RosMissionWebsite(Node):
         self.current_telemetry = {
         "altitude": 0,
         "speed": 0,
-        "battery": 0,
-        "gps": "0, 0",
-        "signal_strength": 0,
+        "battery_percent": 0,
+        "battery_voltage": 0,
+        "gps_relative": "0, 0",
+        "gps_global": "0, 0",
         "flight_mode": "NONE",
-        "temperature": 0
     }
 
         # self.web_app_base_url = "http://localhost:5000"
         # self.web_app_base_url = "https://osadniik.pythonanywhere.com/"
 
         # Post data to website with specified time interval
-        post_interval = 0.5
+        post_interval = 1
         self.timer = self.create_timer(post_interval, self.post_all_to_server)
         self.get_logger().info('RosMissionWebsite client node created')
         self.test_server_connection()
@@ -71,10 +73,10 @@ class RosMissionWebsite(Node):
             "altitude": telemetry_msg.alt,
             "speed":  telemetry_msg.speed,
             "battery_percent": telemetry_msg.battery_percentage,
-            "gps_relative": f"{telemetry_msg.global_lat},{telemetry_msg.global_lon}",
-            "gps_global": f"{telemetry_msg.global_lat},{telemetry_msg.global_lon}",
+            "gps_relative": f"{round(telemetry_msg.lat, 6)},{round(telemetry_msg.lon, 6)}",
+            "gps_global": f"{round(telemetry_msg.global_lat, 6)},{round(telemetry_msg.global_lon, 6)}",
             "flight_mode": telemetry_msg.flight_mode,
-            "battery_voltage": telemetry_msg.battery_voltage
+            "battery_voltage": round(telemetry_msg.battery_voltage, 3)
         }
 
         return json_msg
@@ -101,6 +103,7 @@ class RosMissionWebsite(Node):
             self.get_logger().warn(f"❌ Failed to post image. Server is not available: {e}")
 
     def post_telemetry_to_server(self):
+        # self.get_logger().info(f"Posting telemetry: {self.current_telemetry}")
         try:
             response = requests.post(f"{self.web_app_base_url}/api/status", json=self.current_telemetry)
             self.get_logger().debug(f"Status telemetry post: {response.status_code}")
@@ -110,8 +113,8 @@ class RosMissionWebsite(Node):
     def post_all_to_server(self):
         self.get_logger().debug('Posting telemetry and image to server')
         self.post_telemetry_to_server()
-        if self.current_image is not None:
-            self.post_image_to_server() 
+        # if self.current_image is not None:
+        #     self.post_image_to_server() 
 
     def handle_post_log_request(self, request, response):
         payload = {
@@ -130,7 +133,8 @@ class RosMissionWebsite(Node):
         except Exception as e:
             response.result = 0
             self.get_logger().warn(f"❌ Failed to post log to server: {e}")
-
+        if self.current_image is not None:
+            self.post_image_to_server() 
         return response
 
 
