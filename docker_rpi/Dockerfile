@@ -17,7 +17,8 @@ RUN apt update && apt install -y \
     python3-pil \ 
     python3-setuptools \ 
     python3-future \
-    ros-humble-tf-transformations
+    ros-humble-tf-transformations \
+    ros-humble-camera-ros
 
 RUN apt-get install -y ros-humble-cv-bridge
 
@@ -29,7 +30,7 @@ RUN pip install \
     MAVProxy==1.8.71 \
     dronekit \
     haversine \
-    opencv-python \
+    opencv-python==4.7.0\
     transforms3d \
     colorama \
     tabulate \

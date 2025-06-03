@@ -1,0 +1,96 @@
+#VRML_SIM R2025a utf8
+
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackground.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/floors/protos/Floor.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/appearances/protos/Grass.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/factory/pipes/protos/PipeSection.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/factory/manhole/protos/SquareManhole.proto"
+IMPORTABLE EXTERNPROTO "../protos/Iris.proto"
+IMPORTABLE EXTERNPROTO "../protos/ArucoMarker.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/humans/pedestrian/protos/Pedestrian.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/vehicles/protos/bmw/BmwX5.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/Barn.proto"
+
+WorldInfo {
+  title "Iris Mines"
+  basicTimeStep 2
+  FPS 20
+}
+Viewpoint {
+  orientation 0.15766792259415036 -0.2923102925246394 -0.9432367248305193 5.244264932109073
+  position -31.564909622155792 -44.087811024606786 20.821395239137644
+  follow "Iris"
+  followSmoothness 0.01
+}
+TexturedBackground {
+}
+TexturedBackgroundLight {
+}
+Floor {
+  size 1000 1000
+  appearance Grass {
+  }
+}
+PipeSection {
+  translation 0 20 0.3
+  radius 0.2
+  subdivision 20
+  appearance PBRAppearance {
+    baseColor 0 0 1
+    roughness 1
+    metalness 0
+  }
+}
+Robot {
+  name "ros2_sim_manager"
+  controller "<extern>"
+  supervisor TRUE
+}
+SquareManhole {
+  translation -6.5 -6.5 0
+  name "drone takeoff(1)"
+  size 0.5 0.5 0.1
+}
+DEF Iris Iris {
+  translation -6.487827768237703 -6.52620899786315 0.10496319054102854
+  rotation 1 8.793701711218406e-14 5.79831125758576e-13 3.91809723316936e-06
+  controller "ardupilot_sitl_controller"
+  controllerArgs [
+    "--motors"
+    "m1_motor, m2_motor, m3_motor, m4_motor"
+    "--camera"
+    "camera"
+    "--camera-port"
+    "5599"
+  ]
+  extensionSlot [
+    DEF camera Camera {
+      translation 0.05 0 -0.05
+      rotation 0 1 0 1.57
+      width 320
+      height 240
+    }
+    DEF camera_2 Camera {
+      translation 0.05 0 -0.05
+      rotation 0 1 0 0.6537003061004253
+      name "camera_2"
+      width 320
+      height 240
+    }
+  ]
+}
+Pedestrian {
+}
+Pedestrian {
+  translation -1.9 3 1.37
+  rotation 0 0 1 -0.6544996938995746
+  name "pedestrian(1)"
+}
+BmwX5 {
+  translation 5 -7 0.4
+  rotation 0 0 1 1.3089996938995747
+}
+Barn {
+  translation 15 8 0
+}

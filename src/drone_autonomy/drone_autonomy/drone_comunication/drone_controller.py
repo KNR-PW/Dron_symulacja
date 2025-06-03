@@ -91,6 +91,12 @@ class DroneController(Node):
         self.get_logger().info('Landing drone...')
         return True
 
+    def rtl(self) -> bool:
+        if not self._set_mode('RTL'):
+            return False
+        self.get_logger().info('RTL mode...')
+        return True
+
     def takeoff(self, altitude: float) -> bool:
         self.get_logger().info(f'Taking off to {altitude} m')
         goal = Takeoff.Goal()

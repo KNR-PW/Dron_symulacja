@@ -22,13 +22,14 @@ class ImageSubscriber(Node):
         Class constructor to set up the node
         """
         # Initiate the Node class's constructor and give it a name
+
         super().__init__('camera')
 
         # Create the subscriber. This subscriber will receive an Image
         # from the video_frames topic. The queue size is 10 messages.
         self.subscription = self.create_subscription(
             Image,
-            '/camera/image_raw',
+            "camera/image_raw",
             self.listener_callback,
             10)
         # Used to convert between ROS and OpenCV images
@@ -37,6 +38,7 @@ class ImageSubscriber(Node):
         self.get_logger().info('image_subscriber node created')
 
     def listener_callback(self, data):
+        self.get_logger().info('frame')
         """
         Callback function.
         """

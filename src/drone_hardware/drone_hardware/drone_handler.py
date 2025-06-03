@@ -28,6 +28,7 @@ class DroneHandler(Node):
         ## DECLARE SERVICES
         self.attitude = self.create_service(GetAttitude, 'get_attitude', self.get_attitude_callback)
         self.gps = self.create_service(GetLocationRelative, 'get_location_relative', self.get_location_relative_callback)
+        self.gps_abs = self.create_service(GetGpsPos, 'get_gps', self.get_gps_callback)
         self.servo = self.create_service(SetServo, 'set_servo', self.set_servo_callback)
         self.create_service(SetSpeed, 'set_speed', self.set_speed_callback)
         #self.yaw = self.create_service(SetYaw, 'set_yaw', self.set_yaw_callback)
@@ -82,13 +83,13 @@ class DroneHandler(Node):
                 # self.vehicle = connect(connection_string, baud=115200, wait_ready=True)
                 self.vehicle = connect(connection_string, baud=57600, wait_ready=False)
             except Exception as e:
-                self.get_logger().info(f"Connecting failed with error: {e}")
+                self.get_logger().error(f"Connecting failed with error: {e}")
                 self.get_logger().info("Retrying to connect in {3} seconds...")
                 time.sleep(3)
         if not self.dev_mode:
             self.wait_fc_ready()
         self.state = "OK"
-        self.get_logger().info("Copter connected, ready to arm")
+        self.get_logger().info("\033[92mCopter connected, ready to arm")
         
         self.timer = self.create_timer(.1, self.telemetry_callback)
 
@@ -99,7 +100,7 @@ class DroneHandler(Node):
                 self.get_logger().info("Waiting for FC to be ready...")
                 if self.vehicle.is_armable:
                     fc_ready = True
-                    self.get_logger().info("FC is ready")
+                    self.get_logger().info("\033[92mFC is ready")
                 else:
                     time.sleep(1)
             except Exception as e:
@@ -184,6 +185,24 @@ class DroneHandler(Node):
         # send command to vehicle
         self.vehicle.send_mavlink(msg)
 
+    def get_gps_callback(self, request, response):
+        self.get_logger().info(f"-- Get GPS service called --")
+        try:
+            if self.vehicle.location.global_frame:
+                lat = self.vehicle.location.global_frame.lat
+                lon = self.vehicle.location.global_frame.lon
+                alt = self.vehicle.location.global_frame.alt
+        except Exception as e:
+            self.get_logger().error(f"Error in get_gps_callback: {e}")
+            lat = 0
+            lon = 0
+            alt = 0
+        response.lat = float(lat)
+        response.lon = float(lon)
+        response.alt = float(alt)
+        return response
+
+        
     def set_yaw(self, yaw, cw ,relative=False):
         
         yaw = yaw / 3.141592 * 180

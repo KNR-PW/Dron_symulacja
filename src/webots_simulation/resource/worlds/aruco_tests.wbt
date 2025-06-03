@@ -31,11 +31,6 @@ Floor {
   appearance Grass {
   }
 }
-SquareManhole {
-  translation -6.5 -6.5 0
-  name "drone takeoff(1)"
-  size 0.5 0.5 0.1
-}
 PipeSection {
   translation 0 20 0.3
   radius 0.2
@@ -45,6 +40,12 @@ PipeSection {
     roughness 1
     metalness 0
   }
+}
+
+SquareManhole {
+  translation -6.5 -6.5 0
+  name "drone takeoff(1)"
+  size 0.5 0.5 0.1
 }
 DEF Iris Iris {
   translation -6.487827768237703 -6.526208998549794 0.10496319054102579

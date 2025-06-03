@@ -1,0 +1,274 @@
+#VRML_SIM R2025a utf8
+
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/backgrounds/protos/TexturedBackground.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/floors/protos/Floor.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/humans/pedestrian/protos/Pedestrian.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/factory/containers/protos/WoodenBox.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/factory/containers/protos/CardboardBox.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/street_furniture/protos/ElectricalCabinet.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/cabinet/protos/Cabinet.proto"
+IMPORTABLE EXTERNPROTO "../protos/Iris.proto"
+IMPORTABLE EXTERNPROTO "../protos/ArucoMarker.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/appearances/protos/Grass.proto"
+
+WorldInfo {
+  info [
+    ""
+  ]
+}
+Viewpoint {
+  orientation -0.42771915967106083 -0.10495426026624652 0.897797818944915 4.009256027769927
+  position 16.139123624025302 26.07455668852868 5.7277280456515856
+}
+TexturedBackground {
+}
+TexturedBackgroundLight {
+}
+Floor {
+  translation 0 0 -0.007
+  size 100 100
+  appearance Grass {
+  }
+}
+Pedestrian {
+  translation -1.27 17.49 1.27
+  rotation -4.34837e-07 2.18965e-07 -1 -2.617985307179586
+  name "pedestrian(2)"
+}
+Pedestrian {
+  translation 5.8 12.71 1.27
+  rotation 1 0 0 4.692820414042842e-06
+}
+Pedestrian {
+  translation 17.7959 19.715 1.26
+  rotation -6.287189999981451e-07 -2.346409999993077e-06 0.9999999999970497 -2.6179953071795863
+  name "pedestrian(1)"
+}
+WoodenBox {
+  translation 16.76 15.38 0.3
+}
+WoodenBox {
+  translation 5.91 20.44 0.3
+  rotation 0 0 1 -0.523595307179586
+  name "wooden box(1)"
+}
+CardboardBox {
+  translation 2.67 13.26 0.3
+}
+CardboardBox {
+  translation 17.3381 19.165 0.3
+  rotation 0 0 -1 -0.7854053071795866
+  name "cardboard box(1)"
+}
+Pose {
+  translation 5.85 12.7151 1.78479
+  rotation 0 0 1 -1.57
+  children [
+    Shape {
+      appearance Appearance {
+        material Material {
+          diffuseColor 0.8 0.2 0.2
+        }
+      }
+      geometry Mesh {
+        url [
+          "Helmet.stl"
+        ]
+      }
+    }
+  ]
+}
+Pose {
+  translation 15.1545 12.3014 1.78479
+  rotation 0 0 1 -2.3553953071795863
+  children [
+    Shape {
+      appearance Appearance {
+        material Material {
+          diffuseColor 0.8 0.2 0.2
+        }
+      }
+      geometry Mesh {
+        url [
+          "Helmet.stl"
+        ]
+      }
+    }
+  ]
+}
+Pose {
+  translation 17.7455 19.6922 1.74479
+  rotation 0 0 1 2.09519
+  children [
+    Shape {
+      appearance Appearance {
+        material Material {
+          diffuseColor 0.8 0.2 0.2
+        }
+      }
+      geometry Mesh {
+        url [
+          "Helmet.stl"
+        ]
+      }
+    }
+  ]
+}
+Transform {
+  translation 12.6388 2.86749 0.495246
+  rotation 3.7616199999730087e-06 0.9999999999928246 -4.486319999967809e-07 -1.5708053071795867
+  scale 0.01 0.01 0.01
+  children [
+    Shape {
+      appearance Appearance {
+        material Material {
+          diffuseColor 1 0.5 0.2
+        }
+      }
+      geometry Mesh {
+        url [
+          "rura2.stl"
+        ]
+      }
+    }
+  ]
+}
+Transform {
+  translation 2.6988 2.86749 0.495186
+  rotation 0.5773479358540498 0.5773519358536053 0.5773509358537164 -2.094405307179586
+  scale 0.01 0.01 0.01
+  children [
+    Shape {
+      appearance Appearance {
+        material Material {
+          diffuseColor 1 0.5 0.2
+        }
+      }
+      geometry Mesh {
+        url [
+          "rura2.stl"
+        ]
+      }
+    }
+  ]
+}
+Transform {
+  translation 12.7388 2.86749 0.495222
+  rotation 0.5773479358540498 0.5773519358536053 0.5773509358537164 -2.094405307179586
+  scale 0.01 0.01 0.005
+  children [
+    Shape {
+      appearance Appearance {
+        material Material {
+          diffuseColor 1 0.5 0.2
+        }
+      }
+      geometry Mesh {
+        url [
+          "rura2.stl"
+        ]
+      }
+    }
+  ]
+}
+Transform {
+  translation 12.7388 7.75749 -0.42479
+  rotation 2.5956799999213812e-06 -7.33749999977776e-06 -0.9999999999697118 1.5708
+  scale 0.01 0.01 0.001
+  children [
+    Shape {
+      appearance Appearance {
+        material Material {
+          diffuseColor 1 0.5 0.2
+        }
+      }
+      geometry Mesh {
+        url [
+          "rura2.stl"
+        ]
+      }
+    }
+  ]
+}
+Robot {
+  name "ros2_sim_manager"
+  controller "<extern>"
+  supervisor TRUE
+}
+SquareManhole {
+  translation -6.5 -6.5 0
+  name "drone takeoff(1)"
+  size 0.5 0.5 0.1
+}
+DEF Iris Iris {
+  translation -6.487827768237703 -6.52620899786315 0.10496319054102854
+  rotation 1 8.793701711218406e-14 5.79831125758576e-13 3.91809723316936e-06
+  controller "ardupilot_sitl_controller"
+  controllerArgs [
+    "--motors"
+    "m1_motor, m2_motor, m3_motor, m4_motor"
+    "--camera"
+    "camera"
+    "--camera-port"
+    "5599"
+  ]
+  extensionSlot [
+    DEF camera Camera {
+      translation 0.05 0 -0.05
+      rotation 0 1 0 1.57
+      width 640
+      height 480
+    }
+  ]
+}
+ElectricalCabinet {
+  translation 0.53 0.99 0.02
+}
+Cabinet {
+  translation 18.7475 8.80088 0
+  rotation 0 0 1 2.35619
+}
+Pedestrian {
+  translation 15.0967 12.3433 1.27
+  rotation 0 0 -1 0.785395
+  name "pedestrian(3)"
+}
+Transform {
+  translation 15.5018 12.4497 0.83521
+  rotation -0.2810860238048953 0.6786010574700474 0.6785950574695392 -2.593575307179586
+  scale 0.001 0.001 0.001
+  children [
+    Shape {
+      appearance Appearance {
+        material Material {
+          diffuseColor 1 0.5 0.2
+        }
+      }
+      geometry Mesh {
+        url [
+          "kamizelka.stl"
+        ]
+      }
+    }
+  ]
+}
+Transform {
+  translation 5.56451 12.3396 0.805141
+  rotation 0.5773486025216047 0.5773496025209163 0.5773526025188509 2.09438
+  scale 0.001 0.001 0.001
+  children [
+    Shape {
+      appearance Appearance {
+        material Material {
+          diffuseColor 1 0.5 0.2
+        }
+      }
+      geometry Mesh {
+        url [
+          "kamizelka.stl"
+        ]
+      }
+    }
+  ]
+}
