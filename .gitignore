@@ -40,3 +40,5 @@ drone_data.db*
 .pytest_cache/
 
 
+saved_images/
+saved_videos/
