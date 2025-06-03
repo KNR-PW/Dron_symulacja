@@ -24,7 +24,8 @@ RUN apt-get install -y ros-humble-cv-bridge
 
 RUN pip install \
     empy==3.3.4 \
-    numpy==1.26.4 \
+    # numpy==1.26.4 \
+    numpy==1.23 \
     lark==1.2.2 \
     MAVProxy==1.8.71 \
     dronekit \

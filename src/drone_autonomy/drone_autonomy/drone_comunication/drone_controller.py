@@ -14,7 +14,6 @@ from drone_interfaces.action import (
     Takeoff,
     GotoRelative,
     GotoGlobal,
-    Shoot,
     SetYawAction
 )
 
@@ -42,7 +41,6 @@ class DroneController(Node):
         self._takeoff_client = ActionClient(self, Takeoff, 'takeoff')
         self._goto_rel_client = ActionClient(self, GotoRelative, 'goto_relative')
         self._goto_glob_client = ActionClient(self, GotoGlobal, 'goto_global')
-        self._shoot_client   = ActionClient(self, Shoot, 'shoot')
         self._yaw_client     = ActionClient(self, SetYawAction, 'Set_yaw')
 
         # --- Telemetry subscriber ---
@@ -115,10 +113,10 @@ class DroneController(Node):
         goal = GotoGlobal.Goal(lat=lat, lon=lon, alt=alt)
         return self._send_action(self._goto_glob_client, goal)
 
-    def send_shoot(self, color: str) -> bool:
-        self.get_logger().info(f'Shooting color {color}')
-        goal = Shoot.Goal(color=color)
-        return self._send_action(self._shoot_client, goal)
+    # def send_shoot(self, color: str) -> bool:
+    #     self.get_logger().info(f'Shooting color {color}')
+    #     goal = Shoot.Goal(color=color)
+    #     return self._send_action(self._shoot_client, goal)
 
     def send_set_yaw(self, yaw: float, relative: bool = True) -> bool:
         self.get_logger().info(f'Setting yaw to {yaw} rad, relative={relative}')
@@ -177,7 +175,14 @@ class DroneController(Node):
         return fut.result().yaw
 
     def _telemetry_cb(self, msg: Telemetry):
-        #print("TELE") czemu stasiu.....
+        # Unpack telemetry message and save as attributes
+        self.battery_percentage = msg.battery_percentage
+        self.battery_voltage = msg.battery_voltage
+        self.battery_current = msg.battery_current
+        self.lat = msg.lat
+        self.lon = msg.lon
+        self.alt = msg.alt
+        self.flight_mode = msg.flight_mode
         if msg.battery_voltage < self._voltage_threshold:
             self._voltage_spikes += 1
         else:
@@ -185,6 +190,7 @@ class DroneController(Node):
         if self._voltage_spikes >= 5 and not self._alarm:
             self.get_logger().warn('Low battery detected, emergency return')
             self._alarm = True
+
     def destroy_node(self):
         super().destroy_node()
 

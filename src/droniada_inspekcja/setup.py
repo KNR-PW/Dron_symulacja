@@ -1,11 +1,11 @@
-from setuptools import setup
+from setuptools import find_packages, setup
 
-package_name = 'drone_hardware'
+package_name = 'droniada_inspekcja'
 
 setup(
     name=package_name,
     version='0.0.0',
-    packages=[package_name],
+    packages=find_packages(exclude=['test']),
     data_files=[
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
@@ -13,19 +13,15 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='kuba',
-    maintainer_email='ntfr123@gmail.com',
+    maintainer='stas',
+    maintainer_email='stas.kolodziejczyk@gmail.com',
     description='TODO: Package description',
     license='TODO: License declaration',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            "drone_handler=drone_hardware.drone_handler:main",
-            "healthcheck=drone_hardware.healthcheck:main",
-            "host_bridge=drone_hardware.host_hardware:main",
-            "uart_bridge = drone_hardware.uartbridge:main",
-            "hbridge = drone_hardware.hbridge:main",
-
+            "mission_reporter = droniada_inspekcja.mission_reporter:main",
+            "simulate_mission = droniada_inspekcja.simulate_mission:main",
         ],
     },
 )

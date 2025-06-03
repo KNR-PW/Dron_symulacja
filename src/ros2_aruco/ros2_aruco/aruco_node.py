@@ -37,6 +37,7 @@ class ArucoNode(rclpy.node.Node):
             name="aruco_dictionary_id",
             # value="DICT_5X5_250",
             value="DICT_4X4_100",
+            # value="DICT_ARUCO_ORIGINAL",
             descriptor=ParameterDescriptor(
                 type=ParameterType.PARAMETER_STRING,
                 description="Dictionary that was used to generate markers.",
@@ -135,8 +136,9 @@ class ArucoNode(rclpy.node.Node):
         self.markers_pub = self.create_publisher(ArucoMarkers, "aruco_markers", 10)
 
 
-        self.aruco_dictionary = cv2.aruco.Dictionary_get(dictionary_id)
+        self.aruco_dictionary = cv2.aruco.getPredefinedDictionary(dictionary_id)
         self.aruco_parameters = cv2.aruco.DetectorParameters_create()
+
         self.bridge = CvBridge()
 
     def image_callback(self, img_msg):
@@ -156,6 +158,7 @@ class ArucoNode(rclpy.node.Node):
             cv_image, self.aruco_dictionary, parameters=self.aruco_parameters
         )
         if marker_ids is not None:
+            self.get_logger().info(f"Found {len(marker_ids)} markers")
             if cv2.__version__ > "4.0.0":
                 rvecs, tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(
                     corners, self.marker_size, self.intrinsic_mat, self.distortion

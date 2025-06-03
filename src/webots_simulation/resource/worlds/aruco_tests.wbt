@@ -9,6 +9,7 @@ EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/project
 IMPORTABLE EXTERNPROTO "../protos/Iris.proto"
 IMPORTABLE EXTERNPROTO "../protos/ArucoMarker.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/factory/containers/protos/PlasticCrate.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/humans/pedestrian/protos/Pedestrian.proto"
 
 WorldInfo {
   title "Iris Mines"
@@ -17,7 +18,7 @@ WorldInfo {
 }
 Viewpoint {
   orientation 0.01337616361221954 -0.9976144202808228 -0.06772404812750664 5.892276250263881
-  position -12.812244349403272 -7.181814853420726 3.256337504782789
+  position -23.31410953665553 -7.463486656329506 7.574733238431486
   follow "Iris"
   followSmoothness 0.01
 }
@@ -40,19 +41,15 @@ PipeSection {
     metalness 0
   }
 }
-Robot {
-  name "ros2_sim_manager"
-  controller "<extern>"
-  supervisor TRUE
-}
+
 SquareManhole {
   translation -6.5 -6.5 0
   name "drone takeoff(1)"
   size 0.5 0.5 0.1
 }
 DEF Iris Iris {
-  translation -6.487827768237703 -6.52620899786315 0.10496319054102854
-  rotation 1 8.793701711218406e-14 5.79831125758576e-13 3.91809723316936e-06
+  translation -6.487827768237703 -6.526208998549794 0.10496319054102579
+  rotation 1 2.319253129162253e-13 3.637660290065909e-13 3.918097484911812e-06
   controller "ardupilot_sitl_controller"
   controllerArgs [
     "--motors"
@@ -73,6 +70,9 @@ DEF Iris Iris {
 }
 ArucoMarker {
   translation -5.5 -7.5 0
+}
+Pedestrian {
+  translation -1 -7 1.27
 }
 ArucoMarker {
   translation -5.5 -10.5 0

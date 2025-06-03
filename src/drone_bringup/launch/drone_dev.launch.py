@@ -1,3 +1,4 @@
+
 from launch import LaunchDescription
 from launch_ros.actions import Node
 import os
@@ -36,13 +37,13 @@ def generate_launch_description():
                 {'dev': 'true'}
             ]
         ),
-        Node(
-            package='camera_ros',
-            executable='camera_node',
-            parameters=[
-                {'format': 'RGB888'}
-            ]
-        ),
+         Node(
+             package='camera_ros',
+             executable='camera_node',
+            #  parameters=[
+            #      {'format': 'RGB888'}
+            #  ]
+         ),
         Node(
             package='drone_camera',
             executable='images_recorder',
@@ -52,19 +53,27 @@ def generate_launch_description():
             ]
         ),
         Node(
-            package='ros2_aruco',
-            executable='aruco_node',
+            package='drone_camera',
+            executable='video_recorder',
             parameters=[
-                {'image_topic': 'camera/image_raw'},
+                {'camera_topic': 'camera/image_raw'}
                 # {'camera_topic': 'camera'}
             ]
         ),
-        Node(
-            package='drone_web',
-            executable='ros_mission_website',
-            parameters=[
-                {'base_url': 'https://osadniik.pythonanywhere.com/'}
-            ]
-        ),
-        healthcheck_action,
+      #  Node(
+      #      package='ros2_aruco',
+      #      executable='aruco_node',
+      #      parameters=[
+      #          {'image_topic': 'camera/image_raw'},
+      #          # {'camera_topic': 'camera'}
+      #      ]
+      #  ),
+       # Node(
+        #    package='drone_web',
+        #    executable='ros_mission_website',
+        #    parameters=[
+        #        {'base_url': 'https://osadniik.pythonanywhere.com/'}
+        #    ]
+        #),
+       # healthcheck_action,
     ])

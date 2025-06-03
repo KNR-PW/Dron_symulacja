@@ -1,0 +1,5 @@
+bool spin_motor
+float32 time
+---
+bool result
+string message

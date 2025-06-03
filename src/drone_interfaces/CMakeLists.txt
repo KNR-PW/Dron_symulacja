@@ -14,10 +14,7 @@ find_package(geometry_msgs REQUIRED)
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
-  "msg/DetectionMsg.msg"
-  "msg/DetectionsList.msg"
   "msg/ArucoMarkers.msg"
-  "msg/AxisAngle.msg"
   "msg/Telemetry.msg"
   "srv/Dropper.srv"
   "srv/GetAttitude.srv"
@@ -27,23 +24,17 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/SetMode.srv"
   "srv/SetSpeed.srv"
   "srv/GetGpsPos.srv"
-  "srv/SetRobotPose.srv"
-  "srv/SetRobotPoseRelative.srv"
-  "srv/SetObstacleParameters.srv"
-  "srv/SetCylinderParameters.srv"
-  "srv/SetBoxParameters.srv"
-  "srv/SetSphereParameters.srv"
+  "srv/SpinDCMotor.srv"
   "srv/PostLog.srv"
   "srv/TurnOnVideo.srv"
   "srv/TurnOffVideo.srv"
+  "srv/CreateReport.srv"
+  "srv/UpdateReport.srv"
   "action/GotoRelative.action"
   "action/GotoGlobal.action"
   "action/Arm.action"
-  "action/Shoot.action"
   "action/SetYawAction.action"
-  "action/MoveRelative.action"
   "action/Takeoff.action"
-  "srv/DetectTrees.srv"
   "srv/TakePhoto.srv"
   DEPENDENCIES
   geometry_msgs

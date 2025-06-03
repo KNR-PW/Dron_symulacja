@@ -4,7 +4,7 @@ from rclpy.action import ActionClient
 
 from drone_interfaces.msg import Telemetry
 from drone_interfaces.srv import GetLocationRelative, GetAttitude, SetYaw, SetMode
-from drone_interfaces.action import GotoRelative, GotoGlobal, Shoot, Arm, Takeoff, SetYawAction
+from drone_interfaces.action import GotoRelative, GotoGlobal, Arm, Takeoff, SetYawAction
 
 import time
 class Hardware_com(Node):
@@ -25,7 +25,6 @@ class Hardware_com(Node):
         # DECLARE actions client
         self.goto_rel_action_client = ActionClient(self, GotoRelative, "goto_relative")
         self.goto_glob_action_client = ActionClient(self, GotoGlobal, "goto_global")
-        self.shoot_action_client = ActionClient(self, Shoot, "shoot")
         self.takeoff_action_client = ActionClient(self, Takeoff, 'takeoff')
         self.arm_action_client = ActionClient(self, Arm, 'Arm')
         self.yaw_action_client = ActionClient(self, SetYawAction, 'Set_yaw')
@@ -203,28 +202,6 @@ class Hardware_com(Node):
 
     def _goto_glob_result_callback(self, future):
         self.get_logger().info("Goto rel  action finished")
-        self.__state = "OK"
-
-    # DECLARE shoot action
-
-    def send_shoot_goal(self, color):
-        self.get_logger().info(f"Sending shoot goal, color: {color}")
-        self.__state = "BUSY"
-        goal_msg = Shoot.Goal()
-        goal_msg.color = color
-        self.send_goal_future = self.shoot_action_client.send_goal_async(goal_msg)
-        self.send_goal_future.add_done_callback(self._shoot_response_callback)
-        self.get_logger().info("Shoot action sent")       
-        self._wait_busy()
-
-    def _shoot_response_callback(self, future):
-        self.get_logger().info("Shoot response callback")
-        goal_handle = future.result()
-        self.get_result_future = goal_handle.get_result_async()
-        self.get_result_future.add_done_callback(self._shoot_result_callback)
-
-    def _shoot_result_callback(self, future):
-        self.get_logger().info("Shoot action finished")
         self.__state = "OK"
 
     # DECLARE telemetry function

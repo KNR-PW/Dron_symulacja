@@ -36,7 +36,8 @@ class ImagePublisher(Node):
         self.timer = self.create_timer(timer_period, self.timer_callback)
 
         # self.img = cv2.imread('/home/stas/Dron/drone_photos/drone_photosdrone_photo111.jpg', cv2.IMREAD_COLOR)
-        video_file = "/home/stas/Videos/Screencasts/aruco_website.mp4"
+        video_file = "/home/stas/Videos/Screencasts/Screencast from 06-02-2025 03:22:23 PM.webm"
+        # video_file = "/home/stas/Videos/Screencasts/aruco_website.mp4"
         # video_file = "/home/stas/Dron/KNRDron/rosDron/install/drone_detector/lib/drone_detector/car_counting.mp4"
         self.cap = cv2.VideoCapture(video_file)
 
@@ -70,8 +71,11 @@ class ImagePublisher(Node):
             self.cap = cv2.VideoCapture(video_file)
             return
         img = cv2.resize(self.img, (640, 480), interpolation=cv2.INTER_LINEAR)
+
         # img = cv2.blur(img, (10, 10))  
         self.publisher_.publish(self.br.cv2_to_imgmsg(img))
+        cv2.imshow('Video Frame', img)
+        cv2.waitKey(1)
 
 
 def main(args=None):

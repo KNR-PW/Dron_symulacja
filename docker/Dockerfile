@@ -46,14 +46,16 @@ RUN apt update && apt install -y \
 
 RUN pip install \
     empy==3.3.4 \
-    numpy==1.26.4 \
+    # numpy==1.26.4 \
+    numpy==1.23 \
     lark==1.2.2 \
     MAVProxy==1.8.71 \
     dronekit \
     haversine \
     transforms3d \
     colorama \
-    tabulate
+    tabulate \
+    requests
 
 # Fix dronekit
 RUN sed -i 's/collections.MutableMapping/collections.abc.MutableMapping/g' /usr/local/lib/python3.10/dist-packages/dronekit/__init__.py
