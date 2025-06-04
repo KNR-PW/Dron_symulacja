@@ -62,7 +62,7 @@ class MissionRunner(DroneController):
         self._marker_locations.clear()
 
         img = self.get_camera_image()
-        gps_global = (self.lat, self.lon) if hasattr(self, 'lat') else (None, None)
+        gps_global = (self.global_lat, self.global_lon) if hasattr(self, 'global_lat') else (None, None)
 
         h, w = img.shape[:2] if img is not None else (0, 0)
         half_box = 50
