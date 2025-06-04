@@ -167,6 +167,7 @@ class MissionReporter(Node):
         image_paths = []
         # Aruco images
         for aruco in mission.get("arucos", []):
+            self.get_logger().debug(f"Processing aruco: {aruco}")
             img_path = aruco.get("image_path")
             if img_path:
                 image_paths.append(img_path)

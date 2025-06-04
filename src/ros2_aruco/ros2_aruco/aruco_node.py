@@ -160,8 +160,8 @@ class ArucoNode(rclpy.node.Node):
             cv_image, self.aruco_dictionary, parameters=self.aruco_parameters
         )
         if marker_ids is not None:
-            self.get_logger().info(f"Found {len(marker_ids)} markers")
-            self.get_logger().info(f"Marker ids: {marker_ids.flatten()}")
+            # self.get_logger().info(f"Found {len(marker_ids)} markers")
+            # self.get_logger().info(f"Marker ids: {marker_ids.flatten()}")
             if cv2.__version__ > "4.0.0":
                 rvecs, tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(
                     corners, self.marker_size, self.intrinsic_mat, self.distortion
