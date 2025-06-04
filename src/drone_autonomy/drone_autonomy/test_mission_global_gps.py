@@ -10,30 +10,6 @@ from drone_comunication.drone_controller import DroneController
 from drone_interfaces.msg import ArucoMarkers
 from drone_interfaces.srv import PostLog
 
-# class WebLogger(Node):
-#     def __init__(self):
-#         super().__init__('web_logger')
-#         self.client = self.create_client(PostLog, 'post_log_to_web')
-
-#     def log(self, message, level="info"):
-#         while not self.client.wait_for_service(timeout_sec=1.0):
-#             self.get_logger().info('Waiting for service post_log_to_server...')
-
-#         request = PostLog.Request()
-#         request.message = message
-#         request.level = level
-
-#         future = self.client.call_async(request)
-#         rclpy.spin_until_future_complete(self, future)
-
-#         if future.result() is not None:
-#             if future.result().result:
-#                 self.get_logger().info('Successfully posted web log')
-#             else:
-#                 self.get_logger().warn(f"Failed to post log")
-#         else:
-#             self.get_logger().error('Service call failed')
-            
 
 class ArucoMissionNode(DroneController):
     def __init__(self):
@@ -51,7 +27,7 @@ class ArucoMissionNode(DroneController):
         # Delay mission start by 1s to allow connections
         # self._mission_timer = self.create_timer(1.0, self._mission_entry)
         # self.web_logger = WebLogger()
-        # self.web_logger.log("Aruco mission node started", "info")
+        self.web_logger.log("Aruco mission node started", "info")
         self._mission_started = False
         self.i = 0
 
@@ -190,32 +166,21 @@ def main(args=None):
     spin_thread = threading.Thread(target=executor.spin, daemon=True)
     spin_thread.start()
     
-    # Define mission waypoints
-    waypoints = [
-        (50.27228213642658, 18.672786340141236, 5.0),
-        (50.27217242065779, 18.672783657932438, 5.0),
-        (50.27217927790075, 18.67259590331664, 5.0),
-        (50.27229585087989, 18.67277292909725, 5.0)
-    ]
+    # # node.arm()
 
     # node.start_mission()
     node.start_video()
 
     node.arm()
     node.takeoff(5.0)
-    node.send_goto_relative(0.0, 0.0, 0.0)   
-    node.set_speed(1) 
-
-    for lat, lon, alt in waypoints:
-        print(f"Lecę do: LAT={lat}, LON={lon}, ALT={alt}")
-        node.send_goto_global(lat, lon, alt)
-        time.sleep(1) 
-
-    node.rtl()
+    node.set_speed(0.5)
+    
+    node.send_goto_global()
+ 
+    node.land()
     node.stop_video()
+    # print(node.i)
 
-    # Shut down the executor and node
-    # This is important to ensure all threads are cleaned up properly
     executor.shutdown()
     node.destroy_node()
     rclpy.shutdown()
