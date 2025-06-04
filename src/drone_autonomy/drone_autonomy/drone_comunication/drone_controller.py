@@ -52,6 +52,13 @@ class DroneController(Node):
         self._voltage_spikes = 0
         self._voltage_threshold = 12.0
 
+        self.global_lat = 0.0
+        self.global_lon = 0.0
+        self.global_alt = 0.0
+        self.lat = 0.0
+        self.lon = 0.0
+        self.alt = 0.0
+
     def _wait_for_service(self, client, name=""):
         while not client.wait_for_service(timeout_sec=1.0):
             self.get_logger().warn(f'Waiting for {name} service...')
@@ -182,6 +189,9 @@ class DroneController(Node):
         self.lat = msg.lat
         self.lon = msg.lon
         self.alt = msg.alt
+        self.global_lat = msg.global_lat
+        self.global_lon = msg.global_lon
+        self.speed = msg.speed
         self.flight_mode = msg.flight_mode
         if msg.battery_voltage < self._voltage_threshold:
             self._voltage_spikes += 1

@@ -161,13 +161,36 @@ class MissionReporter(Node):
 
         future.add_done_callback(_on_create_done)
 
-    def call_update_report(self, payload: dict):
+    def get_all_image_paths(self, mission: dict):
         """
-        Call the /update_report service with the given payload (as dict).
+        Collect all image file paths from arucos, people, and incidents/events for the mission.
+        """
+        image_paths = []
+        # Aruco images
+        for aruco in mission.get("arucos", []):
+            img_path = aruco.get("image_path")
+            if img_path:
+                image_paths.append(img_path)
+        # People images
+        for person in mission.get("employees", []):
+            img_path = person.get("image_path")
+            if img_path:
+                image_paths.append(img_path)
+        # Incident/event images
+        for incident in mission.get("incidents", []):
+            img_path = incident.get("image_path")
+            if img_path:
+                image_paths.append(img_path)
+        return image_paths
+
+    def call_update_report(self, payload: dict, images_list=None):
+        """
+        Call the /update_report service with the given payload (as dict) and images_list.
         """
         req = UpdateReport.Request()
         req.json_update = json.dumps(payload)
-
+        if images_list is not None:
+            req.images_list = images_list
         future = self.update_client_.call_async(req)
 
         def _on_update_done(fut):
