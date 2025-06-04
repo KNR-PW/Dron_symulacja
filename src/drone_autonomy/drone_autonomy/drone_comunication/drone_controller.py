@@ -115,7 +115,10 @@ class DroneController(Node):
         goal = GotoRelative.Goal(north=north, east=east, down=down)
         return self._send_action(self._goto_rel_client, goal)
 
-    def send_goto_global(self, lat: float, lon: float, alt: float) -> bool:
+    def send_goto_global(self, lat, lon, alt) -> bool:
+        lat = float(lat)
+        lon = float(lon)
+        alt = float(alt)
         self.get_logger().info(f'Moving global LAT:{lat}, LON:{lon}, ALT:{alt}')
         goal = GotoGlobal.Goal(lat=lat, lon=lon, alt=alt)
         return self._send_action(self._goto_glob_client, goal)
