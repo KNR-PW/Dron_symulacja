@@ -6,7 +6,7 @@ import json
 
 class RosReportWebsite(Node):
     def __init__(self):
-        super().__init__('ros_mission_report')
+        super().__init__('ros_report_website')
 
         self.declare_parameter('base_url', 'http://localhost:5000')
         self.web_app_base_url = self.get_parameter('base_url').get_parameter_value().string_value

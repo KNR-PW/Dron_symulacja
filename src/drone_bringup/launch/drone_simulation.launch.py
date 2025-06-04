@@ -34,6 +34,9 @@ def generate_launch_description():
     healthcheck = Node(
             package='drone_hardware',
             executable='healthcheck',
+            parameters=[
+                {"required_nodes": ['aruco_node', 'ros_mission_website', 'ros_report_website', 'mission_reporter']},
+            ]
         )
     # Delay running drone_handler to wain for  webots init
     drone_handler_node_action = TimerAction(
@@ -59,6 +62,22 @@ def generate_launch_description():
                 "camera_topic": 'camera',}
            ]
         )
+    
+    web_inspekcja = Node(
+           package='drone_web',
+           executable='ros_report_website',
+           parameters=[
+               {'base_url': 'https://inspekcja-osadniik.pythonanywhere.com/'}
+           ]
+        )
+
+    mission_reporter = Node(
+        package='droniada_inspekcja',
+        executable='mission_reporter',
+        parameters=[
+            {'db_path': 'drone_data.db'}
+        ]
+    )
 
     return LaunchDescription([
         DeclareLaunchArgument(
@@ -70,7 +89,9 @@ def generate_launch_description():
         webots._supervisor,
         drone_handler_node_action,
         web_telemetry,
+        web_inspekcja,
         healthcheck_action,
+        mission_reporter,
 
         # This action will kill all nodes once the Webots simulation has exited
         launch.actions.RegisterEventHandler(
