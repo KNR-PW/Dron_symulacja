@@ -190,8 +190,6 @@ def main(args=None):
     spin_thread = threading.Thread(target=executor.spin, daemon=True)
     spin_thread.start()
     
-    # # node.arm()
-
     # node.start_mission()
     node.start_video()
 
@@ -208,43 +206,10 @@ def main(args=None):
     
     node.send_goto_global(50.27229585087989, 18.67277292909725, 10)
 
-
-    # node.send_goto_relative(0.0, 0.0, 0.0
-    # node.send_goto_relative(3.0, 0.0, 0.0)
-    # node.set_speed(0.5)
-    # node.send_goto_relative(0.0, 3.0, 0.0)
-    # node.set_speed(0.8)
-    # node.send_goto_relative(-3.0, -3.0, 0.0)
     time.sleep(3)
-    # node.set_speed(0.03)
-    # node.send_goto_relative(0.0, 5.0, 0.0)
-    
-    # node.set_speed(0.5)
-    # node.send_goto_relative(0.0, 2.0, 0.0)
-    # node.send_goto_relative(0.0, 0.0, 0.0)
-    # node.send_set_yaw(2.0)
+
     node.rtl()
     node.stop_video()
-    # print(node.i)
-
-# ASYNC
-    # executor = MultiThreadedExecutor()
-    # executor.add_node(node)
-
-    # # Start the asyncio event loop manually
-    # async def run_async():
-    #     node.start_mission_async()
-    #     while rclpy.ok():
-    #         rclpy.spin_once(node, timeout_sec=0.1)
-    #         await asyncio.sleep(0.01)  # Yield control to asyncio
-
-    # try:
-    #     asyncio.run(run_async())
-    # finally:
-    #     node.destroy_node()
-    #     rclpy.shutdown()
-
-
 
     # Shut down the executor and node
     # This is important to ensure all threads are cleaned up properly
