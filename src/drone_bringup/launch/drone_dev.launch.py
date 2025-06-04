@@ -68,12 +68,12 @@ def generate_launch_description():
       #          # {'camera_topic': 'camera'}
       #      ]
       #  ),
-       # Node(
-        #    package='drone_web',
-        #    executable='ros_mission_website',
-        #    parameters=[
-        #        {'base_url': 'https://osadniik.pythonanywhere.com/'}
-        #    ]
-        #),
+       Node(
+           package='drone_web',
+           executable='ros_mission_website',
+           parameters=[
+               {'base_url': 'https://telemetria-osadniik.pythonanywhere.com/'}
+           ]
+        ),
        # healthcheck_action,
     ])
