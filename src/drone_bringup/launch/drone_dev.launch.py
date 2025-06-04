@@ -5,6 +5,30 @@ import os
 from launch.actions import DeclareLaunchArgument, TimerAction
 from launch.actions import SetEnvironmentVariable
 
+web_telemetry = Node(
+           package='drone_web',
+           executable='ros_mission_website',
+           parameters=[
+               {'base_url': 'https://telemetria-osadniik.pythonanywhere.com/',
+                "camera_topic": 'camera',}
+           ]
+        )
+    
+web_inspekcja = Node(
+           package='drone_web',
+           executable='ros_report_website',
+           parameters=[
+               {'base_url': 'https://inspekcja-osadniik.pythonanywhere.com/'}
+           ]
+        )
+
+mission_reporter = Node(
+        package='droniada_inspekcja',
+        executable='mission_reporter',
+        parameters=[
+            {'db_path': 'drone_data.db'}
+        ]
+    )
 def generate_launch_description():
     log_dir = os.path.expanduser('~/ros2_logs')  # Folder na logi
     os.makedirs(log_dir, exist_ok=True) 
@@ -15,7 +39,7 @@ def generate_launch_description():
             parameters=[
                 {'camera_topic': 'camera/image_raw'},
                 # {'camera_topic': 'camera'},
-                {'required_nodes': ['aruco_node', 'ros_mission_website']}
+                {'required_nodes': ['aruco_node', 'ros_mission_website', 'ros_report_website', 'mission_reporter']}
             ],
         )
 
@@ -60,20 +84,24 @@ def generate_launch_description():
                 # {'camera_topic': 'camera'}
             ]
         ),
-      #  Node(
-      #      package='ros2_aruco',
-      #      executable='aruco_node',
-      #      parameters=[
-      #          {'image_topic': 'camera/image_raw'},
-      #          # {'camera_topic': 'camera'}
-      #      ]
-      #  ),
        Node(
-           package='drone_web',
-           executable='ros_mission_website',
+           package='ros2_aruco',
+           executable='aruco_node',
            parameters=[
-               {'base_url': 'https://telemetria-osadniik.pythonanywhere.com/'}
+               {'image_topic': 'camera/image_raw',
+               "aruco_dictionary_id": "DICT_ARUCO_ORIGINAL"},
+               # {'camera_topic': 'camera'}
            ]
-        ),
+       ),
+    #    Node(
+    #        package='drone_web',
+    #        executable='ros_mission_website',
+    #        parameters=[
+    #            {'base_url': 'https://telemetria-osadniik.pythonanywhere.com/'}
+    #        ]
+    #     ),
        # healthcheck_action,
+        web_telemetry,
+        web_inspekcja,
+        mission_reporter,
     ])

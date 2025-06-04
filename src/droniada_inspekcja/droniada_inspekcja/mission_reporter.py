@@ -165,20 +165,21 @@ class MissionReporter(Node):
 
     def get_all_image_paths(self, mission: dict):
         image_paths = []
+        self.get_logger().debug(f"Getting all image paths for mission ID {mission}")
         # Aruco images
         for aruco in mission.get("arucos", []):
             self.get_logger().debug(f"Processing aruco: {aruco}")
-            img_path = aruco.get("image_path")
+            img_path = aruco.get("image")
             if img_path:
                 image_paths.append(img_path)
         # People images
         for person in mission.get("employees", []):
-            img_path = person.get("image_path")
+            img_path = person.get("image")
             if img_path:
                 image_paths.append(img_path)
         # Incident/event images
         for incident in mission.get("incidents", []):
-            img_path = incident.get("image_path")
+            img_path = incident.get("image")
             if img_path:
                 image_paths.append(img_path)
         return image_paths

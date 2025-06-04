@@ -37,6 +37,7 @@ class MissionRunner(DroneController):
         self._latest_image = None
         self._cv_bridge = CvBridge()
 
+        # self.create_subscription(Image, 'camera/image_raw', self._camera_callback, 10)
         self.create_subscription(Image, 'camera', self._camera_callback, 10)
         self.create_subscription(ArucoMarkers, 'aruco_markers', self._marker_callback, 10)
 
@@ -114,17 +115,17 @@ class MissionRunner(DroneController):
     def _create_mission_row(self):
         mission_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.mission_id = self.db.add_mission(
-            team="Team A",
-            email="pilot@example.com",
-            pilot="Test Pilot",
-            phone="000-000-0000",
+            team="KNR PW",
+            email="michal.lejwoda.stud@pw.edu.pl",
+            pilot="Franek Jóźwiak",
+            phone="661672850",
             mission_time=mission_time_str,
             mission_no=f"M{int(time.time())}",
             duration="0m",
-            battery_before="100%",
-            battery_after="100%",
+            battery_before="-%",
+            battery_after="-%",
             kp_index=0,
-            infra_map="/static/img/mapa.jpg",
+            infra_map="/data/img/mapa.jpg",
         )
         self.get_logger().info(f"Created mission ID {self.mission_id}")
 
@@ -192,7 +193,7 @@ class MissionRunner(DroneController):
 
         img = self.get_camera_image()
         img_path = os.path.abspath(f"mapa.jpg")
-        cv2.imwrite(crop_path, img)
+        cv2.imwrite(img_path, img)
         record = {
                         "content": str(-1),
                         "location": "",
@@ -202,13 +203,19 @@ class MissionRunner(DroneController):
                         "jury": "-"
                     }
         self.db.add_arucos(self.mission_id, to_store)
-        self.get_logger().info("Mission complete. Landing...")
-        if not self.land():
-            self.get_logger().error("Landing failed.")
-            return
-        self.get_logger().info("Landed successfully.")
-        self.get_logger().info("MissionRunner: Shutting down node.")
-        rclpy.shutdown()
+
+        # self.send_goto_global(self.orto_waypoint[0], self.orto_waypoint[1], self.orto_waypoint[2])
+
+        self.send_goto_relative(self.orto_waypoint[0], self.orto_waypoint[1], self.orto_waypoint[2])
+
+        self.rtl() 
+        # self.get_logger().info("Mission complete. Landing...")
+        # if not self.land():
+        #     self.get_logger().error("Landing failed.")
+        #     return
+        # self.get_logger().info("Landed successfully.")
+        # self.get_logger().info("MissionRunner: Shutting down node.")
+        # rclpy.shutdown()
 
     def _camera_callback(self, msg):
         try:
@@ -224,7 +231,7 @@ class MissionRunner(DroneController):
 def main(args=None):
     rclpy.init(args=args)
     waypoints = [(2.0, 0.0, 0.0), (0.0, 3.0, 0.0), (-2.0, 0.0, 0.0), (0.0, -3.0, 0.0)]
-    orto_waypoint = []
+    orto_waypoint = [0.0, 0.0, 5.0]
     node = MissionRunner(waypoints, orto_waypoint)
     executor = MultiThreadedExecutor()
     executor.add_node(node)

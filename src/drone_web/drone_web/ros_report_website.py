@@ -62,7 +62,8 @@ class RosReportWebsite(Node):
         images_list_read = [cv2.imread(img_path) for img_path in images_list]
         for idx, image in enumerate(images_list_read):
             try:
-                filename = os.path.basename(images_list[idx])
+                filename = images_list[idx].split("/")[-1]
+                self.get_logger().info(f"Posting image {filename}")
                 # Encode the image as JPEG
                 _, buffer = cv2.imencode('.jpg', image)
                 file_bytes = io.BytesIO(buffer.tobytes())
