@@ -10,29 +10,29 @@ from drone_comunication.drone_controller import DroneController
 from drone_interfaces.msg import ArucoMarkers
 from drone_interfaces.srv import PostLog
 
-class WebLogger(Node):
-    def __init__(self):
-        super().__init__('web_logger')
-        self.client = self.create_client(PostLog, 'post_log_to_web')
+# class WebLogger(Node):
+#     def __init__(self):
+#         super().__init__('web_logger')
+#         self.client = self.create_client(PostLog, 'post_log_to_web')
 
-    def log(self, message, level="info"):
-        while not self.client.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info('Waiting for service post_log_to_server...')
+#     def log(self, message, level="info"):
+#         while not self.client.wait_for_service(timeout_sec=1.0):
+#             self.get_logger().info('Waiting for service post_log_to_server...')
 
-        request = PostLog.Request()
-        request.message = message
-        request.level = level
+#         request = PostLog.Request()
+#         request.message = message
+#         request.level = level
 
-        future = self.client.call_async(request)
-        rclpy.spin_until_future_complete(self, future)
+#         future = self.client.call_async(request)
+#         rclpy.spin_until_future_complete(self, future)
 
-        if future.result() is not None:
-            if future.result().result:
-                self.get_logger().info('Successfully posted web log')
-            else:
-                self.get_logger().warn(f"Failed to post log")
-        else:
-            self.get_logger().error('Service call failed')
+#         if future.result() is not None:
+#             if future.result().result:
+#                 self.get_logger().info('Successfully posted web log')
+#             else:
+#                 self.get_logger().warn(f"Failed to post log")
+#         else:
+#             self.get_logger().error('Service call failed')
             
 
 class ArucoMissionNode(DroneController):
@@ -51,7 +51,7 @@ class ArucoMissionNode(DroneController):
         # Delay mission start by 1s to allow connections
         # self._mission_timer = self.create_timer(1.0, self._mission_entry)
         # self.web_logger = WebLogger()
-        self.web_logger.log("Aruco mission node started", "info")
+        # self.web_logger.log("Aruco mission node started", "info")
         self._mission_started = False
         self.i = 0
 
@@ -198,7 +198,7 @@ def main(args=None):
     node.send_goto_relative(0.0, 0.0, 0.0)
     node.set_speed(0.5)
     
-    node.send_goto_global(50.27228213642658, 18.672786340141236, 10)
+    node.send_goto_global(50.27228213642658, 18.672786340141236, 10.0)
     
     node.send_goto_global(50.27217242065779, 18.672783657932438, 10)
     
