@@ -82,7 +82,9 @@ class MissionReporter(Node):
                     return
 
                 payload = self.build_website_payload(mission)
-                self.call_update_report(payload)
+                image_paths = self.get_all_image_paths(mission)
+                self.get_logger().info(f"Updating report for missionwith {image_paths} images.")
+                self.call_update_report(payload, images_list=image_paths)
 
         except Exception as e:
             self.get_logger().error(f"Exception in timer_callback: {e}", exc_info=True)
@@ -162,9 +164,6 @@ class MissionReporter(Node):
         future.add_done_callback(_on_create_done)
 
     def get_all_image_paths(self, mission: dict):
-        """
-        Collect all image file paths from arucos, people, and incidents/events for the mission.
-        """
         image_paths = []
         # Aruco images
         for aruco in mission.get("arucos", []):
