@@ -194,17 +194,17 @@ def main(args=None):
     node.start_video()
 
     node.arm()
-    node.takeoff(5.0)
+    node.takeoff(10.0)
     node.send_goto_relative(0.0, 0.0, 0.0)
     node.set_speed(0.5)
     
     node.send_goto_global(50.27228213642658, 18.672786340141236, 10.0)
     
-    node.send_goto_global(50.27217242065779, 18.672783657932438, 10)
+    node.send_goto_global(50.27217242065779, 18.672783657932438, 10.0)
     
-    node.send_goto_global(50.27217927790075, 18.67259590331664, 10)
+    node.send_goto_global(50.27217927790075, 18.67259590331664, 10.0)
     
-    node.send_goto_global(50.27229585087989, 18.67277292909725, 10)
+    node.send_goto_global(50.27229585087989, 18.67277292909725, 10.0)
 
     time.sleep(3)
 
