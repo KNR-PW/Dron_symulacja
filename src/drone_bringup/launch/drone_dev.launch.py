@@ -89,7 +89,10 @@ def generate_launch_description():
            executable='aruco_node',
            parameters=[
                {'image_topic': 'camera/image_raw',
-               "aruco_dictionary_id": "DICT_ARUCO_ORIGINAL"},
+               "aruco_dictionary_id": "DICT_ARUCO_ORIGINAL",
+               "intrinsic_matrix": [3.97045297e+03, 0.00000000e+00, 2.04507985e+03, 0.00000000e+00, 3.97159037e+03, 1.55103947e+03, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00],
+               "distortion": [-4.91966963e-01, 8.04697976e-01, -4.74937802e-04, 1.52222453e-03, -1.36235112e+00]},
+
                # {'camera_topic': 'camera'}
            ]
        ),
