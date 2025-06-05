@@ -44,7 +44,7 @@ def generate_launch_description():
         )
 
     healthcheck_action = TimerAction(
-            period=12.0,
+            period=14.0,
             actions=[
                 healthcheck
             ]
