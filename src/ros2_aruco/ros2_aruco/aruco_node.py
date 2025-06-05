@@ -235,7 +235,8 @@ class ArucoNode(rclpy.node.Node):
             for (x, y) in pts:
                 corners_flat.extend([float(x), float(y)])
         markers_msg.corners = corners_flat
-
+        # Log detected marker IDs
+        self.get_logger().info(f"Detected marker IDs: {marker_ids.flatten().tolist()}")
         # Publish results
         self.poses_pub.publish(poses_msg)
         self.markers_pub.publish(markers_msg)
