@@ -2,7 +2,7 @@
 This node locates Aruco AR markers in images and publishes their ids and poses.
 
 Author: Nathan Sprague modified by Stanislaw Kolodziejczyk
-Modified to use the new OpenCV ArUco API (ArucoDetector)
+Further modified to use the new ArUco API and manual pose estimation
 Version: 06/05/2025
 """
 
@@ -13,7 +13,6 @@ from cv_bridge import CvBridge
 import numpy as np
 import cv2
 import tf_transformations
-from sensor_msgs.msg import CameraInfo
 from sensor_msgs.msg import Image
 from geometry_msgs.msg import PoseArray, Pose
 from drone_interfaces.msg import ArucoMarkers
@@ -23,199 +22,229 @@ class ArucoNode(rclpy.node.Node):
     def __init__(self):
         super().__init__("aruco_node")
 
-        # Declare and read parameters
+        # --- Declare and read parameters ---
         self.declare_parameter(
             name="marker_size",
             value=0.1,
             descriptor=ParameterDescriptor(
                 type=ParameterType.PARAMETER_DOUBLE,
-                description="Size of the markers in meters.",
+                description="Size of the markers in meters."
             ),
         )
-
         self.declare_parameter(
             name="aruco_dictionary_id",
             value="DICT_4X4_250",
             descriptor=ParameterDescriptor(
                 type=ParameterType.PARAMETER_STRING,
-                description="Dictionary that was used to generate markers.",
+                description="Dictionary that was used to generate markers."
             ),
         )
-
         self.declare_parameter(
             name="image_topic",
             value="/camera",
             descriptor=ParameterDescriptor(
                 type=ParameterType.PARAMETER_STRING,
-                description="Image topic to subscribe to.",
+                description="Image topic to subscribe to."
             ),
         )
-
         self.declare_parameter(
             name="intrinsic_matrix",
-            value=[1.0, 0.0, 320.0, 0.0, 1.0, 240.0, 0.0, 0.0, 1.0],
+            value=[1.0, 0.0, 320.0,
+                   0.0, 1.0, 240.0,
+                   0.0, 0.0,   1.0],
             descriptor=ParameterDescriptor(
                 type=ParameterType.PARAMETER_DOUBLE_ARRAY,
-                description="Camera intrinsic matrix.",
+                description="Camera intrinsic matrix."
             ),
         )
-
         self.declare_parameter(
             name="distortion",
             value=[0.0, 0.0, 0.0, 0.0],
             descriptor=ParameterDescriptor(
                 type=ParameterType.PARAMETER_DOUBLE_ARRAY,
-                description="Camera distortion coefficients.",
+                description="Camera distortion coefficients (k1, k2, p1, p2)."
             ),
         )
 
-
+        # Read marker size
         self.marker_size = (
             self.get_parameter("marker_size").get_parameter_value().double_value
         )
-        self.get_logger().info(f"Marker size: {self.marker_size}")
+        self.get_logger().info(f"Marker size: {self.marker_size} m")
 
+        # Read dictionary ID (string like "DICT_4X4_250")
         dictionary_id_name = (
             self.get_parameter("aruco_dictionary_id").get_parameter_value().string_value
         )
-        self.get_logger().info(f"Marker type: {dictionary_id_name}")
+        self.get_logger().info(f"Aruco dictionary: {dictionary_id_name}")
 
+        # Read image topic
         image_topic = (
             self.get_parameter("image_topic").get_parameter_value().string_value
         )
-        self.get_logger().info(f"Image topic: {image_topic}")
+        self.get_logger().info(f"Subscribing to image topic: {image_topic}")
 
-        self.intrinsic_mat = (
+        # Read intrinsic matrix (flattened list of 9 doubles)
+        intrinsic_list = (
             self.get_parameter("intrinsic_matrix").get_parameter_value().double_array_value
         )
-        self.intrinsic_mat = np.reshape(np.array(self.intrinsic_mat), (3, 3))
-        self.get_logger().info(f"Intrinsic matrix: {self.intrinsic_mat}")
+        self.intrinsic_mat = np.reshape(np.array(intrinsic_list, dtype=np.float64), (3, 3))
+        self.get_logger().info(f"Intrinsic matrix:\n{self.intrinsic_mat}")
 
-        self.distortion = (
+        # Read distortion coefficients (list of 4 doubles)
+        distortion_list = (
             self.get_parameter("distortion").get_parameter_value().double_array_value
         )
-        self.distortion = np.array(self.distortion)
-        self.get_logger().info(f"Distortion: {self.distortion}")
+        self.distortion = np.array(distortion_list, dtype=np.float64)
+        self.get_logger().info(f"Distortion coeffs: {self.distortion}")
 
-        # Check that the intrinsic matrix is 3x3
+        # Validate sizes
         if self.intrinsic_mat.size != 9:
             self.get_logger().error(
-                "Intrinsic matrix must be 3x3, got {} values".format(
-                    len(self.intrinsic_mat)
-                )
+                f"Intrinsic matrix must have 9 elements, got {self.intrinsic_mat.size}"
             )
             return
-        # Check that the distortion is 1x4
         if self.distortion.size != 4:
             self.get_logger().error(
-                "Distortion must be 1x4, got {} values".format(len(self.distortion))
+                f"Distortion must have 4 elements (k1, k2, p1, p2), got {self.distortion.size}"
             )
             return
 
-        # Make sure we have a valid dictionary id:
+        # Validate dictionary ID
         try:
             dictionary_id = cv2.aruco.__getattribute__(dictionary_id_name)
-            if type(dictionary_id) != type(cv2.aruco.DICT_5X5_100):
+            # Ensure it's an integer constant
+            if not isinstance(dictionary_id, (int, np.integer)):
                 raise AttributeError
         except AttributeError:
             self.get_logger().error(
-                "bad aruco_dictionary_id: {}".format(dictionary_id_name)
+                f"Invalid aruco_dictionary_id: {dictionary_id_name}"
             )
-            options = "\n".join([s for s in dir(cv2.aruco) if s.startswith("DICT")])
-            self.get_logger().error("valid options: {}".format(options))
+            valid = [s for s in dir(cv2.aruco) if s.startswith("DICT")]
+            self.get_logger().error(f"Valid options: {valid}")
             return
 
-        # Set up subscriptions
-        self.create_subscription(
-            Image, image_topic, self.image_callback, qos_profile_sensor_data
-        )
-
-        # Set up publishers
-        self.poses_pub = self.create_publisher(PoseArray, "aruco_poses", 10)
-        self.markers_pub = self.create_publisher(ArucoMarkers, "aruco_markers", 10)
-
-        # Initialize ArUco dictionary and parameters
+        # Set up ArUco dictionary and detector (new API)
         self.aruco_dictionary = cv2.aruco.getPredefinedDictionary(dictionary_id)
         self.aruco_parameters = cv2.aruco.DetectorParameters()
-
-        # --- New API: create an ArucoDetector instance ---
         self.aruco_detector = cv2.aruco.ArucoDetector(
             self.aruco_dictionary, self.aruco_parameters
         )
 
+        # Set up CV Bridge
         self.bridge = CvBridge()
 
+        # Create subscription to image topic
+        self.create_subscription(
+            Image, image_topic, self.image_callback, qos_profile_sensor_data
+        )
+
+        # Create publishers for poses and marker info
+        self.poses_pub = self.create_publisher(PoseArray, "aruco_poses", 10)
+        self.markers_pub = self.create_publisher(ArucoMarkers, "aruco_markers", 10)
+
+
     def image_callback(self, img_msg):
-        # self.get_logger().info(f"Received image")
-        cv_image = self.bridge.imgmsg_to_cv2(img_msg)
-        cv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
+        # Convert ROS Image to OpenCV grayscale
+        cv_image_color = self.bridge.imgmsg_to_cv2(img_msg)
+        cv_image = cv2.cvtColor(cv_image_color, cv2.COLOR_BGR2GRAY)
 
-        markers = ArucoMarkers()
-        pose_array = PoseArray()
+        # Prepare output messages
+        markers_msg = ArucoMarkers()
+        poses_msg = PoseArray()
+        markers_msg.header.stamp = img_msg.header.stamp
+        markers_msg.header.frame_id = ""
+        poses_msg.header.stamp = img_msg.header.stamp
+        poses_msg.header.frame_id = ""
 
-        markers.header.frame_id = ""
-        pose_array.header.frame_id = ""
+        # Detect markers using the new ArucoDetector API
+        corners, marker_ids, _ = self.aruco_detector.detectMarkers(cv_image)
 
-        markers.header.stamp = img_msg.header.stamp
-        pose_array.header.stamp = img_msg.header.stamp
+        if marker_ids is None or len(marker_ids) == 0:
+            # No markers detected: publish empty messages
+            self.poses_pub.publish(poses_msg)
+            self.markers_pub.publish(markers_msg)
+            return
 
-        # --- New API: use ArucoDetector instead of detectMarkers ---
-        corners, marker_ids, rejected = self.aruco_detector.detectMarkers(cv_image)
+        # For each detected marker, perform pose estimation via solvePnP
+        for idx, marker_id in enumerate(marker_ids.flatten()):
+            # corners[idx] has shape (1, 4, 2); reshape to (4, 2)
+            img_pts = corners[idx].reshape((4, 2)).astype(np.float64)
 
-        # self.get_logger().info(f"corners: {corners[0] if corners else []}")
-        if marker_ids is not None and len(marker_ids) > 0:
-            # self.get_logger().info(f"Found {len(marker_ids)} markers")
-            # self.get_logger().info(f"Marker ids: {marker_ids.flatten()}")
+            # Define the 3D coordinates of the marker's corners in the marker frame
+            # The order must match the OpenCV convention: top-left, top-right, bottom-right, bottom-left
+            half_size = self.marker_size / 2.0
+            obj_pts = np.array([
+                [-half_size,  half_size, 0.0],
+                [ half_size,  half_size, 0.0],
+                [ half_size, -half_size, 0.0],
+                [-half_size, -half_size, 0.0]
+            ], dtype=np.float64)
 
-            # Pose estimation remains the same
-            if cv2.__version__ > "4.0.0":
-                rvecs, tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(
-                    corners, self.marker_size, self.intrinsic_mat, self.distortion
+            # Solve PnP to get rotation and translation vectors
+            # Using SOLVEPNP_IPPE_SQUARE for square planar markers is recommended if available
+            success, rvec, tvec = cv2.solvePnP(
+                obj_pts,
+                img_pts,
+                self.intrinsic_mat,
+                self.distortion,
+                flags=cv2.SOLVEPNP_IPPE_SQUARE
+            )
+
+            if not success:
+                # Fallback to iterative method if IPPE fails
+                success, rvec, tvec = cv2.solvePnP(
+                    obj_pts,
+                    img_pts,
+                    self.intrinsic_mat,
+                    self.distortion,
+                    flags=cv2.SOLVEPNP_ITERATIVE
                 )
-            else:
-                rvecs, tvecs = cv2.aruco.estimatePoseSingleMarkers(
-                    corners, self.marker_size, self.intrinsic_mat, self.distortion
-                )
 
-            for i, marker_id in enumerate(marker_ids):
-                pose = Pose()
-                pose.position.x = float(tvecs[i][0][0])
-                pose.position.y = float(tvecs[i][0][1])
-                pose.position.z = float(tvecs[i][0][2])
+            if not success:
+                # Could not estimate pose for this marker; skip it
+                continue
 
-                rot_matrix = np.eye(4)
-                rot_matrix[0:3, 0:3] = cv2.Rodrigues(np.array(rvecs[i][0]))[0]
-                quat = tf_transformations.quaternion_from_matrix(rot_matrix)
+            # Build Pose message
+            pose = Pose()
+            pose.position.x = float(tvec[0][0])
+            pose.position.y = float(tvec[1][0])
+            pose.position.z = float(tvec[2][0])
 
-                pose.orientation.x = quat[0]
-                pose.orientation.y = quat[1]
-                pose.orientation.z = quat[2]
-                pose.orientation.w = quat[3]
+            # Convert rotation vector to quaternion
+            rot_mat_4x4 = np.eye(4)
+            rot_mat_3x3, _ = cv2.Rodrigues(rvec)
+            rot_mat_4x4[0:3, 0:3] = rot_mat_3x3
+            quat = tf_transformations.quaternion_from_matrix(rot_mat_4x4)
 
-                pose_array.poses.append(pose)
-                markers.poses.append(pose)
-                markers.marker_ids.append(int(marker_id[0]))
+            pose.orientation.x = quat[0]
+            pose.orientation.y = quat[1]
+            pose.orientation.z = quat[2]
+            pose.orientation.w = quat[3]
 
-            # Prepare corners for the message: flatten all marker corners
-            corners_flat = []
-            for c in corners:
-                # c shape: (4,2) -> 4 corners, each with (x, y)
-                for pt in c[0]:
-                    corners_flat.extend([float(pt[0]), float(pt[1])])
-            markers.corners = corners_flat
+            # Append to PoseArray and ArucoMarkers messages
+            poses_msg.poses.append(pose)
+            markers_msg.poses.append(pose)
+            markers_msg.marker_ids.append(int(marker_id))
 
-            self.poses_pub.publish(pose_array)
-            self.markers_pub.publish(markers)
+        # Flatten all corner points into a single list of floats
+        corners_flat = []
+        for c in corners:
+            # c has shape (1, 4, 2)
+            pts = c.reshape((4, 2))
+            for (x, y) in pts:
+                corners_flat.extend([float(x), float(y)])
+        markers_msg.corners = corners_flat
 
-    def destroy_node(self):
-        super().destroy_node()
+        # Publish results
+        self.poses_pub.publish(poses_msg)
+        self.markers_pub.publish(markers_msg)
 
 
 def main():
     rclpy.init()
     node = ArucoNode()
     rclpy.spin(node)
-
     node.destroy_node()
     rclpy.shutdown()
 
