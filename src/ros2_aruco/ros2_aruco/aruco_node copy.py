@@ -2,8 +2,8 @@
 This node locates Aruco AR markers in images and publishes their ids and poses.
 
 Author: Nathan Sprague modified by Stanislaw Kolodziejczyk
-Modified to use the new OpenCV ArUco API (ArucoDetector)
-Version: 06/05/2025
+Version: 10/26/2020
+
 """
 
 import rclpy
@@ -35,7 +35,10 @@ class ArucoNode(rclpy.node.Node):
 
         self.declare_parameter(
             name="aruco_dictionary_id",
+            # value="DICT_5X5_250",
+            # value="DICT_4X4_100",
             value="DICT_4X4_250",
+            # value="DICT_ARUCO_ORIGINAL",
             descriptor=ParameterDescriptor(
                 type=ParameterType.PARAMETER_STRING,
                 description="Dictionary that was used to generate markers.",
@@ -123,7 +126,6 @@ class ArucoNode(rclpy.node.Node):
             )
             options = "\n".join([s for s in dir(cv2.aruco) if s.startswith("DICT")])
             self.get_logger().error("valid options: {}".format(options))
-            return
 
         # Set up subscriptions
         self.create_subscription(
@@ -134,14 +136,9 @@ class ArucoNode(rclpy.node.Node):
         self.poses_pub = self.create_publisher(PoseArray, "aruco_poses", 10)
         self.markers_pub = self.create_publisher(ArucoMarkers, "aruco_markers", 10)
 
-        # Initialize ArUco dictionary and parameters
+
         self.aruco_dictionary = cv2.aruco.getPredefinedDictionary(dictionary_id)
         self.aruco_parameters = cv2.aruco.DetectorParameters()
-
-        # --- New API: create an ArucoDetector instance ---
-        self.aruco_detector = cv2.aruco.ArucoDetector(
-            self.aruco_dictionary, self.aruco_parameters
-        )
 
         self.bridge = CvBridge()
 
@@ -159,15 +156,13 @@ class ArucoNode(rclpy.node.Node):
         markers.header.stamp = img_msg.header.stamp
         pose_array.header.stamp = img_msg.header.stamp
 
-        # --- New API: use ArucoDetector instead of detectMarkers ---
-        corners, marker_ids, rejected = self.aruco_detector.detectMarkers(cv_image)
-
+        corners, marker_ids, rejected = cv2.aruco.detectMarkers(
+            cv_image, self.aruco_dictionary, parameters=self.aruco_parameters
+        )
         # self.get_logger().info(f"corners: {corners[0] if corners else []}")
-        if marker_ids is not None and len(marker_ids) > 0:
+        if marker_ids is not None:
             # self.get_logger().info(f"Found {len(marker_ids)} markers")
             # self.get_logger().info(f"Marker ids: {marker_ids.flatten()}")
-
-            # Pose estimation remains the same
             if cv2.__version__ > "4.0.0":
                 rvecs, tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(
                     corners, self.marker_size, self.intrinsic_mat, self.distortion
@@ -176,12 +171,11 @@ class ArucoNode(rclpy.node.Node):
                 rvecs, tvecs = cv2.aruco.estimatePoseSingleMarkers(
                     corners, self.marker_size, self.intrinsic_mat, self.distortion
                 )
-
             for i, marker_id in enumerate(marker_ids):
                 pose = Pose()
-                pose.position.x = float(tvecs[i][0][0])
-                pose.position.y = float(tvecs[i][0][1])
-                pose.position.z = float(tvecs[i][0][2])
+                pose.position.x = tvecs[i][0][0]
+                pose.position.y = tvecs[i][0][1]
+                pose.position.z = tvecs[i][0][2]
 
                 rot_matrix = np.eye(4)
                 rot_matrix[0:3, 0:3] = cv2.Rodrigues(np.array(rvecs[i][0]))[0]
@@ -194,7 +188,7 @@ class ArucoNode(rclpy.node.Node):
 
                 pose_array.poses.append(pose)
                 markers.poses.append(pose)
-                markers.marker_ids.append(int(marker_id[0]))
+                markers.marker_ids.append(marker_id[0])
 
             # Prepare corners for the message: flatten all marker corners
             corners_flat = []
@@ -206,9 +200,6 @@ class ArucoNode(rclpy.node.Node):
 
             self.poses_pub.publish(pose_array)
             self.markers_pub.publish(markers)
-
-    def destroy_node(self):
-        super().destroy_node()
 
 
 def main():
