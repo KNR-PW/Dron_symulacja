@@ -138,7 +138,7 @@ class ArucoNode(rclpy.node.Node):
 
 
         self.aruco_dictionary = cv2.aruco.getPredefinedDictionary(dictionary_id)
-        self.aruco_parameters = cv2.aruco.DetectorParameters_create()
+        self.aruco_parameters = cv2.aruco.DetectorParameters()
 
         self.bridge = CvBridge()
 
