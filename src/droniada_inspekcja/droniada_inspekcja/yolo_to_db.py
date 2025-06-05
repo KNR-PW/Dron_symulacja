@@ -230,7 +230,7 @@ class PersonJsonToDbNode(Node):
                     location_changed = "Nie"
 
                     # The image path from the same index (if it exists)
-                    corresponding_jpg = os.path.join(self.photo_dir, f"{latest_json_idx}.jpg")
+                    corresponding_jpg = os.path.join(self.photo_dir, f"photo{latest_json_idx}.jpg")
                     image_field = corresponding_jpg if os.path.isfile(corresponding_jpg) else ""
 
                     # jury default

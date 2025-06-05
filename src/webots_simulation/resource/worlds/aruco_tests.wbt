@@ -17,8 +17,8 @@ WorldInfo {
   FPS 20
 }
 Viewpoint {
-  orientation 0.01337616361221954 -0.9976144202808228 -0.06772404812750664 5.892276250263881
-  position -23.31410953665553 -7.463486656329506 7.574733238431486
+  orientation 0.028363339622224835 -0.9981822757472139 -0.05317579665212045 5.301673552943007
+  position -15.587707190660662 -7.548547887879861 15.221757217483317
   follow "Iris"
   followSmoothness 0.01
 }
@@ -41,15 +41,14 @@ PipeSection {
     metalness 0
   }
 }
-
 SquareManhole {
   translation -6.5 -6.5 0
   name "drone takeoff(1)"
   size 0.5 0.5 0.1
 }
 DEF Iris Iris {
-  translation -6.487827768237703 -6.526208998549794 0.10496319054102579
-  rotation 1 2.319253129162253e-13 3.637660290065909e-13 3.918097484911812e-06
+  translation -6.487827768237703 -6.526208998693831 0.10496319054102521
+  rotation 1 2.1778578138681003e-14 3.7825479526676684e-13 3.918097537718031e-06
   controller "ardupilot_sitl_controller"
   controllerArgs [
     "--motors"
@@ -100,6 +99,22 @@ Solid {
       geometry Cylinder {
         height 0.2
         radius 0.5
+      }
+    }
+  ]
+}
+Pose {
+  translation -5 -8.5 0
+  children [
+    Shape {
+      appearance Appearance {
+        material Material {
+          diffuseColor 1 0.4 0.1
+          shininess 1
+        }
+      }
+      geometry Sphere {
+        radius 0.15
       }
     }
   ]

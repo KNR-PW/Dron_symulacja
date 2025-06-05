@@ -43,7 +43,7 @@ class MissionRunner(DroneController):
         self._cv_bridge = CvBridge()
 
         # Subscribe to camera and ArUco markers
-        self.create_subscription(Image, 'camera', self._camera_callback, 10)
+        self.create_subscription(Image, 'camera/image_raw', self._camera_callback, 10)
         self.create_subscription(ArucoMarkers, 'aruco_markers', self._marker_callback, 10)
 
         self._mission_started = False
@@ -145,7 +145,7 @@ class MissionRunner(DroneController):
                 x1, x2 = max(min(xs), 0), min(max(xs), w - 1)
                 y1, y2 = max(min(ys), 0), min(max(ys), h - 1)
                 # Add some padding
-                pad = 10
+                pad = 25
                 x1 = max(x1 - pad, 0)
                 y1 = max(y1 - pad, 0)
                 x2 = min(x2 + pad, w - 1)
@@ -314,12 +314,10 @@ class MissionRunner(DroneController):
             detection_results = self.vision_agent.describe_image(image_path)
             detection_results = self.parse_json_objects(detection_results)
             self.get_logger().info(f"results : {detection_results}")
-            # vision_agent.describe_image(...) returns a list of dicts. Normally there's only one dict.
             if not detection_results:
                 self.get_logger().warn(f"(Thread) No JSON output from VisionAgent for {image_path}")
                 return
 
-            # If multiple JSON objects were returned, just log each; otherwise log the single result
             for idx, result in enumerate(detection_results, start=1):
                 contains = result.get("contains_orange_light", False)
                 status = result.get("light_status", "unknown")
@@ -327,6 +325,24 @@ class MissionRunner(DroneController):
                     f"(Thread) Waypoint {waypoint_idx} → JSON #{idx}: "
                     f"contains_orange_light={contains}, light_status={status}"
                 )
+                # Add to incidents if lamp detected
+                status = "on"
+                if status:
+                    
+                    event_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    incident_record = {
+                        "event": f"Lamp detected (status: {status})",
+                        "event_time": event_time,
+                        "location": f"-",
+                        "image": image_path.split('/')[-1] if image_path else "",
+                        "notified": "Tak",  # or "Tak" if you want to mark as notified
+                        "jury": "-"
+                    }
+                    try:
+                        self.db.add_incidents(self.mission_id, [incident_record])
+                        self.get_logger().info(f"Added lamp incident to DB for waypoint {waypoint_idx}.")
+                    except Exception as e:
+                        self.get_logger().error(f"Failed to add lamp incident to DB: {e}")
         except Exception as e:
             self.get_logger().error(f"(Thread) Lamp detection failed for {image_path}: {e}")
 
