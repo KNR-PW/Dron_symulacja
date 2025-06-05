@@ -182,13 +182,13 @@ class MissionRunner(DroneController):
         mission_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.mission_id = self.db.add_mission(
             team="KNR PW",
-            email="michal.lejwoda.stud@pw.edu.pl",
+            email="franek.jozwiak.stud@pw.edu.pl",
             pilot="Franek Jóźwiak",
-            phone="661672850",
+            phone="724466512",
             mission_time=mission_time_str,
             mission_no=f"M{int(time.time())}",
             duration="0m",
-            battery_before="-%",
+            battery_before="98%",
             battery_after="-%",
             kp_index=0,
             infra_map="/data/img/mapa.jpg",
@@ -217,25 +217,25 @@ class MissionRunner(DroneController):
             self._marker_image_paths.clear()
             self._marker_locations.clear()
 
-            if not self.send_goto_relative(north, east, down):
+            if not self.send_goto_global(north, east, down):
                 self.get_logger().error(f"Goto waypoint {idx} failed; skipping.")
                 continue
 
-            # Wait until we arrive or until a marker is detected
-            while rclpy.ok():
-                gps = self.get_gps()
-                if gps is None:
-                    self.get_logger().warn("GPS unavailable; cannot check arrival.")
-                    break
-                cur_north, cur_east, cur_down = gps
-                if (abs(cur_north - north) <= 0.5 and
-                    abs(cur_east - east) <= 0.5 and
-                    abs(cur_down - down) <= 0.5):
-                    self.get_logger().info(f"Arrived at waypoint {idx}.")
-                    break
-                if self._marker_event.is_set():
-                    break
-                time.sleep(0.2)
+            # # Wait until we arrive or until a marker is detected
+            # while rclpy.ok():
+            #     gps = self.get_gps()
+            #     if gps is None:
+            #         self.get_logger().warn("GPS unavailable; cannot check arrival.")
+            #         break
+            #     cur_north, cur_east, cur_down = gps
+            #     if (abs(cur_north - north) <= 0.5 and
+            #         abs(cur_east - east) <= 0.5 and
+            #         abs(cur_down - down) <= 0.5):
+            #         self.get_logger().info(f"Arrived at waypoint {idx}.")
+            #         break
+            #     if self._marker_event.is_set():
+            #         break
+            #     time.sleep(0.2)
 
             # If we found ArUco markers, save them
             if self._marker_event.is_set() and self._marker_ids:
@@ -281,7 +281,7 @@ class MissionRunner(DroneController):
 
 
         # Fly to the orthophoto waypoint, then RTL
-        self.send_goto_relative(self.orto_waypoint[0], self.orto_waypoint[1], self.orto_waypoint[2])
+        self.send_goto_global(self.orto_waypoint[0], self.orto_waypoint[1], self.orto_waypoint[2])
 
         final_img = self.get_camera_image()
         if final_img is not None:
@@ -330,6 +330,7 @@ class MissionRunner(DroneController):
                 if status:
                     
                     event_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    self.get_logger().info(f"event time: {event_time}")
                     incident_record = {
                         "event": f"Lamp detected (status: {status})",
                         "event_time": event_time,
@@ -360,8 +361,14 @@ class MissionRunner(DroneController):
 
 def main(args=None):
     rclpy.init(args=args)
-    waypoints = [(2.0, 0.0, 0.0), (0.0, 3.0, 0.0), (-2.0, 0.0, 0.0), (0.0, -3.0, 0.0)]
-    orto_waypoint = [0.0, 0.0, 5.0]
+    alt = 10.0
+    # waypoints = [(2.0, 0.0, 0.0), (0.0, 3.0, 0.0), (-2.0, 0.0, 0.0), (0.0, -3.0, 0.0)]
+    waypoints = [(50.2715662, 18.6443051, alt),
+        (50.2714623, 18.6442565, alt),
+        # (50.2717372, 18.6440945, alt),
+        # (50.2719005, 18.6444969, alt)
+        ]
+    orto_waypoint = [50.2719005, 18.6444969, alt+3]
     node = MissionRunner(waypoints, orto_waypoint)
     executor = MultiThreadedExecutor()
     executor.add_node(node)
