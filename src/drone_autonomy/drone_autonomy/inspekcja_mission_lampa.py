@@ -185,9 +185,9 @@ class MissionRunner(DroneController):
         mission_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.mission_id = self.db.add_mission(
             team="KNR PW",
-            email="michal.lejwoda.stud@pw.edu.pl",
+            email="franek.jozwiak.stud@pw.edu.pl",
             pilot="Franek Jóźwiak",
-            phone="661672850",
+            phone="724466512",
             mission_time=mission_time_str,
             mission_no=f"M{int(time.time())}",
             duration="0m",
@@ -247,6 +247,7 @@ class MissionRunner(DroneController):
             if not self.send_goto_global(north, east, down):
                 self.get_logger().error(f"Goto waypoint {idx} failed; skipping.")
                 continue
+
             time.sleep(3.0)
             # If we found ArUco markers, save them
             if self._marker_event.is_set() and self._marker_ids:
@@ -290,6 +291,27 @@ class MissionRunner(DroneController):
             # Small pause before next waypoint
             time.sleep(1.0)
 
+
+        # Fly to the orthophoto waypoint, then RTL
+        self.send_goto_global(self.orto_waypoint[0], self.orto_waypoint[1], self.orto_waypoint[2])
+
+        final_img = self.get_camera_image()
+        if final_img is not None:
+            ortho_path = os.path.abspath("mapa.jpg")
+            cv2.imwrite(ortho_path, final_img)
+            record = {
+                "content": str(-1),
+                "location": "",
+                "location_changed": "-",
+                "content_changed": "-",
+                "image": ortho_path.split('/')[-1],
+                "jury": "-"
+            }
+            try:
+                self.db.add_arucos(self.mission_id, [record])
+                self.get_logger().info("Saved final orthophoto to DB.")
+            except Exception as e:
+                self.get_logger().error(f"Failed to save final photomap to DB: {e}")
 
         self.rtl()
         self.final_report_update()
@@ -345,6 +367,7 @@ class MissionRunner(DroneController):
                     status = "on"
                     self.lamp_detected = True
                     event_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    self.get_logger().info(f"event time: {event_time}")
                     incident_record = {
                         "event": f"Lamp detected (status: {status})",
                         "event_time": event_time,
@@ -375,12 +398,14 @@ class MissionRunner(DroneController):
 
 def main(args=None):
     rclpy.init(args=args)
-    waypoints = [(5.2726545, 18.6711181), 
-    (50.2727052, 18.6711198),
-    (50.2727628, 18.6711201),
-    (50.2728006, 18.6711205)
-    ]
-    orto_waypoint = [50.2727237, 18.6711196, 33]
+    alt = 10.0
+    # waypoints = [(2.0, 0.0, 0.0), (0.0, 3.0, 0.0), (-2.0, 0.0, 0.0), (0.0, -3.0, 0.0)]
+    waypoints = [(50.2715662, 18.6443051, alt),
+        (50.2714623, 18.6442565, alt),
+        # (50.2717372, 18.6440945, alt),
+        # (50.2719005, 18.6444969, alt)
+        ]
+    orto_waypoint = [50.2719005, 18.6444969, alt+3]
     node = MissionRunner(waypoints, orto_waypoint)
     executor = MultiThreadedExecutor()
     executor.add_node(node)
