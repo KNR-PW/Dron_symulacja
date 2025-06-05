@@ -159,6 +159,7 @@ class ArucoNode(rclpy.node.Node):
         corners, marker_ids, rejected = cv2.aruco.detectMarkers(
             cv_image, self.aruco_dictionary, parameters=self.aruco_parameters
         )
+        # self.get_logger().info(f"corners: {corners[0] if corners else []}")
         if marker_ids is not None:
             # self.get_logger().info(f"Found {len(marker_ids)} markers")
             # self.get_logger().info(f"Marker ids: {marker_ids.flatten()}")
@@ -188,6 +189,14 @@ class ArucoNode(rclpy.node.Node):
                 pose_array.poses.append(pose)
                 markers.poses.append(pose)
                 markers.marker_ids.append(marker_id[0])
+
+            # Prepare corners for the message: flatten all marker corners
+            corners_flat = []
+            for c in corners:
+                # c shape: (4,2) -> 4 corners, each with (x, y)
+                for pt in c[0]:
+                    corners_flat.extend([float(pt[0]), float(pt[1])])
+            markers.corners = corners_flat
 
             self.poses_pub.publish(pose_array)
             self.markers_pub.publish(markers)

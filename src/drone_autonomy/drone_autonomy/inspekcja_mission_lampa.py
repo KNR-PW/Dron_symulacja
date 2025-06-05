@@ -21,10 +21,13 @@ from geopy.distance import geodesic
 
 from droniada_inspekcja.vision_agent import VisionAgent
 
+import json
+
 class MissionRunner(DroneController):
     def __init__(self, waypoints, orto_waypoint):
         super().__init__()
 
+        # --- Existing attributes ---
         self.db = DroneDB("drone_data.db")
         self.mission_id = None
         self.waypoints = waypoints
@@ -39,12 +42,59 @@ class MissionRunner(DroneController):
         self._latest_image = None
         self._cv_bridge = CvBridge()
 
-        # self.create_subscription(Image, 'camera/image_raw', self._camera_callback, 10)
+        # Subscribe to camera and ArUco markers
         self.create_subscription(Image, 'camera', self._camera_callback, 10)
         self.create_subscription(ArucoMarkers, 'aruco_markers', self._marker_callback, 10)
 
         self._mission_started = False
+
+        # --- NEW: instantiate VisionAgent here ---
+        self.vision_agent = VisionAgent()
+
+        # Delay start by 2 seconds, then run mission
         threading.Thread(target=self._delayed_start, daemon=True).start()
+
+
+    def parse_json_objects(self, raw: str):
+        """
+        Given a string that may contain one or more JSON objects back‐to‐back (possibly separated by commas or whitespace),
+        find each balanced { … } block, parse it with json.loads, and return a list of dicts. 
+        If only one object is found, a list of length 1 is returned.
+        
+        Example:
+        s = '{"contains_orange_light": true, "light_status": "unknown"}, {"contains_orange_light": true, "light_status": "on"}'
+        parse_json_objects(s)
+        # ⇒ [
+        #      {"contains_orange_light": True, "light_status": "unknown"},
+        #      {"contains_orange_light": True, "light_status": "on"}
+        #    ]
+        """
+        objects = []
+        brace_level = 0
+        start_idx = None
+
+        for i, ch in enumerate(raw):
+            if ch == "{":
+                if brace_level == 0:
+                    # mark the start of a new JSON object
+                    start_idx = i
+                brace_level += 1
+
+            elif ch == "}":
+                brace_level -= 1
+                if brace_level == 0 and start_idx is not None:
+                    # we have a complete {...} block from start_idx to i
+                    json_str = raw[start_idx : i + 1]
+                    try:
+                        parsed = json.loads(json_str)
+                        objects.append(parsed)
+                    except json.JSONDecodeError:
+                        # If parsing fails, you can either skip or raise an error.
+                        # Here we choose to skip invalid JSON fragments.
+                        pass
+                    start_idx = None
+
+        return objects
 
     def _calculate_gps_offset(self, base_lat, base_lon, offset_north, offset_east):
         origin = (base_lat, base_lon)
@@ -167,23 +217,27 @@ class MissionRunner(DroneController):
             self._marker_image_paths.clear()
             self._marker_locations.clear()
 
-            if not self.send_goto_global(north, east, down):
+            if not self.send_goto_relative(north, east, down):
                 self.get_logger().error(f"Goto waypoint {idx} failed; skipping.")
                 continue
 
+            # Wait until we arrive or until a marker is detected
             while rclpy.ok():
                 gps = self.get_gps()
                 if gps is None:
                     self.get_logger().warn("GPS unavailable; cannot check arrival.")
                     break
                 cur_north, cur_east, cur_down = gps
-                if abs(cur_north - north) <= 0.5 and abs(cur_east - east) <= 0.5 and abs(cur_down - down) <= 0.5:
+                if (abs(cur_north - north) <= 0.5 and
+                    abs(cur_east - east) <= 0.5 and
+                    abs(cur_down - down) <= 0.5):
                     self.get_logger().info(f"Arrived at waypoint {idx}.")
                     break
                 if self._marker_event.is_set():
                     break
                 time.sleep(0.2)
 
+            # If we found ArUco markers, save them
             if self._marker_event.is_set() and self._marker_ids:
                 to_store = []
                 for (aruco_id, pose, img_path, gps_loc) in zip(
@@ -205,33 +259,74 @@ class MissionRunner(DroneController):
                 except Exception as e:
                     self.get_logger().error(f"Failed to save ArUco(s) to DB: {e}")
 
+            # --- NEW: Capture a snapshot of the camera and run lamp detection in a separate thread ---
+            current_img = self.get_camera_image()
+            if current_img is not None:
+                lamp_image_path = os.path.abspath(f"lamp_wp{idx}_{int(time.time())}.jpg")
+                cv2.imwrite(lamp_image_path, current_img)
+                self.get_logger().info(f"Saved waypoint {idx} image for lamp detection: {lamp_image_path}")
+
+                # Launch a daemon thread so this is non-blocking
+                threading.Thread(
+                    target=self._run_lamp_detection,
+                    args=(lamp_image_path, idx),
+                    daemon=True
+                ).start()
+            else:
+                self.get_logger().warn(f"No camera image to save for lamp detection at waypoint {idx}.")
+
+            # Small pause before next waypoint
             time.sleep(1.0)
 
-        img = self.get_camera_image()
-        img_path = os.path.abspath(f"mapa.jpg")
-        cv2.imwrite(img_path, img)
-        record = {
-                        "content": str(-1),
-                        "location": "",
-                        "location_changed": "-",
-                        "content_changed": "-",
-                        "image": img_path.split('/')[-1] if img_path else "",
-                        "jury": "-"
-                    }
-        self.db.add_arucos(self.mission_id, to_store)
+        # After finishing all waypoints, take a final orthophoto and return home
+        final_img = self.get_camera_image()
+        if final_img is not None:
+            ortho_path = os.path.abspath("mapa.jpg")
+            cv2.imwrite(ortho_path, final_img)
+            record = {
+                "content": str(-1),
+                "location": "",
+                "location_changed": "-",
+                "content_changed": "-",
+                "image": ortho_path.split('/')[-1],
+                "jury": "-"
+            }
+            try:
+                self.db.add_arucos(self.mission_id, [record])
+                self.get_logger().info("Saved final orthophoto to DB.")
+            except Exception as e:
+                self.get_logger().error(f"Failed to save final photomap to DB: {e}")
 
-        # self.send_goto_global(self.orto_waypoint[0], self.orto_waypoint[1], self.orto_waypoint[2])
+        # Fly to the orthophoto waypoint, then RTL
+        self.send_goto_relative(self.orto_waypoint[0], self.orto_waypoint[1], self.orto_waypoint[2])
+        self.rtl()
 
-        self.send_goto_global(self.orto_waypoint[0], self.orto_waypoint[1], self.orto_waypoint[2])
+    def _run_lamp_detection(self, image_path: str, waypoint_idx: int):
+        self.get_logger().info(f"Running lamp detection for waypoint {waypoint_idx} using image: {image_path}...")
+        """
+        Runs VisionAgent.describe_image(...) on the given image_path.
+        This is launched in a separate thread so as not to block the main mission logic.
+        """
+        try:
+            self.get_logger().info(f"(Thread) Starting lamp detection for waypoint {waypoint_idx} using {image_path}")
+            detection_results = self.vision_agent.describe_image(image_path)
+            detection_results = self.parse_json_objects(detection_results)
+            self.get_logger().info(f"results : {detection_results}")
+            # vision_agent.describe_image(...) returns a list of dicts. Normally there's only one dict.
+            if not detection_results:
+                self.get_logger().warn(f"(Thread) No JSON output from VisionAgent for {image_path}")
+                return
 
-        self.rtl() 
-        # self.get_logger().info("Mission complete. Landing...")
-        # if not self.land():
-        #     self.get_logger().error("Landing failed.")
-        #     return
-        # self.get_logger().info("Landed successfully.")
-        # self.get_logger().info("MissionRunner: Shutting down node.")
-        # rclpy.shutdown()
+            # If multiple JSON objects were returned, just log each; otherwise log the single result
+            for idx, result in enumerate(detection_results, start=1):
+                contains = result.get("contains_orange_light", False)
+                status = result.get("light_status", "unknown")
+                self.get_logger().info(
+                    f"(Thread) Waypoint {waypoint_idx} → JSON #{idx}: "
+                    f"contains_orange_light={contains}, light_status={status}"
+                )
+        except Exception as e:
+            self.get_logger().error(f"(Thread) Lamp detection failed for {image_path}: {e}")
 
     def _camera_callback(self, msg):
         try:
@@ -243,6 +338,7 @@ class MissionRunner(DroneController):
 
     def get_camera_image(self):
         return self._latest_image
+
 
 def main(args=None):
     rclpy.init(args=args)
@@ -256,6 +352,7 @@ def main(args=None):
     finally:
         node.destroy_node()
         rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()

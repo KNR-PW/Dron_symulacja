@@ -22,6 +22,7 @@ setup(
         'console_scripts': [
             "mission_reporter = droniada_inspekcja.mission_reporter:main",
             "simulate_mission = droniada_inspekcja.simulate_mission:main",
+            "yolo_to_db = droniada_inspekcja.yolo_to_db:main",
         ],
     },
 )
