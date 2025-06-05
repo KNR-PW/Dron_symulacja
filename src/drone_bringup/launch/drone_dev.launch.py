@@ -100,7 +100,7 @@ def generate_launch_description():
     #            {'base_url': 'https://telemetria-osadniik.pythonanywhere.com/'}
     #        ]
     #     ),
-       # healthcheck_action,
+       healthcheck_action,
         web_telemetry,
         web_inspekcja,
         mission_reporter,

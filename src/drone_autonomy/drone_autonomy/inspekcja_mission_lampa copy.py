@@ -48,9 +48,6 @@ class MissionRunner(DroneController):
 
         self._mission_started = False
 
-        self.start_time = time.time()  # Track mission start time
-        self.battery_percentage = None 
-        self.lamp_detected = False  
         # --- NEW: instantiate VisionAgent here ---
         self.vision_agent = VisionAgent()
 
@@ -185,40 +182,18 @@ class MissionRunner(DroneController):
         mission_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.mission_id = self.db.add_mission(
             team="KNR PW",
-            email="michal.lejwoda.stud@pw.edu.pl",
+            email="franek.jozwiak.stud@pw.edu.pl",
             pilot="Franek Jóźwiak",
-            phone="661672850",
+            phone="724466512",
             mission_time=mission_time_str,
             mission_no=f"M{int(time.time())}",
             duration="0m",
             battery_before="98%",
             battery_after="-%",
-            kp_index=3.67,
+            kp_index=0,
             infra_map="/data/img/mapa.jpg",
         )
         self.get_logger().info(f"Created mission ID {self.mission_id}")
-
-    def orto_map(self):
-        # Fly to the orthophoto waypoint, then RTL
-        self.send_goto_global(self.orto_waypoint[0], self.orto_waypoint[1], self.orto_waypoint[2])
-
-        final_img = self.get_camera_image()
-        if final_img is not None:
-            ortho_path = os.path.abspath("mapa.jpg")
-            cv2.imwrite(ortho_path, final_img)
-            record = {
-                "content": str(-1),
-                "location": "",
-                "location_changed": "-",
-                "content_changed": "-",
-                "image": ortho_path.split('/')[-1],
-                "jury": "-"
-            }
-            try:
-                self.db.add_arucos(self.mission_id, [record])
-                self.get_logger().info("Saved final orthophoto to DB.")
-            except Exception as e:
-                self.get_logger().error(f"Failed to save final photomap to DB: {e}")
 
     def _run_mission(self):
         if self._mission_started:
@@ -230,12 +205,10 @@ class MissionRunner(DroneController):
         if not self.arm():
             self.get_logger().error("Arm failed; aborting mission.")
             return
-        if not self.takeoff(10.0):
+        if not self.takeoff(5.0):
             self.get_logger().error("Takeoff failed; aborting mission.")
             return
 
-        time.sleep(2.0)  
-        self.orto_map() 
         for idx, (north, east, down) in enumerate(self.waypoints, start=1):
             self.get_logger().info(f"Heading to waypoint {idx}: N={north}, E={east}, D={down}")
             self._marker_event.clear()
@@ -247,7 +220,23 @@ class MissionRunner(DroneController):
             if not self.send_goto_global(north, east, down):
                 self.get_logger().error(f"Goto waypoint {idx} failed; skipping.")
                 continue
-            time.sleep(3.0)
+
+            # # Wait until we arrive or until a marker is detected
+            # while rclpy.ok():
+            #     gps = self.get_gps()
+            #     if gps is None:
+            #         self.get_logger().warn("GPS unavailable; cannot check arrival.")
+            #         break
+            #     cur_north, cur_east, cur_down = gps
+            #     if (abs(cur_north - north) <= 0.5 and
+            #         abs(cur_east - east) <= 0.5 and
+            #         abs(cur_down - down) <= 0.5):
+            #         self.get_logger().info(f"Arrived at waypoint {idx}.")
+            #         break
+            #     if self._marker_event.is_set():
+            #         break
+            #     time.sleep(0.2)
+
             # If we found ArUco markers, save them
             if self._marker_event.is_set() and self._marker_ids:
                 to_store = []
@@ -270,52 +259,49 @@ class MissionRunner(DroneController):
                 except Exception as e:
                     self.get_logger().error(f"Failed to save ArUco(s) to DB: {e}")
 
-            if not self.lamp_detected:
-                # --- NEW: Capture a snapshot of the camera and run lamp detection in a separate thread ---
-                current_img = self.get_camera_image()
-                if current_img is not None:
-                    lamp_image_path = os.path.abspath(f"lamp_wp{idx}_{int(time.time())}.jpg")
-                    cv2.imwrite(lamp_image_path, current_img)
-                    self.get_logger().info(f"Saved waypoint {idx} image for lamp detection: {lamp_image_path}")
+            # --- NEW: Capture a snapshot of the camera and run lamp detection in a separate thread ---
+            current_img = self.get_camera_image()
+            if current_img is not None:
+                lamp_image_path = os.path.abspath(f"lamp_wp{idx}_{int(time.time())}.jpg")
+                cv2.imwrite(lamp_image_path, current_img)
+                self.get_logger().info(f"Saved waypoint {idx} image for lamp detection: {lamp_image_path}")
 
-                    # Launch a daemon thread so this is non-blocking
-                    threading.Thread(
-                        target=self._run_lamp_detection,
-                        args=(lamp_image_path, idx),
-                        daemon=True
-                    ).start()
-                else:
-                    self.get_logger().warn(f"No camera image to save for lamp detection at waypoint {idx}.")
+                # Launch a daemon thread so this is non-blocking
+                threading.Thread(
+                    target=self._run_lamp_detection,
+                    args=(lamp_image_path, idx),
+                    daemon=True
+                ).start()
+            else:
+                self.get_logger().warn(f"No camera image to save for lamp detection at waypoint {idx}.")
 
             # Small pause before next waypoint
             time.sleep(1.0)
 
 
-        self.rtl()
-        self.final_report_update()
 
-    def final_report_update(self):
-        battery_percent = self.battery_percentage if hasattr(self, 'battery_percentage') else None
-        mission_duration = time.time() - self.start_time if hasattr(self, 'start_time') else None
-        if self.mission_id is not None:
-            updates = {}
-            if battery_percent is not None:
-                updates['battery_after'] = f"{battery_percent:.0f}%"
-            if mission_duration is not None:
-                # Format as Xm Ys
-                minutes = int(mission_duration // 60)
-                seconds = int(mission_duration % 60)
-                updates['duration'] = f"{minutes}m {seconds}s"
-            if updates:
-                set_clause = ", ".join([f"{k}=?" for k in updates.keys()])
-                values = list(updates.values()) + [self.mission_id]
-                with self.db._get_connection() as conn:
-                    conn.execute(f"UPDATE missions SET {set_clause} WHERE id=?", values)
-                self.get_logger().info(f"Updated mission {self.mission_id} with: {updates}")
-            else:
-                self.get_logger().warn("No battery_after or duration to update in mission.")
-        else:
-            self.get_logger().warn("No mission_id set for final_report_update.")
+        # Fly to the orthophoto waypoint, then RTL
+        self.send_goto_global(self.orto_waypoint[0], self.orto_waypoint[1], self.orto_waypoint[2])
+
+        final_img = self.get_camera_image()
+        if final_img is not None:
+            ortho_path = os.path.abspath("mapa.jpg")
+            cv2.imwrite(ortho_path, final_img)
+            record = {
+                "content": str(-1),
+                "location": "",
+                "location_changed": "-",
+                "content_changed": "-",
+                "image": ortho_path.split('/')[-1],
+                "jury": "-"
+            }
+            try:
+                self.db.add_arucos(self.mission_id, [record])
+                self.get_logger().info("Saved final orthophoto to DB.")
+            except Exception as e:
+                self.get_logger().error(f"Failed to save final photomap to DB: {e}")
+
+        self.rtl()
 
     def _run_lamp_detection(self, image_path: str, waypoint_idx: int):
         self.get_logger().info(f"Running lamp detection for waypoint {waypoint_idx} using image: {image_path}...")
@@ -340,11 +326,11 @@ class MissionRunner(DroneController):
                     f"contains_orange_light={contains}, light_status={status}"
                 )
                 # Add to incidents if lamp detected
-                
+                status = "on"
                 if status:
-                    status = "on"
-                    self.lamp_detected = True
+                    
                     event_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    self.get_logger().info(f"event time: {event_time}")
                     incident_record = {
                         "event": f"Lamp detected (status: {status})",
                         "event_time": event_time,
@@ -375,12 +361,14 @@ class MissionRunner(DroneController):
 
 def main(args=None):
     rclpy.init(args=args)
-    waypoints = [(5.2726545, 18.6711181), 
-    (50.2727052, 18.6711198),
-    (50.2727628, 18.6711201),
-    (50.2728006, 18.6711205)
-    ]
-    orto_waypoint = [50.2727237, 18.6711196, 33]
+    alt = 10.0
+    # waypoints = [(2.0, 0.0, 0.0), (0.0, 3.0, 0.0), (-2.0, 0.0, 0.0), (0.0, -3.0, 0.0)]
+    waypoints = [(50.2715662, 18.6443051, alt),
+        (50.2714623, 18.6442565, alt),
+        # (50.2717372, 18.6440945, alt),
+        # (50.2719005, 18.6444969, alt)
+        ]
+    orto_waypoint = [50.2719005, 18.6444969, alt+3]
     node = MissionRunner(waypoints, orto_waypoint)
     executor = MultiThreadedExecutor()
     executor.add_node(node)
