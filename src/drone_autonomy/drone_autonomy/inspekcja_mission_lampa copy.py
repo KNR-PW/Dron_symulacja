@@ -19,7 +19,7 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 from geopy.distance import geodesic
 
-from droniada_inspekcja.vision_agent import VisionAgent
+# from droniada_inspekcja.vision_agent import VisionAgent
 
 import json
 
@@ -49,7 +49,7 @@ class MissionRunner(DroneController):
         self._mission_started = False
 
         # --- NEW: instantiate VisionAgent here ---
-        self.vision_agent = VisionAgent()
+        # self.vision_agent = VisionAgent()
 
         # Delay start by 2 seconds, then run mission
         threading.Thread(target=self._delayed_start, daemon=True).start()
@@ -209,6 +209,9 @@ class MissionRunner(DroneController):
             self.get_logger().error("Takeoff failed; aborting mission.")
             return
 
+        self.send_goto_relative(0.0, 0.0, 0.0)
+        self.set_speed(0.6)
+
         for idx, (north, east, down) in enumerate(self.waypoints, start=1):
             self.get_logger().info(f"Heading to waypoint {idx}: N={north}, E={east}, D={down}")
             self._marker_event.clear()
@@ -259,21 +262,21 @@ class MissionRunner(DroneController):
                 except Exception as e:
                     self.get_logger().error(f"Failed to save ArUco(s) to DB: {e}")
 
-            # --- NEW: Capture a snapshot of the camera and run lamp detection in a separate thread ---
-            current_img = self.get_camera_image()
-            if current_img is not None:
-                lamp_image_path = os.path.abspath(f"lamp_wp{idx}_{int(time.time())}.jpg")
-                cv2.imwrite(lamp_image_path, current_img)
-                self.get_logger().info(f"Saved waypoint {idx} image for lamp detection: {lamp_image_path}")
+            # # --- NEW: Capture a snapshot of the camera and run lamp detection in a separate thread ---
+            # current_img = self.get_camera_image()
+            # if current_img is not None:
+            #     lamp_image_path = os.path.abspath(f"lamp_wp{idx}_{int(time.time())}.jpg")
+            #     cv2.imwrite(lamp_image_path, current_img)
+            #     self.get_logger().info(f"Saved waypoint {idx} image for lamp detection: {lamp_image_path}")
 
-                # Launch a daemon thread so this is non-blocking
-                threading.Thread(
-                    target=self._run_lamp_detection,
-                    args=(lamp_image_path, idx),
-                    daemon=True
-                ).start()
-            else:
-                self.get_logger().warn(f"No camera image to save for lamp detection at waypoint {idx}.")
+            #     # Launch a daemon thread so this is non-blocking
+            #     threading.Thread(
+            #         target=self._run_lamp_detection,
+            #         args=(lamp_image_path, idx),
+            #         daemon=True
+            #     ).start()
+            # else:
+            #     self.get_logger().warn(f"No camera image to save for lamp detection at waypoint {idx}.")
 
             # Small pause before next waypoint
             time.sleep(1.0)
@@ -303,32 +306,32 @@ class MissionRunner(DroneController):
 
         self.rtl()
 
-    def _run_lamp_detection(self, image_path: str, waypoint_idx: int):
-        self.get_logger().info(f"Running lamp detection for waypoint {waypoint_idx} using image: {image_path}...")
-        """
-        Runs VisionAgent.describe_image(...) on the given image_path.
-        This is launched in a separate thread so as not to block the main mission logic.
-        """
-        try:
-            self.get_logger().info(f"(Thread) Starting lamp detection for waypoint {waypoint_idx} using {image_path}")
-            detection_results = self.vision_agent.describe_image(image_path)
-            detection_results = self.parse_json_objects(detection_results)
-            self.get_logger().info(f"results : {detection_results}")
-            # vision_agent.describe_image(...) returns a list of dicts. Normally there's only one dict.
-            if not detection_results:
-                self.get_logger().warn(f"(Thread) No JSON output from VisionAgent for {image_path}")
-                return
+    # def _run_lamp_detection(self, image_path: str, waypoint_idx: int):
+    #     self.get_logger().info(f"Running lamp detection for waypoint {waypoint_idx} using image: {image_path}...")
+    #     """
+    #     Runs VisionAgent.describe_image(...) on the given image_path.
+    #     This is launched in a separate thread so as not to block the main mission logic.
+    #     """
+    #     try:
+    #         self.get_logger().info(f"(Thread) Starting lamp detection for waypoint {waypoint_idx} using {image_path}")
+    #         detection_results = self.vision_agent.describe_image(image_path)
+    #         detection_results = self.parse_json_objects(detection_results)
+    #         self.get_logger().info(f"results : {detection_results}")
+    #         # vision_agent.describe_image(...) returns a list of dicts. Normally there's only one dict.
+    #         if not detection_results:
+    #             self.get_logger().warn(f"(Thread) No JSON output from VisionAgent for {image_path}")
+    #             return
 
-            # If multiple JSON objects were returned, just log each; otherwise log the single result
-            for idx, result in enumerate(detection_results, start=1):
-                contains = result.get("contains_orange_light", False)
-                status = result.get("light_status", "unknown")
-                self.get_logger().info(
-                    f"(Thread) Waypoint {waypoint_idx} → JSON #{idx}: "
-                    f"contains_orange_light={contains}, light_status={status}"
-                )
-        except Exception as e:
-            self.get_logger().error(f"(Thread) Lamp detection failed for {image_path}: {e}")
+    #         # If multiple JSON objects were returned, just log each; otherwise log the single result
+    #         for idx, result in enumerate(detection_results, start=1):
+    #             contains = result.get("contains_orange_light", False)
+    #             status = result.get("light_status", "unknown")
+    #             self.get_logger().info(
+    #                 f"(Thread) Waypoint {waypoint_idx} → JSON #{idx}: "
+    #                 f"contains_orange_light={contains}, light_status={status}"
+    #             )
+    #     except Exception as e:
+    #         self.get_logger().error(f"(Thread) Lamp detection failed for {image_path}: {e}")
 
     def _camera_callback(self, msg):
         try:
@@ -344,8 +347,8 @@ class MissionRunner(DroneController):
 
 def main(args=None):
     rclpy.init(args=args)
-    waypoints = [(2.0, 0.0, 0.0), (0.0, 3.0, 0.0), (-2.0, 0.0, 0.0), (0.0, -3.0, 0.0)]
-    orto_waypoint = [0.0, 0.0, 5.0]
+    waypoints = [(2.0, 0.0, 0.0), (0.0, 2.0, 0.0), (-2.0, 0.0, 0.0), (0.0, -2.0, 0.0)]
+    orto_waypoint = [0.0, 0.0, 2.0]
     node = MissionRunner(waypoints, orto_waypoint)
     executor = MultiThreadedExecutor()
     executor.add_node(node)
