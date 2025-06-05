@@ -210,7 +210,7 @@ class ArucoNode(rclpy.node.Node):
             pose.position.x = float(tvec[0][0])
             pose.position.y = float(tvec[1][0])
             pose.position.z = float(tvec[2][0])
-
+            self.get_logger().info(f"Marker ID {marker_id}: Position (x={pose.position.x:.3f}, y={pose.position.y:.3f}, z={pose.position.z:.3f})")
             # Convert rotation vector to quaternion
             rot_mat_4x4 = np.eye(4)
             rot_mat_3x3, _ = cv2.Rodrigues(rvec)
