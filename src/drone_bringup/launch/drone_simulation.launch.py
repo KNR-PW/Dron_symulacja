@@ -89,9 +89,9 @@ def generate_launch_description():
         webots._supervisor,
         drone_handler_node_action,
         web_telemetry,
-        web_inspekcja,
+        # web_inspekcja,
         healthcheck_action,
-        mission_reporter,
+        # mission_reporter,
 
         # This action will kill all nodes once the Webots simulation has exited
         launch.actions.RegisterEventHandler(
