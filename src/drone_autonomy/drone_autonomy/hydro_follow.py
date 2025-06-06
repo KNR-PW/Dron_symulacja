@@ -182,8 +182,11 @@ class MissionRunner(DroneController):
                 X_rel, Y_rel = image_to_ground(pool_position, scaled_instricts, alt)
                 self.get_logger().info(f"Pool position in ground coordinates: X={X_rel}, Y={Y_rel}, Alt={alt}")
                 # time.sleep(10)
-                self.send_goto_relative(X_rel, Y_rel, 0.0)
-            time.sleep(5.0)
+                self.send_goto_relative(-Y_rel, X_rel, 0.0)
+            start_time = time.time()
+            while time.time() - start_time < 5.0:
+                rclpy.spin_once(self, timeout_sec=0.1)
+
 
             
         self.rtl()
