@@ -25,13 +25,14 @@ import cv2
 import numpy as np
 
 class MissionRunner(DroneController):
-    def __init__(self, waypoints, beacons_nums, flight_alt):
+    def __init__(self, waypoints, beacons_nums, droppers_nums, flight_alt):
         super().__init__()
 
         self.mission_id = None
         self.waypoints = waypoints
         self.flight_alt = flight_alt
         self.beacons_nums = beacons_nums
+        self.droppers_nums = droppers_nums
 
         if len(self.beacons_nums) != len(self.waypoints):
             self.get_logger().error(f"Invalid input data ")
@@ -77,13 +78,23 @@ class MissionRunner(DroneController):
             self.get_logger().error(f"Exception in beacon msg: {e}")
     
     def _run_mission(self):
+
+        if self._mission_started:
+            return
+        self._mission_started = True
+
         for idx, (north, east, down) in enumerate(self.waypoints, start=1):
             self.get_logger().info(f"Heading to waypoint {idx}: N={north}, E={east}, D={down}")
-            self.get_logger().error(f"Arrived to waypoint {idx}")
+
+            self.get_logger().info(f"Arrived to waypoint {idx}")
+
             beacon = self.beacons_nums[idx-1]
+            dropper = self.droppers_nums[idx-1]
+
+            self.get_logger().info(f"Sending beacon message for beacon {beacon} and dropper {dropper}")
             self.send_beacon_msg("b"+str(beacon)+"r")
             time.sleep(2.0)
-            self.send_beacon_msg("d"+str(beacon))
+            self.send_beacon_msg("d"+str(dropper))
             time.sleep(2.0)
 
             
@@ -95,17 +106,15 @@ class MissionRunner(DroneController):
 def main(args=None):
     rclpy.init(args=args)
     alt = 10.0
-    # waypoints = [(2.0, 0.0, 0.0), (0.0, 3.0, 0.0), (-2.0, 0.0, 0.0), (0.0, -3.0, 0.0)]
+
     waypoints = [
-        (-35.363319396972656, 149.16531372070312, 10),
-        (-35.36327258544922, 149.16510009765625, 10)
-        # (50.2715662, 18.6443051, alt),
-        # (50.2714623, 18.6442565, alt),
-        # (50.2717372, 18.6440945, alt),
-        # (50.2719005, 18.6444969, alt)
-        
+        (-35.363319396972656, 149.16531372070312, alt),
+        (-35.36327258544922, 149.16510009765625, alt)
         ]
+
     beacons = [1, 2]
+    droppers = [1, 2]
+
     node = MissionRunner(waypoints, beacons, alt)
     executor = MultiThreadedExecutor()
     executor.add_node(node)
