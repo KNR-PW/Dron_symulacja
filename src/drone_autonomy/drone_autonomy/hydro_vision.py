@@ -15,6 +15,7 @@ from drone_interfaces.srv import (
     SetSpeed,
     TurnOnVideo,
     TurnOffVideo,
+    PostLog
 )
 from drone_interfaces.action import Arm, Takeoff, GotoRelative, GotoGlobal, SetYawAction
 
@@ -69,6 +70,29 @@ def image_to_ground(point, K, height):
 
     return X, Y
 
+class WebLogger(Node):
+    def __init__(self):
+        super().__init__('web_logger')
+        self.client = self.create_client(PostLog, 'post_log_to_web')
+
+    def log(self, message="Zbiornik został wykryty", level="info"):
+        while not self.client.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('Waiting for service post_log_to_server...')
+
+        request = PostLog.Request()
+        request.message = message
+        request.level = level
+
+        future = self.client.call_async(request)
+        # rclpy.spin_until_future_complete(self, future)
+
+        # if future.result() is not None:
+        #     if future.result().result:
+        #         self.get_logger().info('Successfully posted web log')
+        #     else:
+        #         self.get_logger().warn(f"Failed to post log")
+        # else:
+        #     self.get_logger().error('Service call failed')
 
 class MissionRunner(DroneController):
     def __init__(self, takeoff_alt):
@@ -97,6 +121,9 @@ class MissionRunner(DroneController):
             ]
         )
         self.calibration_img_shape = (4056, 3040)
+
+        self.web_logger = WebLogger()
+
         threading.Thread(target=self._delayed_start, daemon=True).start()
 
     def _delayed_start(self):
@@ -170,10 +197,15 @@ class MissionRunner(DroneController):
 
         while True:
             self.pool_found = False
-            pool_data = self.detect_pool()
+            if self._latest_image is not None:
+                pool_data = self.detect_pool()
+            else:
+                pool_data = None
+
             if pool_data is not None:
                 self.pool_found = True
                 self.get_logger().info(f"Pool detected with data: {pool_data}")
+                threading.Thread(target=self.web_logger.log, daemon=True).start()
 
                 pool_position = pool_data[:2]
                 pool_radius = pool_data[2]

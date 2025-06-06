@@ -8,7 +8,7 @@ from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
 
 from drone_interfaces.msg import ArucoMarkers, Telemetry
-from drone_interfaces.srv import GetLocationRelative, GetAttitude, SetMode, SetSpeed, TurnOnVideo, TurnOffVideo
+from drone_interfaces.srv import GetLocationRelative, GetAttitude, SetMode, SetSpeed, TurnOnVideo, TurnOffVideo, PostLog
 from drone_interfaces.action import Arm, Takeoff, GotoRelative, GotoGlobal, SetYawAction
 
 from drone_comunication.drone_controller import DroneController
@@ -62,6 +62,30 @@ def image_to_ground(point, K, height):
 
     return X, Y
 
+class WebLogger(Node):
+    def __init__(self):
+        super().__init__('web_logger')
+        self.client = self.create_client(PostLog, 'post_log_to_web')
+
+    def log(self, message="Zbiornik został wykryty", level="info"):
+        while not self.client.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('Waiting for service post_log_to_server...')
+
+        request = PostLog.Request()
+        request.message = message
+        request.level = level
+
+        future = self.client.call_async(request)
+        # rclpy.spin_until_future_complete(self, future)
+
+        # if future.result() is not None:
+        #     if future.result().result:
+        #         self.get_logger().info('Successfully posted web log')
+        #     else:
+        #         self.get_logger().warn(f"Failed to post log")
+        # else:
+        #     self.get_logger().error('Service call failed')
+            
 
 class MissionRunner(DroneController):
     def __init__(self, waypoints):
@@ -82,6 +106,9 @@ class MissionRunner(DroneController):
 
         self.camera_instricts = np.array([[3.97045297e+03, 0.00000000e+00, 2.04507985e+03], [0.00000000e+00, 3.97159037e+03, 1.55103947e+03], [0.00000000e+00, 0.00000000e+00, 1.00000000e+00]])
         self.calibration_img_shape = (4056, 3040)
+
+        self.web_logger = WebLogger()
+
         threading.Thread(target=self._delayed_start, daemon=True).start()
 
     def _delayed_start(self):
@@ -167,10 +194,15 @@ class MissionRunner(DroneController):
 
             time.sleep(3.0)
             
-            pool_data = self.detect_pool()
+            if self._latest_image is not None:
+                pool_data = self.detect_pool()
+            else:
+                pool_data = None
+
             if pool_data is not None:
                 self.pool_found = True
                 self.get_logger().info(f"Pool detected at waypoint {idx} with data: {pool_data}")
+                threading.Thread(target=self.web_logger.log, daemon=True).start()
                 break
 
             # Small pause before next waypoint
