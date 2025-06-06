@@ -129,9 +129,9 @@ class MissionRunner(DroneController):
             time.sleep(3.0)
             self.get_logger().error(f"Arrived to waypoint {idx}")
             i+=1
-            self.send_beacon_msg("b"+str(i)+"r")
+            self.send_beacon_msg("b"+str(num)+"r")
             time.sleep(2.0)
-            self.send_beacon_msg("d"+str(i))
+            self.send_beacon_msg("d"+str(num))
             time.sleep(2.0)
 
             
