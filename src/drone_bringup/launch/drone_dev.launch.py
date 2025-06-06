@@ -10,7 +10,7 @@ web_telemetry = Node(
            executable='ros_mission_website',
            parameters=[
                {'base_url': 'https://telemetria-osadniik.pythonanywhere.com/',
-                "camera_topic": 'camera',}
+                "camera_topic": 'camera/image_raw',}
            ]
         )
     

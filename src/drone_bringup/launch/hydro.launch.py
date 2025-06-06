@@ -10,7 +10,7 @@ web_telemetry = Node(
            executable='ros_mission_website',
            parameters=[
                {'base_url': 'https://telemetria-osadniik.pythonanywhere.com/',
-                "camera_topic": 'camera',}
+                "camera_topic": 'camera/image_raw',}
            ]
         )
     
@@ -24,7 +24,7 @@ def generate_launch_description():
             parameters=[
                 {'camera_topic': 'camera/image_raw'},
                 # {'camera_topic': 'camera'},
-                {'required_nodes': ['aruco_node', 'ros_mission_website', 'ros_report_website', 'mission_reporter']}
+                {'required_nodes': ['ros_mission_website']}
             ],
         )
 
