@@ -10,6 +10,7 @@ class HostHardware(Node):
     def __init__(self):
         super().__init__("HardwareNode")
 
+
         uart_connected = False
         while not uart_connected:
             try:
