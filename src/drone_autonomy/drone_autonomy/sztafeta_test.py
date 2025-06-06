@@ -25,7 +25,7 @@ import cv2
 import numpy as np
 
 class MissionRunner(DroneController):
-    def __init__(self, waypoints, beacons_nums, droppers_nums, flight_alt):
+    def __init__(self, waypoints, drop_points, beacons_nums, droppers_nums, flight_alt):
         super().__init__()
 
         self.mission_id = None
@@ -33,6 +33,7 @@ class MissionRunner(DroneController):
         self.flight_alt = flight_alt
         self.beacons_nums = beacons_nums
         self.droppers_nums = droppers_nums
+        self.drop_points = drop_points
 
         if len(self.beacons_nums) != len(self.waypoints):
             self.get_logger().error(f"Invalid input data ")
@@ -60,7 +61,6 @@ class MissionRunner(DroneController):
     def send_beacon_msg(self, beacon_msg):
         self.get_logger().info(f"Senting beacon msg: {beacon_msg}")
         try:
-            
             while not self.dropper_client.wait_for_service(timeout_sec=1.0):
                 self.get_logger().info('Waiting for dropper service...')
             request = Dropper.Request()
@@ -83,16 +83,23 @@ class MissionRunner(DroneController):
             return
         self._mission_started = True
 
+        # WAYPOINTS
         for idx, (north, east, down) in enumerate(self.waypoints, start=1):
             self.get_logger().info(f"Heading to waypoint {idx}: N={north}, E={east}, D={down}")
-
             self.get_logger().info(f"Arrived to waypoint {idx}")
+
+        self.get_logger().info("All waypoints reached, starting drop sequence.")
+
+        # DROP_POINTS
+        for idx, (north, east, down) in enumerate(self.drop_points, start=1):
+            self.get_logger().info(f"Heading to drop point {idx}: N={north}, E={east}, D={down}")
+            self.get_logger().info(f"Arrived to drop point {idx}")
 
             beacon = self.beacons_nums[idx-1]
             dropper = self.droppers_nums[idx-1]
 
             self.get_logger().info(f"Sending beacon message for beacon {beacon} and dropper {dropper}")
-            self.send_beacon_msg("b"+str(beacon)+"o")
+            self.send_beacon_msg("b"+str(beacon)+"r")
             time.sleep(2.0)
             self.send_beacon_msg("d"+str(dropper))
             time.sleep(2.0)
@@ -107,16 +114,26 @@ def main(args=None):
     rclpy.init(args=args)
     alt = 10.0
 
-
+    # SYMUALCJA
     waypoints = [
         (-35.363319396972656, 149.16531372070312, alt),
         (-35.36327258544922, 149.16510009765625, alt)
         ]
+    drop_points = [
+        (-35.363319396972656, 149.16531372070312, alt),
+        ]
+    # REAL
+    # waypoints = [
+    #     (50.272161660346256, 18.672639278930014, alt),
+    #     (50.27214126802746, 18.67262278740535, alt),
+    #     ]
+    # drop_points = [
+    #     ]
 
     beacons = [1, 2]
     droppers = [1, 2]
 
-    node = MissionRunner(waypoints, beacons, droppers, alt)
+    node = MissionRunner(waypoints, drop_points, beacons, droppers, alt)
     executor = MultiThreadedExecutor()
     executor.add_node(node)
     try:
