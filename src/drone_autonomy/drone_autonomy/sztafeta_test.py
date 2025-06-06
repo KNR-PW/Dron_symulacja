@@ -92,7 +92,7 @@ class MissionRunner(DroneController):
             dropper = self.droppers_nums[idx-1]
 
             self.get_logger().info(f"Sending beacon message for beacon {beacon} and dropper {dropper}")
-            self.send_beacon_msg("b"+str(beacon)+"r")
+            self.send_beacon_msg("b"+str(beacon)+"o")
             time.sleep(2.0)
             self.send_beacon_msg("d"+str(dropper))
             time.sleep(2.0)
@@ -106,6 +106,7 @@ class MissionRunner(DroneController):
 def main(args=None):
     rclpy.init(args=args)
     alt = 10.0
+
 
     waypoints = [
         (-35.363319396972656, 149.16531372070312, alt),
