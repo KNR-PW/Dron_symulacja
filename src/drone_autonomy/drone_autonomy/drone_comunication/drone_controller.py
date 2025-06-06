@@ -110,7 +110,10 @@ class DroneController(Node):
         goal.altitude = altitude
         return self._send_action(self._takeoff_client, goal)
 
-    def send_goto_relative(self, north: float, east: float, down: float) -> bool:
+    def send_goto_relative(self, north, east, down) -> bool:
+        north = float(north)
+        east = float(east)
+        down = float(down)
         self.get_logger().info(f'Moving relative N:{north}, E:{east}, D:{down}')
         goal = GotoRelative.Goal(north=north, east=east, down=down)
         return self._send_action(self._goto_rel_client, goal)

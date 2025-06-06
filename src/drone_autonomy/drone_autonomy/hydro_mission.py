@@ -43,6 +43,7 @@ def scale_intrinsics(K, original_size, new_size):
 
 
 def image_to_ground(point, K, height):
+    u, v = point
     fx = K[0, 0]
     fy = K[1, 1]
     cx = K[0, 2]
@@ -80,8 +81,8 @@ class MissionRunner(DroneController):
 
         self.pool_found = False
 
-        self.camera_instricts = [[3.97045297e+03, 0.00000000e+00, 2.04507985e+03], [0.00000000e+00, 3.97159037e+03, 1.55103947e+03], [0.00000000e+00, 0.00000000e+00, 1.00000000e+00]]
-        # Delay start by 2 seconds, then run mission
+        self.camera_instricts = np.array([[3.97045297e+03, 0.00000000e+00, 2.04507985e+03], [0.00000000e+00, 3.97159037e+03, 1.55103947e+03], [0.00000000e+00, 0.00000000e+00, 1.00000000e+00]])
+        self.calibration_img_shape = (4056, 3040)
         threading.Thread(target=self._delayed_start, daemon=True).start()
 
     def _delayed_start(self):
@@ -158,6 +159,9 @@ class MissionRunner(DroneController):
 
         time.sleep(2.0)  
 
+        self.send_goto_relative(0.0, 0.0, 0.0)
+        self.set_speed(0.8)
+
         for idx, (north, east, down) in enumerate(self.waypoints, start=1):
             self.get_logger().info(f"Heading to waypoint {idx}: N={north}, E={east}, D={down}")
 
@@ -183,12 +187,18 @@ class MissionRunner(DroneController):
         else:
             pool_position = pool_data[:2]
             pool_radius = pool_data[2]
-            # scale_intrinsics!!!!!!!!!!!!!!!!!!!!!!!!!1
-            X_rel, Y_rel = image_to_ground(pool_position, self.camera_instricts, self.alt)
-            self.get_logger().info(f"Pool position in ground coordinates: X={X_rel}, Y={Y_rel}, Radius={pool_radius}")
-            self.send_goto_relative(X_rel, Y_rel, 0.0)
+
+            scaled_instricts = scale_intrinsics(self.camera_instricts, self.calibration_img_shape, self._latest_image.shape[:2])
+            alt = self.alt
+
+            X_rel, Y_rel = image_to_ground(pool_position, scaled_instricts, alt)
+            self.get_logger().info(f"Pool position in ground coordinates: X={X_rel}, Y={-Y_rel}, Alt={alt}")
+            time.sleep(10)
+            self.send_goto_relative(X_rel, -Y_rel, 0.0)
+
             
         self.rtl()
+        return
 
     def _camera_callback(self, msg):
         try:
@@ -206,10 +216,14 @@ def main(args=None):
     rclpy.init(args=args)
     alt = 10.0
     # waypoints = [(2.0, 0.0, 0.0), (0.0, 3.0, 0.0), (-2.0, 0.0, 0.0), (0.0, -3.0, 0.0)]
-    waypoints = [(50.2715662, 18.6443051, alt),
-        (50.2714623, 18.6442565, alt),
+    waypoints = [
+        (-35.363319396972656, 149.16531372070312, 10),
+        (-35.36327258544922, 149.16510009765625, 10)
+        # (50.2715662, 18.6443051, alt),
+        # (50.2714623, 18.6442565, alt),
         # (50.2717372, 18.6440945, alt),
         # (50.2719005, 18.6444969, alt)
+        
         ]
     node = MissionRunner(waypoints)
     executor = MultiThreadedExecutor()
