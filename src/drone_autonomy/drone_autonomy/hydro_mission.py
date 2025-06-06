@@ -26,7 +26,6 @@ import cv2
 import numpy as np
 
 def scale_intrinsics(K, original_size, new_size):
-    print(new_size)
     orig_w, orig_h = original_size
     new_w, new_h = new_size
 
@@ -194,7 +193,7 @@ class MissionRunner(DroneController):
 
             X_rel, Y_rel = image_to_ground(pool_position, scaled_instricts, alt)
             self.get_logger().info(f"Pool position in ground coordinates: X={X_rel}, Y={Y_rel}, Alt={alt}")
-            time.sleep(10)
+            # time.sleep(10)
             self.send_goto_relative(X_rel, Y_rel, 0.0)
 
             
