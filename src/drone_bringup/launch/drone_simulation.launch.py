@@ -79,6 +79,10 @@ def generate_launch_description():
         ]
     )
 
+    host_bridge = Node(
+            package='drone_hardware',
+            executable='host_bridge'
+        )
     return LaunchDescription([
         DeclareLaunchArgument(
             'world',
@@ -92,6 +96,7 @@ def generate_launch_description():
         # web_inspekcja,
         healthcheck_action,
         # mission_reporter,
+        # host_bridge,
 
         # This action will kill all nodes once the Webots simulation has exited
         launch.actions.RegisterEventHandler(
