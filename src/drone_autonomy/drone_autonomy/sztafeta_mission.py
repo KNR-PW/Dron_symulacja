@@ -73,6 +73,10 @@ class MissionRunner(DroneController):
         self._run_mission()
 
 
+    def test_beacon(num):
+        self.send_beacon_msg("b"+str(i)+"r")
+        time.sleep(2.0)
+        self.send_beacon_msg("d"+str(i))
     def send_beacon_msg(self, beacon_msg):
         self.get_logger().info(f"Senting beacon msg: {beacon_msg}")
         try:
