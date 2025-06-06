@@ -30,7 +30,10 @@ def generate_launch_description():
 
     host_bridge = Node(
             package='drone_hardware',
-            executable='host_bridge'
+            executable='host_bridge',
+            parameters = [
+                {'uart_port': '/dev/ttyUSB0'}
+            ]
         )
 
     healthcheck_action = TimerAction(
