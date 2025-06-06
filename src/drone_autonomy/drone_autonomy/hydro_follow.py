@@ -98,7 +98,7 @@ class MissionRunner(DroneController):
         self._cv_bridge = CvBridge()
 
         # Subscribe to camera and ArUco markers
-        self.create_subscription(Image, 'camera', self._camera_callback, 10)
+        self.create_subscription(Image, 'camera/image_raw', self._camera_callback, 10)
 
         self._mission_started = False
 
