@@ -115,7 +115,7 @@ def main(args=None):
     beacons = [1, 2]
     droppers = [1, 2]
 
-    node = MissionRunner(waypoints, beacons, alt)
+    node = MissionRunner(waypoints, beacons, droppers, alt)
     executor = MultiThreadedExecutor()
     executor.add_node(node)
     try:
