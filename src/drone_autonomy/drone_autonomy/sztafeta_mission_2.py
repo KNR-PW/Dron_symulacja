@@ -35,7 +35,7 @@ class MissionRunner(DroneController):
         self.droppers_nums = droppers_nums
         self.drop_points = drop_points
 
-        if len(self.beacons_nums) != len(self.waypoints):
+        if len(self.beacons_nums) != len(self.drop_points):
             self.get_logger().error(f"Invalid input data ")
 
         self._latest_image = None
@@ -83,9 +83,25 @@ class MissionRunner(DroneController):
             return
         self._mission_started = True
 
+
+        if not self.arm():
+            self.get_logger().error("Arm failed; aborting mission.")
+            return
+        if not self.takeoff(self.flight_alt):
+            self.get_logger().error("Takeoff failed; aborting mission.")
+            return
+
+        time.sleep(2.0)  
+
         # WAYPOINTS
         for idx, (north, east, down) in enumerate(self.waypoints, start=1):
             self.get_logger().info(f"Heading to waypoint {idx}: N={north}, E={east}, D={down}")
+
+            if not self.send_goto_global(north, east, down):
+                self.get_logger().error(f"Goto waypoint {idx} failed; skipping.")
+                continue
+
+            time.sleep(1.0)
             self.get_logger().info(f"Arrived to waypoint {idx}")
 
         self.get_logger().info("All waypoints reached, starting drop sequence.")
@@ -93,6 +109,12 @@ class MissionRunner(DroneController):
         # DROP_POINTS
         for idx, (north, east, down) in enumerate(self.drop_points, start=1):
             self.get_logger().info(f"Heading to drop point {idx}: N={north}, E={east}, D={down}")
+
+            if not self.send_goto_global(north, east, down):
+                self.get_logger().error(f"Goto drop point {idx} failed; skipping.")
+                continue
+
+            time.sleep(3.0)
             self.get_logger().info(f"Arrived to drop point {idx}")
 
             beacon = self.beacons_nums[idx-1]
@@ -112,7 +134,7 @@ class MissionRunner(DroneController):
 
 def main(args=None):
     rclpy.init(args=args)
-    alt = 10.0
+    alt = 5.0
 
     # SYMUALCJA
     # waypoints = [
@@ -124,22 +146,18 @@ def main(args=None):
     #     ]
     # REAL
     waypoints = [
-        (50.2718290, 18.6703181, alt),
-        (50.2709085, 18.6663970, alt),
-        (50.2685576, 18.6665210, alt),
-        (50.2679101, 18.6694241, alt),
-        (50.2679101, 18.6694241, alt),
-        (50.2681382, 18.6772142, alt),
-        (50.2702439, 18.6769421, alt)
+        (50.2700317, 18.6697820, alt),
+        (50.2695232, 18.6770394, alt),
+        (50.2702870, 18.6766561, alt),
         ]
     drop_points = [
-        (50.270897, 018.674997, alt),
-        (50.270912, 018.674848, alt),
-        # (50.270935, 018.674712, alt),
-        # (50.270967, 018.674578, alt),
+        # (50.270897, 018.674997, alt),
+        # (50.270912, 018.674848, alt),
+        (50.270935, 018.674712, alt),
+        (50.270967, 018.674578, alt),
         ]
 
-    beacons = [1, 2]
+    beacons = [3, 4]
     droppers = [1, 2]
 
     node = MissionRunner(waypoints, drop_points, beacons, droppers, alt)

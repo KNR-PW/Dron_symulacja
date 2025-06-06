@@ -35,7 +35,7 @@ class MissionRunner(DroneController):
         self.droppers_nums = droppers_nums
         self.drop_points = drop_points
 
-        if len(self.beacons_nums) != len(self.waypoints):
+        if len(self.beacons_nums) != len(self.drop_points):
             self.get_logger().error(f"Invalid input data ")
 
         self._latest_image = None
@@ -146,11 +146,19 @@ def main(args=None):
     #     ]
     # REAL
     waypoints = [
-        (50.2723336, 18.6726809, alt),
+        (50.2718290, 18.6703181, alt),
+        (50.2709085, 18.6663970, alt),
+        (50.2685576, 18.6665210, alt),
+        (50.2679101, 18.6694241, alt),
+        (50.2679101, 18.6694241, alt),
+        (50.2681382, 18.6772142, alt),
+        (50.2702439, 18.6769421, alt)
         ]
     drop_points = [
-        (50.2722702, 18.6725146, alt),
-        (50.2723889, 18.6726269, alt),
+        (50.270897, 018.674997, alt),
+        (50.270912, 018.674848, alt),
+        # (50.270935, 018.674712, alt),
+        # (50.270967, 018.674578, alt),
         ]
 
     beacons = [1, 2]
