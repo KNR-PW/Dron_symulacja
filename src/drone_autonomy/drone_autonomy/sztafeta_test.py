@@ -104,38 +104,11 @@ class MissionRunner(DroneController):
             return
         self._mission_started = True
 
-
-        if not self.arm():
-            self.get_logger().error("Arm failed; aborting mission.")
-            return
-        if not self.takeoff(self.flight_alt):
-            self.get_logger().error("Takeoff failed; aborting mission.")
-            return
-
-        time.sleep(2.0)  
-
-        # self.send_goto_relative(0.0, 0.0, 0.0)
-        # self.set_speed(0.8)
-
-        i = 0
-
-        for idx, (north, east, down) in enumerate(self.waypoints, start=1):
-            self.get_logger().info(f"Heading to waypoint {idx}: N={north}, E={east}, D={down}")
-
-            if not self.send_goto_global(north, east, down):
-                self.get_logger().error(f"Goto waypoint {idx} failed; skipping.")
-                continue
-
-            time.sleep(3.0)
-            self.get_logger().error(f"Arrived to waypoint {idx}")
-            i+=1
-            self.send_beacon_msg("b"+str(i)+"r")
-            time.sleep(2.0)
-            self.send_beacon_msg("d"+str(i))
-            time.sleep(2.0)
-
+        idx = 1
+        self.get_logger().info(f"Testing beacon nr {idx}...")
+        self.test_beacon(idx)
+        self.get_logger().info(f"Beacon nr {idx} test done")
             
-        self.rtl()
         return
 
 
