@@ -24,38 +24,17 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-class WebLogger(Node):
-    def __init__(self):
-        super().__init__('web_logger')
-        self.client = self.create_client(PostLog, 'post_log_to_web')
-
-    def log(self, message="Zbiornik został wykryty", level="info"):
-        while not self.client.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info('Waiting for service post_log_to_server...')
-
-        request = PostLog.Request()
-        request.message = message
-        request.level = level
-
-        future = self.client.call_async(request)
-        # rclpy.spin_until_future_complete(self, future)
-
-        # if future.result() is not None:
-        #     if future.result().result:
-        #         self.get_logger().info('Successfully posted web log')
-        #     else:
-        #         self.get_logger().warn(f"Failed to post log")
-        # else:
-        #     self.get_logger().error('Service call failed')
-            
-
 class MissionRunner(DroneController):
-    def __init__(self, waypoints, flight_alt):
+    def __init__(self, waypoints, beacons_nums, flight_alt):
         super().__init__()
 
         self.mission_id = None
         self.waypoints = waypoints
         self.flight_alt = flight_alt
+        self.beacons_nums = beacons_nums
+
+        if len(self.beacons_nums) != len(self.waypoints):
+            self.get_logger().error(f"Invalid input data ")
 
         self._latest_image = None
         self._cv_bridge = CvBridge()
@@ -64,7 +43,6 @@ class MissionRunner(DroneController):
 
         self.dropper_client = self.create_client(Dropper, 'dropper')
 
-        self.web_logger = WebLogger()
 
         threading.Thread(target=self._delayed_start, daemon=True).start()
 
@@ -74,9 +52,9 @@ class MissionRunner(DroneController):
 
 
     def test_beacon(self, num):
-        self.send_beacon_msg("b"+str(num)+"r")
+        self.send_beacon_msg("b"+str(i)+"r")
         time.sleep(2.0)
-        self.send_beacon_msg("d"+str(num))
+        self.send_beacon_msg("d"+str(i))
 
     def send_beacon_msg(self, beacon_msg):
         self.get_logger().info(f"Senting beacon msg: {beacon_msg}")
@@ -99,16 +77,16 @@ class MissionRunner(DroneController):
             self.get_logger().error(f"Exception in beacon msg: {e}")
     
     def _run_mission(self):
+        for idx, (north, east, down), beacon in enumerate(zip(self.waypoints, self.beacons_nums), start=1):
+            self.get_logger().info(f"Heading to waypoint {idx}: N={north}, E={east}, D={down}")
+            self.get_logger().error(f"Arrived to waypoint {idx}")
+            self.send_beacon_msg("b"+str(beacon)+"r")
+            time.sleep(2.0)
+            self.send_beacon_msg("d"+str(beacon))
+            time.sleep(2.0)
 
-        if self._mission_started:
-            return
-        self._mission_started = True
-
-        idx = 1
-        self.get_logger().info(f"Testing beacon nr {idx}...")
-        self.test_beacon(idx)
-        self.get_logger().info(f"Beacon nr {idx} test done")
             
+        self.rtl()
         return
 
 
@@ -126,7 +104,8 @@ def main(args=None):
         # (50.2719005, 18.6444969, alt)
         
         ]
-    node = MissionRunner(waypoints, alt)
+    beacons = [1, 2]
+    node = MissionRunner(waypoints, beacons, alt)
     executor = MultiThreadedExecutor()
     executor.add_node(node)
     try:
