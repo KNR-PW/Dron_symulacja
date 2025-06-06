@@ -10,11 +10,15 @@ class HostHardware(Node):
     def __init__(self):
         super().__init__("HardwareNode")
 
+        self.declare_parameter('uart_port', '/dev/ttyAMA0')
+        self.uart_port = self.get_parameter('uart_port').get_parameter_value().string_value
+
+        self.get_logger().info(f'Connecting on port: {self.uart_port}')
 
         uart_connected = False
         while not uart_connected:
             try:
-                self.uart = serial.Serial("/dev/ttyAMA0", 9600)
+                self.uart = serial.Serial(self.uart_port, 9600)
                 self.get_logger().error(f'serial connected:)')
                 uart_connected = True
             except Exception as e:
