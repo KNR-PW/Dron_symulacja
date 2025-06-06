@@ -2,13 +2,14 @@ import threading
 import time
 from datetime import datetime
 import os
+import lgpio
 
 import rclpy
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
 
 from drone_interfaces.msg import ArucoMarkers, Telemetry
-from drone_interfaces.srv import GetLocationRelative, GetAttitude, SetMode, SetSpeed, TurnOnVideo, TurnOffVideo
+from drone_interfaces.srv import GetLocationRelative, GetAttitude, SetMode, SetSpeed, TurnOnVideo, TurnOffVideo, SpinDCMotor
 from drone_interfaces.action import Arm, Takeoff, GotoRelative, GotoGlobal, SetYawAction
 
 from drone_comunication.drone_controller import DroneController
