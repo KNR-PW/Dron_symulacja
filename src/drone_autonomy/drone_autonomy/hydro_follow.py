@@ -64,11 +64,12 @@ def image_to_ground(point, K, height):
 
 
 class MissionRunner(DroneController):
-    def __init__(self, waypoints):
+    def __init__(self, takeoff_alt):
         super().__init__()
 
+        self.takeoff_alt = takeoff_alt
+
         self.mission_id = None
-        self.waypoints = waypoints
 
         self._latest_image = None
         self._cv_bridge = CvBridge()
@@ -79,6 +80,7 @@ class MissionRunner(DroneController):
         self._mission_started = False
 
         self.pool_found = False
+        self.debug_mode = True
 
         self.camera_instricts = np.array([[3.97045297e+03, 0.00000000e+00, 2.04507985e+03], [0.00000000e+00, 3.97159037e+03, 1.55103947e+03], [0.00000000e+00, 0.00000000e+00, 1.00000000e+00]])
         self.calibration_img_shape = (4056, 3040)
@@ -92,7 +94,7 @@ class MissionRunner(DroneController):
         RESIZE_WIDTH = 640
         LOWER_BLUE = np.array([90,  50,  50], dtype=np.uint8)
         UPPER_BLUE = np.array([130, 255, 255], dtype=np.uint8)
-        MIN_RADIUS = 30
+        MIN_RADIUS = 10
         ROUNDEDNESS = 0.60
 
         KERNEL = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
@@ -122,6 +124,8 @@ class MissionRunner(DroneController):
         frame_small, mask = _preprocess(frame)
         cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if not cnts:
+            if self.debug_mode:
+                print("No contours found.")
             return None
 
         # Largest contour is the most likely pool candidate.
@@ -131,8 +135,12 @@ class MissionRunner(DroneController):
 
         # Quick rejection of small or misshapen blobs.
         if radius < MIN_RADIUS:
-            return  None
+            if self.debug_mode:
+                print(f"Rejected small radius: {radius} < {MIN_RADIUS}")
+            return None
         if area < ROUNDEDNESS * np.pi * radius * radius:
+            if self.debug_mode:
+                print(f"Rejected area: {area} < {ROUNDEDNESS * np.pi * radius * radius}")
             return None
 
         centre = (int(x), int(y))
@@ -149,48 +157,33 @@ class MissionRunner(DroneController):
         if not self.arm():
             self.get_logger().error("Arm failed; aborting mission.")
             return
-        if not self.takeoff(10.0):
+        if not self.takeoff(self.takeoff_alt):
             self.get_logger().error("Takeoff failed; aborting mission.")
             return
 
         time.sleep(2.0)  
 
         self.send_goto_relative(0.0, 0.0, 0.0)
-        self.set_speed(0.8)
+        self.set_speed(0.6)
 
-        for idx, (north, east, down) in enumerate(self.waypoints, start=1):
-            self.get_logger().info(f"Heading to waypoint {idx}: N={north}, E={east}, D={down}")
-
-            if not self.send_goto_global(north, east, down):
-                self.get_logger().error(f"Goto waypoint {idx} failed; skipping.")
-                continue
-
-            time.sleep(3.0)
-            
+        while True:
+            self.pool_found = False
             pool_data = self.detect_pool()
             if pool_data is not None:
                 self.pool_found = True
-                self.get_logger().info(f"Pool detected at waypoint {idx} with data: {pool_data}")
-                break
+                self.get_logger().info(f"Pool detected with data: {pool_data}")
+        
+                pool_position = pool_data[:2]
+                pool_radius = pool_data[2]
 
-            # Small pause before next waypoint
-            time.sleep(1.0)
+                scaled_instricts = scale_intrinsics(self.camera_instricts, self.calibration_img_shape, self._latest_image.shape[:2])
+                alt = self.alt
 
-        if not self.pool_found:
-            self.get_logger().info("No pool detected in the waypoints. Returning to home.")
-            self.rtl()   
-            return
-        else:
-            pool_position = pool_data[:2]
-            pool_radius = pool_data[2]
-
-            scaled_instricts = scale_intrinsics(self.camera_instricts, self.calibration_img_shape, self._latest_image.shape[:2])
-            alt = self.alt
-
-            X_rel, Y_rel = image_to_ground(pool_position, scaled_instricts, alt)
-            self.get_logger().info(f"Pool position in ground coordinates: X={X_rel}, Y={Y_rel}, Alt={alt}")
-            # time.sleep(10)
-            self.send_goto_relative(X_rel, Y_rel, 0.0)
+                X_rel, Y_rel = image_to_ground(pool_position, scaled_instricts, alt)
+                self.get_logger().info(f"Pool position in ground coordinates: X={X_rel}, Y={Y_rel}, Alt={alt}")
+                # time.sleep(10)
+                self.send_goto_relative(X_rel, Y_rel, 0.0)
+            time.sleep(5.0)
 
             
         self.rtl()
@@ -210,18 +203,10 @@ class MissionRunner(DroneController):
 
 def main(args=None):
     rclpy.init(args=args)
+
     alt = 10.0
-    # waypoints = [(2.0, 0.0, 0.0), (0.0, 3.0, 0.0), (-2.0, 0.0, 0.0), (0.0, -3.0, 0.0)]
-    waypoints = [
-        (-35.363319396972656, 149.16531372070312, 10),
-        (-35.36327258544922, 149.16510009765625, 10)
-        # (50.2715662, 18.6443051, alt),
-        # (50.2714623, 18.6442565, alt),
-        # (50.2717372, 18.6440945, alt),
-        # (50.2719005, 18.6444969, alt)
-        
-        ]
-    node = MissionRunner(waypoints)
+
+    node = MissionRunner(alt)
     executor = MultiThreadedExecutor()
     executor.add_node(node)
     try:
