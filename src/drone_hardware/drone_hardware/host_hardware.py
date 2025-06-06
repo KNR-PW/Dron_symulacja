@@ -19,7 +19,7 @@ class HostHardware(Node):
         while not uart_connected:
             try:
                 self.uart = serial.Serial(self.uart_port, 9600)
-                self.get_logger().error(f'serial connected:)')
+                self.get_logger().info(f'serial connected:)')
                 uart_connected = True
             except Exception as e:
                 self.get_logger().error(f'Error while opening serial: {e}')

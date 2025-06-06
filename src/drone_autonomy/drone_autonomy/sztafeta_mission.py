@@ -25,13 +25,14 @@ import cv2
 import numpy as np
 
 class MissionRunner(DroneController):
-    def __init__(self, waypoints, beacons_nums, flight_alt):
+    def __init__(self, waypoints, beacons_nums, droppers_nums, flight_alt):
         super().__init__()
 
         self.mission_id = None
         self.waypoints = waypoints
         self.flight_alt = flight_alt
         self.beacons_nums = beacons_nums
+        self.droppers_nums = droppers_nums
 
         if len(self.beacons_nums) != len(self.waypoints):
             self.get_logger().error(f"Invalid input data ")
@@ -92,11 +93,6 @@ class MissionRunner(DroneController):
 
         time.sleep(2.0)  
 
-        # self.send_goto_relative(0.0, 0.0, 0.0)
-        # self.set_speed(0.8)
-
-        i = 0
-
         for idx, (north, east, down) in enumerate(self.waypoints, start=1):
             self.get_logger().info(f"Heading to waypoint {idx}: N={north}, E={east}, D={down}")
 
@@ -105,11 +101,15 @@ class MissionRunner(DroneController):
                 continue
 
             time.sleep(3.0)
-            self.get_logger().error(f"Arrived to waypoint {idx}")
+            self.get_logger().info(f"Arrived to waypoint {idx}")
+
             beacon = self.beacons_nums[idx-1]
+            dropper = self.droppers_nums[idx-1]
+
+            self.get_logger().info(f"Sending beacon message for beacon {beacon} and dropper {dropper}")
             self.send_beacon_msg("b"+str(beacon)+"r")
             time.sleep(2.0)
-            self.send_beacon_msg("d"+str(beacon))
+            self.send_beacon_msg("d"+str(dropper))
             time.sleep(2.0)
 
             
@@ -132,6 +132,8 @@ def main(args=None):
         
         ]
     beacons = [1, 2]
+    droppers = [1, 2]
+    
     node = MissionRunner(waypoints, beacons, alt)
     executor = MultiThreadedExecutor()
     executor.add_node(node)
