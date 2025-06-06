@@ -97,7 +97,7 @@ class MissionRunner(DroneController):
 
         i = 0
 
-        for idx, (north, east, down), beacon in enumerate(zip(self.waypoints, self.beacons_nums), start=1):
+        for idx, (north, east, down) in enumerate(self.waypoints, start=1):
             self.get_logger().info(f"Heading to waypoint {idx}: N={north}, E={east}, D={down}")
 
             if not self.send_goto_global(north, east, down):
@@ -106,6 +106,7 @@ class MissionRunner(DroneController):
 
             time.sleep(3.0)
             self.get_logger().error(f"Arrived to waypoint {idx}")
+            beacon = self.beacons_nums[idx-1]
             self.send_beacon_msg("b"+str(beacon)+"r")
             time.sleep(2.0)
             self.send_beacon_msg("d"+str(beacon))
