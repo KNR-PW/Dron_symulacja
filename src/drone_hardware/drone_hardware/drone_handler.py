@@ -363,14 +363,14 @@ class DroneHandler(Node):
         feedback_msg.distance = self.get_distance_global(self.vehicle.location.global_relative_frame, destination)
         self.get_logger().info(f"Distance remaining: {feedback_msg.distance} m")
 
-        while feedback_msg.distance>0.5:
+        while feedback_msg.distance>2:
             if goal_handle.is_cancel_requested:
                 goal_handle.canceled()
                 self.get_logger().info('Goal canceled')
                 return GotoGlobal.Result()
 
             feedback_msg.distance = self.get_distance_global(self.vehicle.location.global_relative_frame, destination)
-            # self.get_logger().info(f"Distance remaining: {feedback_msg.distance} m")
+            self.get_logger().info(f"Distance remaining: {feedback_msg.distance} m")
             time.sleep(1)
 
         goal_handle.succeed()

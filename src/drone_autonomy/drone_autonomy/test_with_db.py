@@ -114,21 +114,7 @@ class MissionRunner(DroneController):
                     cv2.circle(debug_img, (x, y), 20, (0, 0, 255), 3)
                     debug_img_path = os.path.abspath(f"./aruco_{self._marker_id}_{int(time.time())}_debug.jpg")
                     cv2.imwrite(debug_img_path, debug_img)
-                    self.get_logger().info(f"Saved debug image with marker center to {debug_img_path}")
-
-                    # Define padding (in pixels) around marker
-                    padding = 120  # Increased padding for better visibility
-                    # Estimate marker size (if available), else use default
-                    marker_size = 180  # Increased marker size for larger crop
-                    # Compute crop boundaries and ensure they are within image bounds
-                    # Reverse vertical axis (y) if needed: OpenCV images have (0,0) at top-left,
-                    # but if marker y is from bottom, flip it.
-                    x1 = max(x - marker_size // 2 - padding, 0)
-                    # Revert vertical axis: OpenCV (0,0) is top-left, but if marker y is from bottom, flip it
-                    y_img = img.shape[0] - int(round(self._marker_pose.position.y))
-                    y1 = max(y_img - marker_size // 2 - padding, 0)
-                    x2 = min(x + marker_size // 2 + padding, img.shape[1])
-                    y2 = min(y + marker_size // 2 + padding, img.shape[0])
+                    self.get_logger().info(f"Saved debug imadebug_imgding, img.shape[0]")
                     # Ensure x1 < x2 and y1 < y2
                     if x2 > x1 and y2 > y1:
                         cropped_img = img[y1:y2, x1:x2]

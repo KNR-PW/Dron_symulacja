@@ -11,7 +11,7 @@ from drone_interfaces.action import GotoRelative, GotoGlobal, Shoot, Arm, Takeof
 from std_msgs.msg import Int32MultiArray
 import time
 from rclpy.action import ActionClient
-import haversine as hv
+import haversine as hv, Unit
 import math
 
 class Detection:
@@ -480,12 +480,11 @@ class Mission(Node):
             return res
 
 
-    # using haversine formula, dronekit's doesn't work in some cases
     def get_distance_global(self, aLocation1, aLocation2):
         coord1 = (aLocation1.lat, aLocation1.lon)
         coord2 = (aLocation2.lat, aLocation2.lon)
 
-        return hv.haversine(coord1, coord2)*1000 # because we want it in metres
+        return hv.haversine(coord1, coord2, unit=Unit.METERS)
 
     def rtl_and_land(self):
         gps = self.get_gps()

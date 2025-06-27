@@ -1,5 +1,5 @@
 string json_update
-sensor_msgs/Image[] images
+string[] images_list
 ---
 bool success
 string message

@@ -3,10 +3,13 @@ from rclpy.node import Node
 from drone_interfaces.srv import CreateReport, UpdateReport
 import requests
 import json
+import cv2
+import io
+import os
 
 class RosReportWebsite(Node):
     def __init__(self):
-        super().__init__('ros_mission_report')
+        super().__init__('ros_report_website')
 
         self.declare_parameter('base_url', 'http://localhost:5000')
         self.web_app_base_url = self.get_parameter('base_url').get_parameter_value().string_value
@@ -39,6 +42,10 @@ class RosReportWebsite(Node):
         return response
 
     def handle_update_report(self, request, response):
+        images_list = getattr(request, 'images_list', None)
+        if images_list:
+            self.get_logger().info(f"Posting {len(images_list)} images to server...")
+            self.post_images_to_server(images_list)
         try:
             update_data = json.loads(request.json_update)
             res = requests.post(f"{self.web_app_base_url}/api/report/update", json=update_data)
@@ -50,20 +57,28 @@ class RosReportWebsite(Node):
         return response
 
     def post_images_to_server(self, images_list):
-        for image in images_list:
-            _, buffer = cv2.imencode('.jpg', self.image)  # Encode as JPEG (or PNG)
-            file_bytes = io.BytesIO(buffer.tobytes())  # Wrap in a file-like object
-
-            files = {
-                'image': ('image.jpg', file_bytes, 'image/jpeg')  # filename, fileobj, MIME type
-            }
-
-            # Send the POST request
+        self.get_logger().info(f"Posting {images_list} images to server...")
+        # images_list is a list of image filepaths
+        images_list_read = [cv2.imread(img_path) for img_path in images_list]
+        for idx, image in enumerate(images_list_read):
             try:
+                filename = images_list[idx].split("/")[-1]
+                self.get_logger().info(f"Posting image {filename}")
+                # Encode the image as JPEG
+                _, buffer = cv2.imencode('.jpg', image)
+                file_bytes = io.BytesIO(buffer.tobytes())
+
+                files = {
+                    'image': (filename, file_bytes, 'image/jpeg')
+                }
+
                 response = requests.post(f"{self.web_app_base_url}/api/report/image", files=files)
-                self.get_logger().debug(f"Status image post: {response.status_code}")
+                if response.status_code == 200:
+                    self.get_logger().debug(f"✅ Successfully posted image {idx+1}/{len(images_list)}")
+                else:
+                    self.get_logger().warn(f"⚠️ Failed to post image {idx+1}: {response.status_code} {response.text}")
             except Exception as e:
-                self.get_logger().warn(f"❌ Failed to post image. Server is not available: {e}")
+                self.get_logger().warn(f"❌ Exception posting image {idx+1}: {e}")
 
 def main(args=None):
     rclpy.init(args=args)

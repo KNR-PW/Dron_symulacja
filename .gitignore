@@ -42,3 +42,5 @@ drone_data.db*
 
 saved_images/
 saved_videos/
+*.jpg
+*.png

@@ -14,21 +14,6 @@ web_telemetry = Node(
            ]
         )
     
-web_inspekcja = Node(
-           package='drone_web',
-           executable='ros_report_website',
-           parameters=[
-               {'base_url': 'https://inspekcja-osadniik.pythonanywhere.com/'}
-           ]
-        )
-
-mission_reporter = Node(
-        package='droniada_inspekcja',
-        executable='mission_reporter',
-        parameters=[
-            {'db_path': 'drone_data.db'}
-        ]
-    )
 def generate_launch_description():
     log_dir = os.path.expanduser('~/ros2_logs')  # Folder na logi
     os.makedirs(log_dir, exist_ok=True) 
@@ -39,7 +24,7 @@ def generate_launch_description():
             parameters=[
                 {'camera_topic': 'camera/image_raw'},
                 # {'camera_topic': 'camera'},
-                {'required_nodes': ['aruco_node', 'ros_mission_website', 'ros_report_website', 'mission_reporter']}
+                {'required_nodes': ['ros_mission_website']}
             ],
         )
 
@@ -97,15 +82,6 @@ def generate_launch_description():
                # {'camera_topic': 'camera'}
            ]
        ),
-    #    Node(
-    #        package='drone_web',
-    #        executable='ros_mission_website',
-    #        parameters=[
-    #            {'base_url': 'https://telemetria-osadniik.pythonanywhere.com/'}
-    #        ]
-    #     ),
-       healthcheck_action,
+        healthcheck_action,
         web_telemetry,
-        web_inspekcja,
-        mission_reporter,
     ])

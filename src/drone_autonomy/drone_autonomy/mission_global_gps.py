@@ -10,29 +10,29 @@ from drone_comunication.drone_controller import DroneController
 from drone_interfaces.msg import ArucoMarkers
 from drone_interfaces.srv import PostLog
 
-class WebLogger(Node):
-    def __init__(self):
-        super().__init__('web_logger')
-        self.client = self.create_client(PostLog, 'post_log_to_web')
+# class WebLogger(Node):
+#     def __init__(self):
+#         super().__init__('web_logger')
+#         self.client = self.create_client(PostLog, 'post_log_to_web')
 
-    def log(self, message, level="info"):
-        while not self.client.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info('Waiting for service post_log_to_server...')
+#     def log(self, message, level="info"):
+#         while not self.client.wait_for_service(timeout_sec=1.0):
+#             self.get_logger().info('Waiting for service post_log_to_server...')
 
-        request = PostLog.Request()
-        request.message = message
-        request.level = level
+#         request = PostLog.Request()
+#         request.message = message
+#         request.level = level
 
-        future = self.client.call_async(request)
-        rclpy.spin_until_future_complete(self, future)
+#         future = self.client.call_async(request)
+#         rclpy.spin_until_future_complete(self, future)
 
-        if future.result() is not None:
-            if future.result().result:
-                self.get_logger().info('Successfully posted web log')
-            else:
-                self.get_logger().warn(f"Failed to post log")
-        else:
-            self.get_logger().error('Service call failed')
+#         if future.result() is not None:
+#             if future.result().result:
+#                 self.get_logger().info('Successfully posted web log')
+#             else:
+#                 self.get_logger().warn(f"Failed to post log")
+#         else:
+#             self.get_logger().error('Service call failed')
             
 
 class ArucoMissionNode(DroneController):
@@ -51,7 +51,7 @@ class ArucoMissionNode(DroneController):
         # Delay mission start by 1s to allow connections
         # self._mission_timer = self.create_timer(1.0, self._mission_entry)
         # self.web_logger = WebLogger()
-        self.web_logger.log("Aruco mission node started", "info")
+        # self.web_logger.log("Aruco mission node started", "info")
         self._mission_started = False
         self.i = 0
 
@@ -184,75 +184,46 @@ def main(args=None):
 
     node = ArucoMissionNode()
 
-    # # Spin node in a separate thread to get subscription callbacks
     executor = MultiThreadedExecutor(num_threads=2)
     executor.add_node(node)
     spin_thread = threading.Thread(target=executor.spin, daemon=True)
     spin_thread.start()
-    
-    # # node.arm()
 
-    # node.start_mission()
     node.start_video()
 
+    alt = 10.0
+
+    # Start
     node.arm()
-    node.takeoff(5.0)
-    node.send_goto_relative(0.0, 0.0, 0.0)
+    node.takeoff(alt)
     node.set_speed(0.5)
-    
-    node.send_goto_global(50.27228213642658, 18.672786340141236, 10)
-    
-    node.send_goto_global(50.27217242065779, 18.672783657932438, 10)
-    
-    node.send_goto_global(50.27217927790075, 18.67259590331664, 10)
-    
-    node.send_goto_global(50.27229585087989, 18.67277292909725, 10)
 
+    # Lista punktów GPS (lat, lon, alt)
+    gps_points = [
+        (50.2715662, 18.6443051, alt),
+        (50.2714623, 18.6442565, alt),
+        (50.2717372, 18.6440945, alt),
+        (50.2719005, 18.6444969, alt),
+        # (50.2727532435, 18.6711853532, alt),
+        # (50.2727532435, 18.6710433263, alt),
+        # (50.27281008297, 18.6710433263, alt),
+        # (50.27281008297, 18.6711853532, alt)
+    ]
 
-    # node.send_goto_relative(0.0, 0.0, 0.0
-    # node.send_goto_relative(3.0, 0.0, 0.0)
-    # node.set_speed(0.5)
-    # node.send_goto_relative(0.0, 3.0, 0.0)
-    # node.set_speed(0.8)
-    # node.send_goto_relative(-3.0, -3.0, 0.0)
-    time.sleep(3)
-    # node.set_speed(0.03)
-    # node.send_goto_relative(0.0, 5.0, 0.0)
-    
-    # node.set_speed(0.5)
-    # node.send_goto_relative(0.0, 2.0, 0.0)
-    # node.send_goto_relative(0.0, 0.0, 0.0)
-    # node.send_set_yaw(2.0)
+    # Przelot przez wszystkie punkty
+    for lat, lon, altitude in gps_points:
+        node.get_logger().info(f'Flying to: {lat}, {lon}')
+        node.send_goto_global(lat, lon, altitude)
+        time.sleep(4) 
+
+    # Powrót do domu
     node.rtl()
     node.stop_video()
-    # print(node.i)
 
-# ASYNC
-    # executor = MultiThreadedExecutor()
-    # executor.add_node(node)
-
-    # # Start the asyncio event loop manually
-    # async def run_async():
-    #     node.start_mission_async()
-    #     while rclpy.ok():
-    #         rclpy.spin_once(node, timeout_sec=0.1)
-    #         await asyncio.sleep(0.01)  # Yield control to asyncio
-
-    # try:
-    #     asyncio.run(run_async())
-    # finally:
-    #     node.destroy_node()
-    #     rclpy.shutdown()
-
-
-
-    # Shut down the executor and node
-    # This is important to ensure all threads are cleaned up properly
     executor.shutdown()
     node.destroy_node()
     rclpy.shutdown()
     spin_thread.join()
-
 
 if __name__ == '__main__':
     main()

@@ -10,30 +10,6 @@ from drone_comunication.drone_controller import DroneController
 from drone_interfaces.msg import ArucoMarkers
 from drone_interfaces.srv import PostLog
 
-class WebLogger(Node):
-    def __init__(self):
-        super().__init__('web_logger')
-        self.client = self.create_client(PostLog, 'post_log_to_web')
-
-    def log(self, message, level="info"):
-        while not self.client.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info('Waiting for service post_log_to_server...')
-
-        request = PostLog.Request()
-        request.message = message
-        request.level = level
-
-        future = self.client.call_async(request)
-        rclpy.spin_until_future_complete(self, future)
-
-        if future.result() is not None:
-            if future.result().result:
-                self.get_logger().info('Successfully posted web log')
-            else:
-                self.get_logger().warn(f"Failed to post log")
-        else:
-            self.get_logger().error('Service call failed')
-            
 
 class ArucoMissionNode(DroneController):
     def __init__(self):
@@ -197,57 +173,14 @@ def main(args=None):
 
     node.arm()
     node.takeoff(5.0)
-    node.send_goto_relative(0.0, 0.0, 0.0)
     node.set_speed(0.5)
     
-    node.send_goto_global(50.27228213642658, 18.672786340141236, 10)
-    
-    node.send_goto_global(50.27217242065779, 18.672783657932438, 10)
-    
-    node.send_goto_global(50.27217927790075, 18.67259590331664, 10)
-    
-    node.send_goto_global(50.27229585087989, 18.67277292909725, 10)
-
-
-    # node.send_goto_relative(0.0, 0.0, 0.0
-    # node.send_goto_relative(3.0, 0.0, 0.0)
-    # node.set_speed(0.5)
-    # node.send_goto_relative(0.0, 3.0, 0.0)
-    # node.set_speed(0.8)
-    # node.send_goto_relative(-3.0, -3.0, 0.0)
-    time.sleep(3)
-    # node.set_speed(0.03)
-    # node.send_goto_relative(0.0, 5.0, 0.0)
-    
-    # node.set_speed(0.5)
-    # node.send_goto_relative(0.0, 2.0, 0.0)
-    # node.send_goto_relative(0.0, 0.0, 0.0)
-    # node.send_set_yaw(2.0)
-    node.rtl()
+    node.send_goto_global()
+ 
+    node.land()
     node.stop_video()
     # print(node.i)
 
-# ASYNC
-    # executor = MultiThreadedExecutor()
-    # executor.add_node(node)
-
-    # # Start the asyncio event loop manually
-    # async def run_async():
-    #     node.start_mission_async()
-    #     while rclpy.ok():
-    #         rclpy.spin_once(node, timeout_sec=0.1)
-    #         await asyncio.sleep(0.01)  # Yield control to asyncio
-
-    # try:
-    #     asyncio.run(run_async())
-    # finally:
-    #     node.destroy_node()
-    #     rclpy.shutdown()
-
-
-
-    # Shut down the executor and node
-    # This is important to ensure all threads are cleaned up properly
     executor.shutdown()
     node.destroy_node()
     rclpy.shutdown()

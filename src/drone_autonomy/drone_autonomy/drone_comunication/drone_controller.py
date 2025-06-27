@@ -52,6 +52,13 @@ class DroneController(Node):
         self._voltage_spikes = 0
         self._voltage_threshold = 12.0
 
+        self.global_lat = 0.0
+        self.global_lon = 0.0
+        self.global_alt = 0.0
+        self.lat = 0.0
+        self.lon = 0.0
+        self.alt = 0.0
+
     def _wait_for_service(self, client, name=""):
         while not client.wait_for_service(timeout_sec=1.0):
             self.get_logger().warn(f'Waiting for {name} service...')
@@ -103,12 +110,18 @@ class DroneController(Node):
         goal.altitude = altitude
         return self._send_action(self._takeoff_client, goal)
 
-    def send_goto_relative(self, north: float, east: float, down: float) -> bool:
+    def send_goto_relative(self, north, east, down) -> bool:
+        north = float(north)
+        east = float(east)
+        down = float(down)
         self.get_logger().info(f'Moving relative N:{north}, E:{east}, D:{down}')
         goal = GotoRelative.Goal(north=north, east=east, down=down)
         return self._send_action(self._goto_rel_client, goal)
 
-    def send_goto_global(self, lat: float, lon: float, alt: float) -> bool:
+    def send_goto_global(self, lat, lon, alt) -> bool:
+        lat = float(lat)
+        lon = float(lon)
+        alt = float(alt)
         self.get_logger().info(f'Moving global LAT:{lat}, LON:{lon}, ALT:{alt}')
         goal = GotoGlobal.Goal(lat=lat, lon=lon, alt=alt)
         return self._send_action(self._goto_glob_client, goal)
@@ -182,6 +195,9 @@ class DroneController(Node):
         self.lat = msg.lat
         self.lon = msg.lon
         self.alt = msg.alt
+        self.global_lat = msg.global_lat
+        self.global_lon = msg.global_lon
+        self.speed = msg.speed
         self.flight_mode = msg.flight_mode
         if msg.battery_voltage < self._voltage_threshold:
             self._voltage_spikes += 1
