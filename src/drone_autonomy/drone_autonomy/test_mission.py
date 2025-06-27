@@ -42,7 +42,7 @@ class PID:
     def get_kie(self):
         return self.ki*self.integral_error
 
-from drone_comunication.drone_controller import DroneController
+from drone_comunication import DroneController
 
 
 
