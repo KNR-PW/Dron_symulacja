@@ -16,6 +16,9 @@ find_package(sensor_msgs REQUIRED)
 # find_package(<dependency> REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/ArucoMarkers.msg"
+  "msg/MiddleOfAruco.msg"
+  "msg/VelocityVectors.msg"
+  "msg/AxisAngle.msg"
   "msg/Telemetry.msg"
   "srv/Dropper.srv"
   "srv/GetAttitude.srv"
@@ -25,6 +28,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/SetMode.srv"
   "srv/SetSpeed.srv"
   "srv/GetGpsPos.srv"
+  "srv/ToggleVelocityControl.srv"
   "srv/SpinDCMotor.srv"
   "srv/PostLog.srv"
   "srv/TurnOnVideo.srv"

@@ -2,7 +2,8 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
 from std_msgs.msg import String
-from drone_interfaces.msg import ArucoMarker, ArucoMarkersList
+#from drone_interfaces.msg import ArucoMarker, ArucoMarkersList
+from drone_interfaces.msg import MiddleOfAruco
 from cv_bridge import CvBridge
 import cv2
 import cv2.aruco as aruco
@@ -22,7 +23,7 @@ class ArucoDetector(Node):
             10)
 
         # Create the publisher for Aruco marker data
-        self.publisher = self.create_publisher(ArucoMarkersList, 'aruco_markers', 10)
+        self.publisher = self.create_publisher(MiddleOfAruco, 'aruco_markers', 10)
 
         self.br = CvBridge()
         self.get_logger().info('aruco_detector node created')
@@ -42,17 +43,31 @@ class ArucoDetector(Node):
         # Detect the markers in the image
         corners, ids, rejectedImgPoints = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
 
-        aruco_markers_list = ArucoMarkersList()
+        #aruco_markers_list = ArucoMarkersList()
+        middle_of_aruco = MiddleOfAruco()
+        mid = [0,0]
         if ids is not None:
             for i in range(len(ids)):
                 marker_id = ids[i][0]
                 marker_corners = corners[i].flatten().tolist()
-                aruco_marker = ArucoMarker()
-                aruco_marker.marker_id = int(marker_id)
-                aruco_marker.corners = marker_corners
-                aruco_markers_list.aruco_markers.append(aruco_marker)
+                #aruco_marker = ArucoMarker()
+                #aruco_marker.marker_id = int(marker_id)
+                #aruco_marker.corners = marker_corners
+                #aruco_markers_list.aruco_markers.append(aruco_marker)
+                
+                middle_of_aruco.x = int((marker_corners[0]+marker_corners[4])/2)
+                middle_of_aruco.y = int((marker_corners[1]+marker_corners[5])/2)
+                mid = [int((marker_corners[0]+marker_corners[4])/2),int((marker_corners[1]+marker_corners[5])/2)]
                 self.get_logger().info(f'Marker ID: {marker_id}, corners: {marker_corners}')
-        self.publisher.publish(aruco_markers_list)
+        #self.publisher.publish(aruco_markers_list)
+
+        current_frame = cv2.circle(current_frame,(mid[0],mid[1]),radius = 5,color=(255,0,0), thickness=-1)
+        
+        #cv2.imshow("camera", current_frame)
+
+        #cv2.waitKey(1)
+        self.get_logger().info('widze zdj')
+        self.publisher.publish(middle_of_aruco)
 
 
 def main(args=None):
