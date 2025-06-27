@@ -1,0 +1,3 @@
+int32 beacon_number
+---
+bool error

@@ -18,42 +18,59 @@ def generate_launch_description():
         ros2_supervisor=True
     )
 
-
-    sim_manager_description_path = os.path.join(sim_package_dir, 'resource', 'webots_sim_manager.urdf')
-    ros2_webots_sim_manager = WebotsController(
-        robot_name='ros2_sim_manager',
-        parameters=[
-            {'robot_description': sim_manager_description_path},
-        ],
-        respawn=True
-    )
-
     drone_handler_node = Node(
             package='drone_hardware',
             executable='drone_handler',
             parameters=[
                 {'fc_ip': 'tcp:127.0.0.1:5762'}
             ]
-
         )
 
+    aruco_node = Node(
+            package='ros2_aruco',
+            executable='aruco_node',
+        )
+
+    healthcheck = Node(
+            package='drone_hardware',
+            executable='healthcheck',
+        )
     # Delay running drone_handler to wain for  webots init
     drone_handler_node_action = TimerAction(
-            period=5.0,  # Delay of 5 seconds
+            period=10.0,
             actions=[
-                drone_handler_node
+                drone_handler_node,
+                aruco_node
             ]
         )
+
+    healthcheck_action = TimerAction(
+            period=16.0,
+            actions=[
+                healthcheck
+            ]
+        )
+
+    web_telemetry = Node(
+           package='drone_web',
+           executable='ros_mission_website',
+           parameters=[
+               {'base_url': 'https://telemetria-osadniik.pythonanywhere.com/',
+                "camera_topic": 'camera',}
+           ]
+        )
+
     return LaunchDescription([
         DeclareLaunchArgument(
             'world',
-            default_value='mars_mines_2.wbt',
+            default_value='aruco_tests.wbt',
             description='Choose one of the world files from `/webots_simulation/resource/worlds` directory'
         ),
         webots,
         webots._supervisor,
-        ros2_webots_sim_manager,
         drone_handler_node_action,
+        web_telemetry,
+        healthcheck_action,
 
         # This action will kill all nodes once the Webots simulation has exited
         launch.actions.RegisterEventHandler(

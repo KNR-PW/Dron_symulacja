@@ -1,6 +1,0 @@
-string box_def
-geometry_msgs/Point translation
-AxisAngle rotation
-geometry_msgs/Vector3 size
----
-int8 result

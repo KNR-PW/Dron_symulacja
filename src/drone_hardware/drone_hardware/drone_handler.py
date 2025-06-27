@@ -10,9 +10,11 @@ from rclpy.node import Node
 from rclpy.action import ActionServer,  CancelResponse,  GoalResponse
 from rclpy.executors import MultiThreadedExecutor
 
+
 from drone_interfaces.msg import Telemetry, VelocityVectors
-from drone_interfaces.srv import GetAttitude, GetLocationRelative, SetServo, SetYaw, SetMode, SetSpeed, ToggleVelocityControl
-from drone_interfaces.action import GotoRelative, GotoGlobal, Arm, Takeoff, Shoot, SetYawAction
+from drone_interfaces.srv import GetAttitude, GetLocationRelative, SetServo, SetYaw, SetMode, SetSpeed, GetGpsPos, ToggleVelocityControl
+from drone_interfaces.action import GotoRelative, GotoGlobal, Arm, Takeoff, SetYawAction, Shoot
+
 
 import haversine as hv
 class DroneHandler(Node):
@@ -28,6 +30,7 @@ class DroneHandler(Node):
         ## DECLARE SERVICES
         self.attitude = self.create_service(GetAttitude, 'get_attitude', self.get_attitude_callback)
         self.gps = self.create_service(GetLocationRelative, 'get_location_relative', self.get_location_relative_callback)
+        self.gps_abs = self.create_service(GetGpsPos, 'get_gps', self.get_gps_callback)
         self.servo = self.create_service(SetServo, 'set_servo', self.set_servo_callback)
         self.create_service(SetSpeed, 'set_speed', self.set_speed_callback)
         #self.yaw = self.create_service(SetYaw, 'set_yaw', self.set_yaw_callback)
@@ -38,7 +41,7 @@ class DroneHandler(Node):
         self.goto_global = ActionServer(self, GotoGlobal, 'goto_global', self.goto_global_action, cancel_callback=self.cancel_callback)
         self.arm = ActionServer(self,Arm, 'Arm',self.arm_callback)
         self.takeoff = ActionServer(self, Takeoff, 'takeoff',self.takeoff_callback, cancel_callback=self.cancel_callback)
-        self.shoot = ActionServer(self, Shoot, 'shoot', self.shoot_callback)
+        # self.shoot = ActionServer(self, Shoot, 'shoot', self.shoot_callback)
         self.yaw = ActionServer(self, SetYawAction, 'Set_yaw', self.yaw_callback, cancel_callback=self.cancel_callback)
 
         #DECLARE PUBLISHER
@@ -72,6 +75,7 @@ class DroneHandler(Node):
         dev = self.get_parameter('dev').get_parameter_value().string_value
         if dev == "true":
             self.dev_mode = True
+            self.get_logger().warn("DEV MODE is enabled.")
         #connection_string = 'tcp:127.0.0.1:5762'
         sitl = None
 
@@ -85,48 +89,63 @@ class DroneHandler(Node):
                 # self.vehicle = connect(connection_string, baud=115200, wait_ready=True)
                 self.vehicle = connect(connection_string, baud=57600, wait_ready=False)
             except Exception as e:
-                self.get_logger().info(f"Connecting failed with error: {e}")
+                self.get_logger().error(f"Connecting failed with error: {e}")
                 self.get_logger().info("Retrying to connect in {3} seconds...")
                 time.sleep(3)
-        print(self.vehicle)
+        if not self.dev_mode:
+            self.wait_fc_ready()
         self.state = "OK"
-        self.get_logger().info("Copter connected, ready to arm")
+        self.get_logger().info("\033[92mCopter connected, ready to arm")
         
-        self.timer = self.create_timer(2.5, self.telemetry_callback)
+        self.timer = self.create_timer(.1, self.telemetry_callback)
 
+    def wait_fc_ready(self):
+        fc_ready = False
+        while not fc_ready:
+            try:
+                self.get_logger().info("Waiting for FC to be ready...")
+                if self.vehicle.is_armable:
+                    fc_ready = True
+                    self.get_logger().info("\033[92mFC is ready")
+                else:
+                    time.sleep(1)
+            except Exception as e:
+                self.get_logger().info(f"Error while waiting for FC to be ready: {e}")
+                time.sleep(1)
     def __del__(self):
         if self.vehicle:
             self.vehicle.mode=VehicleMode("RTL")
 
-    def shoot_callback(self, goal_handle):
-        self.get_logger().info(f"Incoming shoot goal for color: {goal_handle.request.color}")
-        stop = 1000
-        shoot = 1200
-        load =1500
+    # DEPRECATED SHOOT ACTION
+    # def shoot_callback(self, goal_handle):
+    #     self.get_logger().info(f"Incoming shoot goal for color: {goal_handle.request.color}")
+    #     stop = 1000
+    #     shoot = 1200
+    #     load =1500
 
-        left = 2000
-        mid = 1400
-        right = 800
+    #     left = 2000
+    #     mid = 1400
+    #     right = 800
 
-        self.set_servo(10,stop)
-        self.set_servo(11,stop)
-        time.sleep(1)
-        self.set_servo(9,left if goal_handle.request.color == 'yellow' else right)
-        self.set_servo(10,load)
-        self.set_servo(11,load)
-        time.sleep(2)
-        self.set_servo(10,shoot)
-        self.set_servo(11,shoot)
-        self.set_servo(9,mid - 300 if goal_handle.request.color == 'yellow' else mid+300)
-        time.sleep(1)
-        self.set_servo(10,stop)
-        self.set_servo(11,stop)
-        self.set_servo(9,mid)
+    #     self.set_servo(10,stop)
+    #     self.set_servo(11,stop)
+    #     time.sleep(1)
+    #     self.set_servo(9,left if goal_handle.request.color == 'yellow' else right)
+    #     self.set_servo(10,load)
+    #     self.set_servo(11,load)
+    #     time.sleep(2)
+    #     self.set_servo(10,shoot)
+    #     self.set_servo(11,shoot)
+    #     self.set_servo(9,mid - 300 if goal_handle.request.color == 'yellow' else mid+300)
+    #     time.sleep(1)
+    #     self.set_servo(10,stop)
+    #     self.set_servo(11,stop)
+    #     self.set_servo(9,mid)
 
-        self.get_logger().info("Shoot action completed:" + goal_handle.request.color)
-        goal_handle.succeed()
-        result = Shoot.Result()
-        return result
+    #     self.get_logger().info("Shoot action completed:" + goal_handle.request.color)
+    #     goal_handle.succeed()
+    #     result = Shoot.Result()
+    #     return result
 
     ## INTERNAL HELPER METHODS
     def goto_position_target_local_ned( self, north, east, down=-1):
@@ -172,6 +191,24 @@ class DroneHandler(Node):
         # send command to vehicle
         self.vehicle.send_mavlink(msg)
 
+    def get_gps_callback(self, request, response):
+        self.get_logger().info(f"-- Get GPS service called --")
+        try:
+            if self.vehicle.location.global_frame:
+                lat = self.vehicle.location.global_frame.lat
+                lon = self.vehicle.location.global_frame.lon
+                alt = self.vehicle.location.global_frame.alt
+        except Exception as e:
+            self.get_logger().error(f"Error in get_gps_callback: {e}")
+            lat = 0
+            lon = 0
+            alt = 0
+        response.lat = float(lat)
+        response.lon = float(lon)
+        response.alt = float(alt)
+        return response
+
+        
     def set_yaw(self, yaw, cw ,relative=False):
         
         yaw = yaw / 3.141592 * 180
@@ -242,10 +279,10 @@ class DroneHandler(Node):
         response.north = temp.north or 0.0
         response.east = temp.east or 0.0
         response.down = temp.down or 0.0
-        # self.get_logger().info(f"-- Get location relative service called --")
-        # self.get_logger().info(f"North: {response.north}")
-        # self.get_logger().info(f"East: {response.east}")
-        # self.get_logger().info(f"Down: {response.down}")
+        self.get_logger().info(f"-- Get location relative service called --")
+        self.get_logger().info(f"North: {response.north}")
+        self.get_logger().info(f"East: {response.east}")
+        self.get_logger().info(f"Down: {response.down}")
         return response
     
     def set_yaw_callback(self, request, response):
@@ -473,16 +510,13 @@ class DroneHandler(Node):
     
     def set_speed_callback(self, request, response):
         self.get_logger().info(f'-- Set speed service called --')
+    
         speed = request.speed
-        self.vehicle.message_factory.command_long_send(
-            0, 0,    # target system/component
-            mavutil.mavlink.MAV_CMD_DO_CHANGE_SPEED,
-            0,       # confirmation
-            1,       # Speed type: 1 = Airspeed or Groundspeed
-            speed,     # Desired speed in m/s
-            -1, 0, 0, 0, 0  # Unused parameters
-        )
-        response = SetMode.Response()
+        self.get_logger().info(f"Speed: {speed} m/s")
+        
+        self.vehicle.groundspeed = speed
+        self.get_logger().info(f"Speed set to: {self.vehicle.groundspeed} m/s")
+        response = SetSpeed.Response()
         return response
 
     def telemetry_callback(self):
@@ -496,9 +530,23 @@ class DroneHandler(Node):
             msg.lat = self.vehicle.location.global_relative_frame.lat
             msg.lon = self.vehicle.location.global_relative_frame.lon
             msg.alt = self.vehicle.location.global_relative_frame.alt
+
             # Flight mode
             msg.flight_mode = str(self.vehicle.mode)
             
+            msg.speed = float(self.vehicle.groundspeed)  
+
+            gf = self.vehicle.location.global_frame
+            if gf:  # check that GPS is valid
+                msg.global_lat = float(gf.lat)
+                msg.global_lon = float(gf.lon)
+                msg.global_alt = float(gf.alt)
+            else:
+                # If no GPS fix, default to zeros
+                msg.global_lat = 0.0
+                msg.global_lon = 0.0
+                msg.global_alt = 0.0
+
             # 
             #if self._counter > 0:
             #    msg.battery_voltage = 11.5
@@ -558,7 +606,7 @@ def main():
     
     drone = DroneHandler()
 
-    #rclpy.spin(drone)
+    # rclpy.spin(drone)
     executor = MultiThreadedExecutor()
     executor.add_node(drone)
     executor.spin()

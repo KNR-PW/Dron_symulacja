@@ -1,4 +1,4 @@
-from drone_comunication import Hardware_com
+
 from drone_interfaces.msg import MiddleOfAruco, VelocityVectors
 from drone_interfaces.srv import ToggleVelocityControl
 import rclpy
@@ -42,16 +42,25 @@ class PID:
     def get_kie(self):
         return self.ki*self.integral_error
 
+from drone_comunication.drone_controller import DroneController
 
 
-class Mission(Hardware_com):
+
+
+from drone_interfaces.srv import Dropper
+
+class Mission(DroneController):
     def __init__(self):
-        super().__init__("test")
+
+        super().__init__()
         self.midl = self.create_subscription(MiddleOfAruco, 'aruco_markers', self.point_of_aruco ,10)
 
         self.toggle_velocity_control_cli = self.create_client(ToggleVelocityControl,'toggle_v_control')
 
         self.velocity_publisher = self.create_publisher(VelocityVectors,'velocity_vectors', 10)
+        
+
+        self.beacon = self.create_client(Dropper,"dropper")
 
     
     def point_of_aruco(self, msg):
@@ -148,7 +157,22 @@ class Mission(Hardware_com):
             #out = self.pid.compute(220-self.middle_of_aruco[1])
             #self.get_logger().info(f"output of pid: {out}")
             rclpy.spin_once(self, timeout_sec=0.05)
-    
+       
+
+    def drop_beacon(self, number_of_beacon: int = 1):
+        req = Dropper.Request()
+        req.beacon_number = number_of_beacon
+        fut = self._mode_client.call_async(req)
+        rclpy.spin_until_future_complete(self, fut, timeout_sec=2.0)
+        if fut.result() is None:
+            self.get_logger().error(f'Failed to drop beacon')
+            return False
+        self.get_logger().info(f'wainting a sec for a drop')
+        time.sleep(1.5)
+        self.get_logger().info(f'beacon sucsefully drop')
+        return True
+  
+
 def main(args=None):
     rclpy.init(args=args)
     mission = Mission()

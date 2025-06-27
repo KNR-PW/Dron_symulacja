@@ -9,18 +9,18 @@ endif()
 find_package(rosidl_default_generators REQUIRED)
 find_package(ament_cmake REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
 
 # uncomment the following section in order to fill in
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
-  "msg/DetectionMsg.msg"
-  "msg/DetectionsList.msg"
   "msg/ArucoMarkers.msg"
   "msg/MiddleOfAruco.msg"
   "msg/VelocityVectors.msg"
   "msg/AxisAngle.msg"
   "msg/Telemetry.msg"
+  "srv/Dropper.srv"
   "srv/GetAttitude.srv"
   "srv/GetLocationRelative.srv"
   "srv/SetYaw.srv"
@@ -28,24 +28,22 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/SetMode.srv"
   "srv/SetSpeed.srv"
   "srv/GetGpsPos.srv"
-  "srv/SetRobotPose.srv"
-  "srv/SetRobotPoseRelative.srv"
-  "srv/SetObstacleParameters.srv"
-  "srv/SetCylinderParameters.srv"
-  "srv/SetBoxParameters.srv"
-  "srv/SetSphereParameters.srv"
   "srv/ToggleVelocityControl.srv"
+  "srv/SpinDCMotor.srv"
+  "srv/PostLog.srv"
+  "srv/TurnOnVideo.srv"
+  "srv/TurnOffVideo.srv"
+  "srv/CreateReport.srv"
+  "srv/UpdateReport.srv"
   "action/GotoRelative.action"
   "action/GotoGlobal.action"
   "action/Arm.action"
-  "action/Shoot.action"
   "action/SetYawAction.action"
-  "action/MoveRelative.action"
   "action/Takeoff.action"
-  "srv/DetectTrees.srv"
   "srv/TakePhoto.srv"
   DEPENDENCIES
   geometry_msgs
+  sensor_msgs
  )
 ament_export_dependencies(rosidl_default_runtime)
 

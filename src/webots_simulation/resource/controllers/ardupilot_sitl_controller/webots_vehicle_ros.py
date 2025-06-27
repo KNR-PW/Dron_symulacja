@@ -105,6 +105,7 @@ class WebotsArduVehicleRos():
         rclpy.init()
         self.node = Node('webots_vehicle_node')
         self.camera_publisher = self.node.create_publisher(Image, 'camera', 10)
+        # self.camera_publisher_2 = self.node.create_publisher(Image, 'camera_2', 10)
         self.gps_publisher = self.node.create_publisher(Image, 'gps', 10)
         self.br = CvBridge()
         # setup Webots robot instance
@@ -135,7 +136,16 @@ class WebotsArduVehicleRos():
                                              target=self._handle_image_stream,
                                              args=[self.camera, camera_stream_port])
                 self._camera_thread.start()
+  
+        # self.camera_2 = self.robot.getDevice("camera_2")
+        # self.camera_2.enable(1000//camera_fps) # takes frame period in ms
 
+        # start camera streaming thread if requested
+
+        # self._camera_thread_2 = Thread(daemon=True,
+        #                                 target=self._handle_image_stream_2,
+        #                                 args=[self.camera_2, camera_stream_port])
+        # self._camera_thread_2.start()
         # init rangefinder
         if rangefinder_name is not None:
             self.rangefinder = self.robot.getDevice(rangefinder_name)
@@ -275,7 +285,6 @@ class WebotsArduVehicleRos():
         # set velocities of the motors in Webots
         for i, m in enumerate(self._motors):
             m.setVelocity(linearized_motor_commands[i] * min(m.getMaxVelocity(), self.motor_velocity_cap))
-
     def _handle_image_stream(self, camera: Union[Camera, RangeFinder], port: int):
         time.sleep(2)
         """Stream grayscale images over TCP
@@ -352,6 +361,83 @@ class WebotsArduVehicleRos():
             finally:
                 # conn.close()
                 print(f"Camera client disconnected (I{self._instance})")
+    
+    # def _handle_image_stream_2(self, camera: Union[Camera, RangeFinder], port: int):
+    #     time.sleep(2)
+    #     """Stream grayscale images over TCP
+
+    #     Args:
+    #         camera (Camera or RangeFinder): the camera to get images from
+    #         port (int): port to send images over
+    #     """
+
+    #     # get camera info
+    #     # https://cyberbotics.com/doc/reference/camera
+    #     if isinstance(camera, Camera):
+    #         cam_sample_period = self.camera.getSamplingPeriod()
+    #         cam_width = self.camera.getWidth()
+    #         cam_height = self.camera.getHeight()
+    #         print(f"Camera stream started at 127.0.0.1:{port} (I{self._instance}) "
+    #               f"({cam_width}x{cam_height} @ {1000/cam_sample_period:0.2f}fps)")
+    #     elif isinstance(camera, RangeFinder):
+    #         cam_sample_period = self.rangefinder.getSamplingPeriod()
+    #         cam_width = self.rangefinder.getWidth()
+    #         cam_height = self.rangefinder.getHeight()
+    #         print(f"RangeFinder stream started at 127.0.0.1:{port} (I{self._instance}) "
+    #               f"({cam_width}x{cam_height} @ {1000/cam_sample_period:0.2f}fps)")
+    #     else:
+    #         print(sys.stderr, f"Error: camera passed to _handle_image_stream is of invalid type "
+    #                           f"'{type(camera)}' (I{self._instance})")
+    #         return
+
+    #     # create a local TCP socket server
+    #     # server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    #     # server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    #     # server.bind(('127.0.0.1', port))
+    #     # server.listen(1)
+
+    #     # continuously send images
+    #     while self._webots_connected:
+    #         # wait for incoming connection
+    #         # conn, _ = server.accept()
+    #         # print(f"Connected to camera client (I{self._instance})")
+
+    #         # send images to client
+    #         try:
+    #             while self._webots_connected:
+    #                 # delay at sample rate
+    #                 start_time = self.robot.getTime()
+
+    #                 # get image
+    #                 if isinstance(camera, Camera):
+    #                     img = self.get_camera_image_2()
+    #                 elif isinstance(camera, RangeFinder):
+    #                     img = self.get_rangefinder_image()
+
+    #                 if img is None:
+    #                     print(f"No image received (I{self._instance})")
+    #                     time.sleep(cam_sample_period/1000)
+    #                     continue
+
+    #                 # create a header struct with image size
+    #                 # header = struct.pack("=HH", cam_width, cam_height)
+
+    #                 # # pack header and image and send
+    #                 # print(len(img.tobytes()))
+    #                 # data = header + img.tobytes()
+    #                 # conn.sendall(data)
+    #                 # self.camera_publisher_2.publish(self.br.cv2_to_imgmsg(img))
+    #                 # delay at sample rate
+    #                 while self.robot.getTime() - start_time < cam_sample_period/1000:
+    #                     time.sleep(0.001)
+
+    #         except ConnectionResetError:
+    #             pass
+    #         except BrokenPipeError:
+    #             pass
+    #         finally:
+    #             # conn.close()
+    #             print(f"Camera client disconnected (I{self._instance})")
 
     def get_camera_gray_image(self) -> np.ndarray:
         """Get the grayscale image from the camera as a numpy array of bytes"""
@@ -364,6 +450,12 @@ class WebotsArduVehicleRos():
         img = self.camera.getImage()
         img = np.frombuffer(img, np.uint8).reshape((self.camera.getHeight(), self.camera.getWidth(), 4))
         return img[:, :, :3] # RGB only, no Alpha
+
+    # def get_camera_image_2(self) -> np.ndarray:
+    #     """Get the RGB image from the camera as a numpy array of bytes"""
+    #     img = self.camera_2.getImage()
+    #     img = np.frombuffer(img, np.uint8).reshape((self.camera_2.getHeight(), self.camera_2.getWidth(), 4))
+    #     return img[:, :, :3] # RGB only, no Alpha
 
     def get_rangefinder_image(self, use_int16: bool = False) -> np.ndarray:
         """Get the rangefinder depth image as a numpy array of int8 or int16"""\

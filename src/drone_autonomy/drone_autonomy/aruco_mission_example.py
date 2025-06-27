@@ -22,6 +22,7 @@ class ArucoMission(Node):
             'aruco_markers',
             self.aruco_callback,
             10)
+        self.gps_cli = self.c
         self.gps_cli = self.create_client(GetLocationRelative, 'get_location_relative')
         while not self.gps_cli.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('GPS service not available, waiting again...')

@@ -1,28 +1,7 @@
 """
 This node locates Aruco AR markers in images and publishes their ids and poses.
 
-Subscriptions:
-   /camera/image_raw (sensor_msgs.msg.Image)
-   /camera/camera_info (sensor_msgs.msg.CameraInfo)
-   /camera/camera_info (sensor_msgs.msg.CameraInfo)
-
-Published Topics:
-    /aruco_poses (geometry_msgs.msg.PoseArray)
-       Pose of all detected markers (suitable for rviz visualization)
-
-    /aruco_markers (ros2_aruco_interfaces.msg.ArucoMarkers)
-       Provides an array of all poses along with the corresponding
-       marker ids.
-
-Parameters:
-    marker_size - size of the markers in meters (default .0625)
-    aruco_dictionary_id - dictionary that was used to generate markers
-                          (default DICT_5X5_250)
-    image_topic - image topic to subscribe to (default /camera/image_raw)
-    camera_info_topic - camera info topic to subscribe to
-                         (default /camera/camera_info)
-
-Author: Nathan Sprague
+Author: Nathan Sprague modified by Stanislaw Kolodziejczyk
 Version: 10/26/2020
 
 """
@@ -47,7 +26,7 @@ class ArucoNode(rclpy.node.Node):
         # Declare and read parameters
         self.declare_parameter(
             name="marker_size",
-            value=0.0625,
+            value=0.1,
             descriptor=ParameterDescriptor(
                 type=ParameterType.PARAMETER_DOUBLE,
                 description="Size of the markers in meters.",
@@ -57,7 +36,9 @@ class ArucoNode(rclpy.node.Node):
         self.declare_parameter(
             name="aruco_dictionary_id",
             # value="DICT_5X5_250",
-            value="DICT_4X4_100",
+            # value="DICT_4X4_100",
+            value="DICT_4X4_250",
+            # value="DICT_ARUCO_ORIGINAL",
             descriptor=ParameterDescriptor(
                 type=ParameterType.PARAMETER_STRING,
                 description="Dictionary that was used to generate markers.",
@@ -75,7 +56,7 @@ class ArucoNode(rclpy.node.Node):
 
         self.declare_parameter(
             name="intrinsic_matrix",
-            value=[1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
+            value=[1.0, 0.0, 320.0, 0.0, 1.0, 240.0, 0.0, 0.0, 1.0],
             descriptor=ParameterDescriptor(
                 type=ParameterType.PARAMETER_DOUBLE_ARRAY,
                 description="Camera intrinsic matrix.",
@@ -156,11 +137,13 @@ class ArucoNode(rclpy.node.Node):
         self.markers_pub = self.create_publisher(ArucoMarkers, "aruco_markers", 10)
 
 
-        self.aruco_dictionary = cv2.aruco.Dictionary_get(dictionary_id)
+        self.aruco_dictionary = cv2.aruco.getPredefinedDictionary(dictionary_id)
         self.aruco_parameters = cv2.aruco.DetectorParameters_create()
+
         self.bridge = CvBridge()
 
     def image_callback(self, img_msg):
+        # self.get_logger().info(f"Received image")
         cv_image = self.bridge.imgmsg_to_cv2(img_msg)
         cv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
 
@@ -177,6 +160,8 @@ class ArucoNode(rclpy.node.Node):
             cv_image, self.aruco_dictionary, parameters=self.aruco_parameters
         )
         if marker_ids is not None:
+            self.get_logger().info(f"Found {len(marker_ids)} markers")
+            self.get_logger().info(f"Marker ids: {marker_ids.flatten()}")
             if cv2.__version__ > "4.0.0":
                 rvecs, tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(
                     corners, self.marker_size, self.intrinsic_mat, self.distortion

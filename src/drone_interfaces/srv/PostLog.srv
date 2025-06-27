@@ -1,0 +1,4 @@
+string message
+string level
+---
+int8 result
