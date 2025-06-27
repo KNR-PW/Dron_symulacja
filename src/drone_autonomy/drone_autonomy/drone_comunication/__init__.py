@@ -1,1 +1,1 @@
-from .drone_controller import Hardware_com
+from .drone_controller import DroneController
