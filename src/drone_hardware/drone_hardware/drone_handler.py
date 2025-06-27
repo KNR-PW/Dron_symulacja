@@ -13,8 +13,7 @@ from rclpy.executors import MultiThreadedExecutor
 
 from drone_interfaces.msg import Telemetry, VelocityVectors
 from drone_interfaces.srv import GetAttitude, GetLocationRelative, SetServo, SetYaw, SetMode, SetSpeed, GetGpsPos, ToggleVelocityControl
-from drone_interfaces.action import GotoRelative, GotoGlobal, Arm, Takeoff, SetYawAction, Shoot
-
+from drone_interfaces.action import GotoRelative, GotoGlobal, Arm, Takeoff, SetYawAction
 
 import haversine as hv
 class DroneHandler(Node):
