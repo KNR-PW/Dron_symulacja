@@ -68,7 +68,6 @@ def main(args=None):
     mission = Mission()
     mission.arm()
     mission.takeoff(5.0)
-    mission._set_mode("flip")
     # mission.send_goto_relative( 8.0, 0.0, 0.0)
     # mission.send_set_yaw(3.14/2)
     # mission.toggle_control()
