@@ -5,6 +5,7 @@ from cv_bridge import CvBridge
 import cv2
 import os
 from rcl_interfaces.msg import ParameterDescriptor, ParameterType
+# made by Stanisław Kołodziejski
 
 class ImagesRecorder(Node):
 
