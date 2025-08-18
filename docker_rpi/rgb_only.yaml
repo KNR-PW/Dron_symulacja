@@ -1,0 +1,6 @@
+/oak:
+  ros__parameters:
+      rgb:
+        i_resolution: '4K'
+
+    
