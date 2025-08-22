@@ -25,6 +25,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/GetLocationRelative.srv"
   "srv/SetYaw.srv"
   "srv/SetServo.srv"
+  "srv/SetGimbalAngle.srv"
   "srv/SetMode.srv"
   "srv/SetSpeed.srv"
   "srv/GetGpsPos.srv"

@@ -3,6 +3,8 @@ from drone_interfaces.srv import ToggleVelocityControl
 import rclpy
 import time
 from drone_comunication import DroneController
+from drone_interfaces.srv import SetGimbalAngle # Upewnij się, że nazwa pakietu jest poprawna
+
 
 TIME_STEP = 2
 
@@ -12,6 +14,28 @@ class Mission(DroneController):
         self.toggle_velocity_control_cli = self.create_client(ToggleVelocityControl,'toggle_v_control')
 
         self.velocity_publisher = self.create_publisher(VelocityVectors,'velocity_vectors', 10)
+
+        self.set_gimbal_cli = self.create_client(SetGimbalAngle, 'set_gimbal_angle')
+        while not self.set_gimbal_cli.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('Gimbal control service unavailable, waiting...')
+
+    def set_gimbal_angle(self, angle_degrees):
+        """Sends a request to set gimbal angle and waits for an answer."""
+        self.get_logger().info(f"Sending request to set the gimbal to {angle_degrees} degrees...")
+        req = SetGimbalAngle.Request()
+        req.angle_degrees = float(angle_degrees)
+        
+        future = self.set_gimbal_cli.call_async(req)
+        rclpy.spin_until_future_complete(self, future)
+        
+        try:
+            response = future.result()
+            if response.success:
+                self.get_logger().info("Gimbal servo control setting success.")
+            else:
+                self.get_logger().error(f"Gimbal servo control unsuccessful: {response.message}")
+        except Exception as e:
+            self.get_logger().error(f'Service calling unsuccessful: {e}')
 
     def send_vectors(self, vx, vy, vz):
         vectors = VelocityVectors()
@@ -67,7 +91,7 @@ def main(args=None):
     rclpy.init(args=args)
     mission = Mission()
     mission.arm()
-    mission.takeoff(5.0)
+    mission.takeoff(2.0)
     # mission.send_goto_relative( 8.0, 0.0, 0.0)
     # mission.send_set_yaw(3.14/2)
     # mission.toggle_control()
@@ -79,6 +103,20 @@ def main(args=None):
     # time.sleep(1)
     # mission.fly_in_square()
     # mission.toggle_control()
+
+    mission.set_gimbal_angle(30.0)
+    time.sleep(3) 
+
+    # Ustaw gimbal prosto
+    mission.set_gimbal_angle(0.0)
+    time.sleep(3) 
+
+    # Ustaw gimbal w górę o 15 stopni
+    mission.set_gimbal_angle(-15.0)
+    time.sleep(3) 
+
+    mission.set_gimbal_angle(0.0)
+
     mission.land()
     mission.destroy_node()
     rclpy.shutdown()

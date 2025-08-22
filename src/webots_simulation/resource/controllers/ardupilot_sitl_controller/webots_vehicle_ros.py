@@ -11,6 +11,7 @@ import time
 import socket
 import select
 import struct
+import math
 import numpy as np
 from threading import Thread
 from typing import List, Union
@@ -39,6 +40,7 @@ os.environ["PYTHONIOENCODING"] = "UTF-8"
 sys.path.append(f"{WEBOTS_HOME}/lib/controller/python")
 
 from controller import Robot, Camera, RangeFinder # noqa: E401, E402
+from drone_interfaces.srv import SetGimbalAngle
 
 
 class WebotsArduVehicleRos():
@@ -174,9 +176,18 @@ class WebotsArduVehicleRos():
             m.setPosition(float('inf'))
             m.setVelocity(0)
 
+        self.gimbal_service = self.node.create_service(
+            SetGimbalAngle,
+            'set_gimbal_angle',
+            self.handle_set_gimbal_angle_request
+        )
+
         # start ArduPilot SITL communication thread
         self._sitl_thread = Thread(daemon=True, target=self._handle_sitl, args=[sitl_address, 9002+10*instance])
         self._sitl_thread.start()
+
+        self._ros_thread = Thread(daemon=True, target=self._ros_spin_thread)
+        self._ros_thread.start()
 
     def _handle_sitl(self, sitl_address: str = "127.0.0.1", port: int = 9002):
         """Handles all communications with the ArduPilot SITL
@@ -331,16 +342,38 @@ class WebotsArduVehicleRos():
             if sleep_duration > 0:
                 time.sleep(sleep_duration)
     
-    def set_gimbal_angle(self, angle_radians: float):
-        """Sets the position of the gimbal servo.
+    # def set_gimbal_angle(self, angle_radians: float):
+    #     """Sets the position of the gimbal servo.
 
-        Args:
-            angle_radians (float): The desired angle in radians.
-        """
-        if hasattr(self, 'gimbal_servo'):
+    #     Args:
+    #         angle_radians (float): The desired angle in radians.
+    #     """
+    #     if hasattr(self, 'gimbal_servo'):
+    #         self.gimbal_servo.setPosition(angle_radians)
+    #     else:
+    #         self.node.get_logger().warn("Gimbal servo not initialized.")
+
+    def handle_set_gimbal_angle_request(self, request, response):
+        """Handles the SetGimbalAngle service request."""
+        self.node.get_logger().info(f"Received service request to set angle to {request.angle_degrees} degrees.") # <-- ADD THIS
+        if hasattr(self, 'gimbal_servo') and self.gimbal_servo is not None:
+            angle_radians = math.radians(request.angle_degrees)
+            self.node.get_logger().info(f"Setting servo position to {angle_radians} radians.") # <-- ADD THIS
+            
             self.gimbal_servo.setPosition(angle_radians)
+            
+            response.success = True
+            response.message = "Gimbal angle set."
         else:
-            self.node.get_logger().warn("Gimbal servo not initialized.")
+            self.node.get_logger().warn("Gimbal servo is not available.")
+            response.success = False
+            response.message = "Gimbal servo was not initialized."
+        return response
+    
+    def _ros_spin_thread(self):
+        """Spins the ROS 2 node to process callbacks."""
+        self.node.get_logger().info("Starting ROS 2 spin thread.")
+        rclpy.spin(self.node)
 
     def get_camera_gray_image(self) -> np.ndarray:
         """Get the grayscale image from the camera as a numpy array of bytes"""
