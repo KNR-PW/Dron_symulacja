@@ -55,6 +55,17 @@ def get_args():
                         type=str,
                         default=None,
                         help="Webots Camera name (optional)")
+
+    parser.add_argument("--gimbal-camera",
+                        type=str,
+                        default="gimbalCamera",  
+                        help="Webots gimbal camera name (optional)")
+
+    parser.add_argument("--gimbal-servo",
+                        type=str,
+                        default="servo",
+                        help="Webots gimbal servo motor name (optional)")
+
     parser.add_argument("--camera-fps",
                         type=int,
                         default=10,
@@ -108,6 +119,8 @@ if __name__ == "__main__":
                                 gyro_name=args.gyro,
                                 gps_name=args.gps,
                                 camera_name=args.camera,
+                                gimbal_camera_name=args.gimbal_camera,
+                                gimbal_servo_name=args.gimbal_servo,
                                 camera_fps=args.camera_fps,
                                 camera_stream_port=args.camera_port,
                                 rangefinder_name=args.rangefinder,
