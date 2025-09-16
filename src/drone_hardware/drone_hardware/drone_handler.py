@@ -565,7 +565,7 @@ class DroneHandler(Node):
         msg = self.vehicle.message_factory.set_position_target_global_int_encode(
             0,       # time_boot_ms (not used)
             0, 0,    # target system, target component
-            mavutil.mavlink.MAV_FRAME_GLOBAL_TERRAIN_ALT   , # frame
+            mavutil.mavlink.MAV_FRAME_LOCAL_NED  , # frame
             0b0000111111000111, # type_mask (only speeds enabled)
             0, # lat_int - X Position in WGS84 frame in 1e7 * meters
             0, # lon_int - Y Position in WGS84 frame in 1e7 * meters
@@ -585,7 +585,14 @@ class DroneHandler(Node):
     def velocity_control_callback(self, msg):
         if self._velocity_control_flag:
             self.get_logger().info(f"i receive x:{msg.vx} y:{msg.vy} z:{msg.vz}")
-            self.send_global_velocity(msg.vx, msg.vy, msg.vz)
+            
+            yaw = math.radians(self.vehicle.heading)
+
+            v_n = msg.vx * math.cos(yaw) - msg.vy * math.sin(yaw)
+            v_e = msg.vx * math.sin(yaw) + msg.vy * math.cos(yaw)
+            v_d = msg.vz
+
+            self.send_global_velocity(v_n, v_e, v_d)
 
     def toggle_velocity_control(self, request, response):
 
