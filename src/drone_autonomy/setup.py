@@ -1,11 +1,12 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 package_name = 'drone_autonomy'
 
 setup(
     name=package_name,
     version='0.0.0',
-    packages=[package_name],
+    # ← instaluj CAŁY pakiet wraz z podpakietami (drone_comunication itd.)
+    packages=find_packages(include=[package_name, package_name + '.*']),
     data_files=[
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
@@ -24,7 +25,6 @@ setup(
             'goto_detection_group=drone_autonomy.goto_detection_group:main',
             'mission=drone_autonomy.mission:main',
             'fly_to_aruco_example=drone_autonomy.fly_to_aruco_example:main',
-            # ↓↓↓ NOWE
             'follow_aruco_centroid=drone_autonomy.follow_aruco_centroid:main',
         ],
     },
