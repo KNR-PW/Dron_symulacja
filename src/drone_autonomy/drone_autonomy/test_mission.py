@@ -1,6 +1,7 @@
 
 from drone_interfaces.msg import MiddleOfAruco, VelocityVectors
 from drone_interfaces.srv import ToggleVelocityControl
+from drone_interfaces.srv import MakePhoto
 import rclpy
 import time
 
@@ -58,11 +59,46 @@ class Mission(DroneController):
         self.toggle_velocity_control_cli = self.create_client(ToggleVelocityControl,'toggle_v_control')
 
         self.velocity_publisher = self.create_publisher(VelocityVectors,'velocity_vectors', 10)
+
+        self.make_photo_cli = self.create_client(MakePhoto, '/make_photo')  # albo '/mission/mission_make_photo' jeśli masz namespace
+
+        self.make_photo_cli.wait_for_service(timeout_sec=5.0)
         
+        self.photo_idx = 1  # licznik do Zdj1, Zdj2...
 
         self.beacon = self.create_client(Dropper,"dropper")
 
-    
+    def make_photo(self, name: str | None = None, ext: str = 'jpg') -> bool:
+        if name is None:
+            name = f"Zdj{self.photo_idx}"
+            
+        req = MakePhoto.Request()
+        req.prefix = name
+        req.ext = ext
+
+        fut = self.make_photo_cli.call_async(req)
+        rclpy.spin_until_future_complete(self, fut, timeout_sec=2.0)
+        if fut.result() is None:
+            self.get_logger().error('MakePhoto: brak odpowiedzi z serwisu')
+            return False
+
+        resp = fut.result()
+        ok = False
+        if hasattr(resp, "success"):
+            ok = resp.success if isinstance(resp.success, bool) else str(resp.success).lower().startswith("saved")
+        elif hasattr(resp, "feedback"):
+            ok = str(resp.feedback).lower().startswith("saved")
+        self.get_logger().info(f'MakePhoto({name}.{ext}) -> {ok}')
+
+        if ok:
+            self.photo_idx += 1   # zwiększ po sukcesie
+        return ok
+
+    def make_photo_next(self, ext: str = 'jpg') -> bool:
+        """Skrót: zawsze kolejne ZdjN."""
+        return self.make_photo(name=None, ext=ext)
+
+
     def point_of_aruco(self, msg):
         #self.get_logger().info(f"Point of middle [{msg.x}, {msg.y}]")
         self.middle_of_aruco = [msg.x, msg.y]
@@ -176,26 +212,8 @@ class Mission(DroneController):
 def main(args=None):
     rclpy.init(args=args)
     mission = Mission()
-    mission.arm()
-    mission.takeoff(5.0)
-
-    mission.send_goto_relative( 8.0, 0.0, 0.0)
-    mission.toggle_control()
-    mission.send_vectors(1.0,0.0,0.0)
-    time.sleep(1)
-    mission.send_vectors(1.0,0.0,0.0)
-    time.sleep(1)
-    mission.send_vectors(1.0,0.0,0.0)
-    time.sleep(1)
-    # mission.first_test_of_pid_y()
-    # mission.first_test_of_pid_x()
-    #mission.fly_in_square()
-    #mission.send_vectors(0.5,0.5,0)
-    #time.sleep(1)
-    #mission.send_vectors(0,0,0)
-    #time.sleep(10)
-    mission.toggle_control()
-    mission.land()
+    mission.make_photo()  # Powinno zrobic zdj1
+    mission.make_photo_next()  #Powinno zrobic zdj2
     mission.destroy_node()
     rclpy.shutdown()
 

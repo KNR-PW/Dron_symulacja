@@ -7,6 +7,7 @@ from drone_interfaces.srv import (
     GetAttitude,
     SetMode,
     SetSpeed,
+    MakePhoto,
 )
 from drone_interfaces.msg import Telemetry
 from drone_interfaces.action import (
@@ -32,6 +33,7 @@ class DroneController(Node):
         self._wait_for_service(self._gps_client, 'get_location_relative')
         self._wait_for_service(self._atti_client, 'get_attitude')
         self._wait_for_service(self._speed_client, 'set_speed')
+        self._photo_client = self.create_client(MakePhoto, '/mission_make_photo')
         # self._wait_for_service(self._start_video_client, 'turn_on_video')
         # self._wait_for_service(self._stop_video_client, 'turn_off_video')
 
@@ -59,6 +61,28 @@ class DroneController(Node):
         self.lon = 0.0
         self.alt = 0.0
 
+        # --- MakeMissionPhoto zmienne ---
+        self.photo_idx = 1
+
+    def take_mission_photo(self, ext='jpg'):
+        req = MakePhoto.Request()
+        req.prefix = f'Zdj{self.photo_idx}'
+        req.ext = ext
+        future = self.photo_client.call_async(req)
+
+        def _done(_):
+            result = future.result()
+            if result is None:
+                self.get_logger().error('Brak odpowiedzi z mission_make_photo')
+                return
+            if result.success:
+                self.get_logger().info(f'Zrobione: {req.prefix}.{ext}')
+                self.photo_idx += 1
+            else:
+                self.get_logger().warn('Nie udało się zrobić zdjęcia')
+
+        future.add_done_callback(_done)
+        
     def _wait_for_service(self, client, name=""):
         while not client.wait_for_service(timeout_sec=1.0):
             self.get_logger().warn(f'Waiting for {name} service...')

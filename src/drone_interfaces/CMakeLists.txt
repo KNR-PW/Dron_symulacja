@@ -20,6 +20,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/VelocityVectors.msg"
   "msg/AxisAngle.msg"
   "msg/Telemetry.msg"
+  "srv/MakePhoto.srv"
   "srv/Dropper.srv"
   "srv/GetAttitude.srv"
   "srv/GetLocationRelative.srv"
@@ -40,8 +41,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "action/Arm.action"
   "action/SetYawAction.action"
   "action/Takeoff.action"
-  "srv/TakePhoto.srv"
   DEPENDENCIES
+  builtin_interfaces
   geometry_msgs
   sensor_msgs
  )

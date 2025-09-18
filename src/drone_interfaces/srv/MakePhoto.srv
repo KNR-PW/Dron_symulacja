@@ -1,0 +1,4 @@
+string prefix        # np. "Zdj1" – prefiks nazwy pliku
+string ext           # np. "png" | "jpg" jakie tam rozszerzenie wolimy
+---
+string success      # np. Zdjecie zrobione "Zdj1.jpg", zdjecie niezrobione
