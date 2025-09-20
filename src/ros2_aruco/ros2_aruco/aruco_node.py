@@ -148,8 +148,8 @@ class ArucoNode(rclpy.node.Node):
 
         # Publikatory:
         # 1) pełne info: ArucoMarkers (tablice) – na /aruco_markers_full
-        self.markers_pub = self.create_publisher(ArucoMarkers, "aruco_markers_full", 10)
-        self.poses_pub = self.create_publisher(PoseArray, "aruco_poses", 10)
+        # self.markers_pub = self.create_publisher(ArucoMarkers, "aruco_markers_full", 10)
+        # self.poses_pub = self.create_publisher(PoseArray, "aruco_poses", 10)
         # 2) Środek największego markera: MiddleOfAruco – na /aruco_markers (to czyta Twoja misja)
         self.middle_pub = self.create_publisher(MiddleOfAruco, "aruco_markers", 10)
 
@@ -166,18 +166,18 @@ class ArucoNode(rclpy.node.Node):
         corners, marker_ids, _ = self.detect_aruco(gray)
 
         # Przygotuj wiadomości „pełne”
-        markers_msg = ArucoMarkers()
-        poses_msg = PoseArray()
-        markers_msg.header.stamp = img_msg.header.stamp
-        markers_msg.header.frame_id = ""
-        poses_msg.header.stamp = img_msg.header.stamp
-        poses_msg.header.frame_id = ""
+        # markers_msg = ArucoMarkers()
+        # poses_msg = PoseArray()
+        # markers_msg.header.stamp = img_msg.header.stamp
+        # markers_msg.header.frame_id = ""
+        # poses_msg.header.stamp = img_msg.header.stamp
+        # poses_msg.header.frame_id = ""
 
         # Jeśli brak detekcji – opublikuj puste i wróć
-        if marker_ids is None or len(marker_ids) == 0:
-            self.poses_pub.publish(poses_msg)
-            self.markers_pub.publish(markers_msg)
-            return
+        # if marker_ids is None or len(marker_ids) == 0:
+        #     self.poses_pub.publish(poses_msg)
+        #     self.markers_pub.publish(markers_msg)
+        #     return
 
         # Znajdź największy marker (po polu w pikselach) – posłuży do MiddleOfAruco
         areas = []
@@ -188,72 +188,73 @@ class ArucoNode(rclpy.node.Node):
             cx = float(pts[:, 0].mean())
             cy = float(pts[:, 1].mean())
             centers.append((cx, cy))
-        k = int(np.argmax(areas))
-        cx_big, cy_big = centers[k]
+        if len(areas) > 0:
+            k = int(np.argmax(areas))
+            cx_big, cy_big = centers[k]
 
-        # Opublikuj MiddleOfAruco na /aruco_markers (dla Twojej misji)
-        mid = MiddleOfAruco()
-        mid.x = int(cx_big)
-        mid.y = int(cy_big)
-        self.middle_pub.publish(mid)
+            # Opublikuj MiddleOfAruco na /aruco_markers (dla Twojej misji)
+            mid = MiddleOfAruco()
+            mid.x = int(cx_big)
+            mid.y = int(cy_big)
+            self.middle_pub.publish(mid)
 
         # Dla pełnego komunikatu policz pozycje przez solvePnP
-        half = self.marker_size / 2.0
-        obj_pts = np.array(
-            [
-                [-half,  half, 0.0],
-                [ half,  half, 0.0],
-                [ half, -half, 0.0],
-                [-half, -half, 0.0],
-            ],
-            dtype=np.float64,
-        )
+        # half = self.marker_size / 2.0
+        # obj_pts = np.array(
+        #     [
+        #         [-half,  half, 0.0],
+        #         [ half,  half, 0.0],
+        #         [ half, -half, 0.0],
+        #         [-half, -half, 0.0],
+        #     ],
+        #     dtype=np.float64,
+        # )
 
-        for idx, marker_id in enumerate(marker_ids.flatten()):
-            img_pts = corners[idx].reshape((4, 2)).astype(np.float64)
+        # for idx, marker_id in enumerate(marker_ids.flatten()):
+        #     img_pts = corners[idx].reshape((4, 2)).astype(np.float64)
 
-            # PnP – spróbuj IPPE (kwadrat), fallback na ITERATIVE
-            success, rvec, tvec = cv2.solvePnP(
-                obj_pts, img_pts, self.intrinsic_mat, self.distortion,
-                flags=cv2.SOLVEPNP_IPPE_SQUARE
-            )
-            if not success:
-                success, rvec, tvec = cv2.solvePnP(
-                    obj_pts, img_pts, self.intrinsic_mat, self.distortion,
-                    flags=cv2.SOLVEPNP_ITERATIVE
-                )
-            if not success:
-                continue
+        #     # PnP – spróbuj IPPE (kwadrat), fallback na ITERATIVE
+        #     success, rvec, tvec = cv2.solvePnP(
+        #         obj_pts, img_pts, self.intrinsic_mat, self.distortion,
+        #         flags=cv2.SOLVEPNP_IPPE_SQUARE
+        #     )
+        #     if not success:
+        #         success, rvec, tvec = cv2.solvePnP(
+        #             obj_pts, img_pts, self.intrinsic_mat, self.distortion,
+        #             flags=cv2.SOLVEPNP_ITERATIVE
+        #         )
+        #     if not success:
+        #         continue
 
-            pose = Pose()
-            pose.position.x = float(tvec[0][0])
-            pose.position.y = float(tvec[1][0])
-            pose.position.z = float(tvec[2][0])
+            # pose = Pose()
+            # pose.position.x = float(tvec[0][0])
+            # pose.position.y = float(tvec[1][0])
+            # pose.position.z = float(tvec[2][0])
 
-            rot_mat_3x3, _ = cv2.Rodrigues(rvec)
-            rot_mat_4x4 = np.eye(4)
-            rot_mat_4x4[:3, :3] = rot_mat_3x3
-            qx, qy, qz, qw = tf_transformations.quaternion_from_matrix(rot_mat_4x4)
-            pose.orientation.x = float(qx)
-            pose.orientation.y = float(qy)
-            pose.orientation.z = float(qz)
-            pose.orientation.w = float(qw)
+            # rot_mat_3x3, _ = cv2.Rodrigues(rvec)
+            # rot_mat_4x4 = np.eye(4)
+            # rot_mat_4x4[:3, :3] = rot_mat_3x3
+            # qx, qy, qz, qw = tf_transformations.quaternion_from_matrix(rot_mat_4x4)
+            # pose.orientation.x = float(qx)
+            # pose.orientation.y = float(qy)
+            # pose.orientation.z = float(qz)
+            # pose.orientation.w = float(qw)
 
-            poses_msg.poses.append(pose)
-            markers_msg.poses.append(pose)
-            markers_msg.marker_ids.append(int(marker_id))
+            # poses_msg.poses.append(pose)
+            # markers_msg.poses.append(pose)
+            # markers_msg.marker_ids.append(int(marker_id))
 
         # Spłaszcz rogi (do ArucoMarkers)
-        corners_flat = []
-        for c in corners:
-            pts = c.reshape((4, 2))
-            for (x, y) in pts:
-                corners_flat.extend([float(x), float(y)])
-        markers_msg.corners = corners_flat
+        # corners_flat = []
+        # for c in corners:
+        #     pts = c.reshape((4, 2))
+        #     for (x, y) in pts:
+        #         corners_flat.extend([float(x), float(y)])
+        # markers_msg.corners = corners_flat
 
         # Publikacje „pełne”
-        self.poses_pub.publish(poses_msg)
-        self.markers_pub.publish(markers_msg)
+        # self.poses_pub.publish(poses_msg)
+        # self.markers_pub.publish(markers_msg)
 
 
 def main():
