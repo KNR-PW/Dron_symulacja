@@ -60,6 +60,17 @@ RUN git clone https://github.com/PX4/PX4-Autopilot.git --recursive
 RUN ./PX4-Autopilot/Tools/setup/ubuntu.sh --no-nuttx -y
 WORKDIR /tools//PX4-Autopilot
 RUN make px4_sitl
+
+# # === pobieranie agenta uXRCE-DDS
+# WORKDIR /tools
+# RUN git clone -b v2.4.3 https://github.com/eProsima/Micro-XRCE-DDS-Agent.git
+# WORKDIR /tools/Micro-XRCE-DDS-Agent/build
+# RUN cmake ..
+# RUN make
+# RUN sudo make install
+# RUN sudo ldconfig /usr/local/lib/
+
+
 # pobranie potrzebnych bibliotek 
 
 RUN pip3 install \
