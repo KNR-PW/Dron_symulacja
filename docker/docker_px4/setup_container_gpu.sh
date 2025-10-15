@@ -19,6 +19,6 @@ docker run --gpus all \
     -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
     --name knr_drone_px4 \
     -v ./../../src:/root/ros_ws/src:rw \
-    -p 8888:8888/udp \
     -it \
+    --network host \
     $1
