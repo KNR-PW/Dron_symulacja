@@ -1,4 +1,4 @@
-
+# Jak odpalić symulacje PX4
 docker build -t knr_image_px4 .
 
 ```bash
