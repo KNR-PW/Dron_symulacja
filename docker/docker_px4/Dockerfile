@@ -58,7 +58,8 @@ RUN useradd -m -s /bin/bash px4 && \
 # === Pobranie PX4-Autopilot ===
 RUN git clone https://github.com/PX4/PX4-Autopilot.git --recursive
 RUN ./PX4-Autopilot/Tools/setup/ubuntu.sh --no-nuttx -y
-
+WORKDIR /tools//PX4-Autopilot
+RUN make px4_sitl
 # pobranie potrzebnych bibliotek 
 
 RUN pip3 install \
