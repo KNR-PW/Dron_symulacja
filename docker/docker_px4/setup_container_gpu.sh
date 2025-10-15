@@ -19,5 +19,7 @@ docker run --gpus all \
     -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
     --name knr_drone_px4 \
     -v ./../../src:/root/ros_ws/src:rw \
+    -p 5763:5763 \
+    --add-host=host.docker.internal:host-gateway \
     -it \
     $1
