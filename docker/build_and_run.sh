@@ -6,7 +6,7 @@ if [ "$(docker ps -a -q -f status=running -f name=knr_drone)" ]; then
 fi
 
 if [ "$(docker ps -a -q -f status=running -f name=knr_drone)" ]; then
-    ./dockerise_cmd.sh "cd ~/ros_ws && colcon build --packages-skip Micro-XRCE-DDS-Agent px4_msgs px4_ros_com && source install/setup.bash && ros2 launch drone_bringup drone_simulation.launch.py"
+    ./dockerise_cmd.sh "cd ~/ros_ws && colcon build --packages-skip microxrcedds_agent px4_msgs px4_ros_com && source install/setup.bash && ros2 launch drone_bringup drone_simulation.launch.py"
 elif [ "$(docker ps -a -q -f status=running -f name=knr_drone_px4)" ]; then
     echo "darkside"
 else
