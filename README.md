@@ -27,15 +27,20 @@ docker image pull staskolo/knr-drone-sim:latest
 ```
 
 ### 4. Start the Docker Container
-Navigate to the `docker` directory and execute the setup script:  
+First you should source your graphic session to docker:
+```bash
+echo "xhost +local:docker" >> ~/.bashrc
+```
+
+Navigate to the `docker/docker_ap` directory and execute the setup script:  
 If your host has nvidia gpu:
 ```bash
-cd docker
+cd docker/docker_ap
 ./setup_container_gpu.sh staskolo/knr-drone-sim:latest
 ```
 If your host doesnt have nvidia gpu:
 ```bash
-cd docker
+cd docker/docker_ap
 ./setup_container_cpu.sh staskolo/knr-drone-sim:latest
 ```
 Once executed, you will be attached to the newly created Docker container.
