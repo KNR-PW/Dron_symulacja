@@ -1,4 +1,4 @@
-echo "xhost +local:docker" >> ~/.bashrc
+# echo "xhost +local:docker" >> ~/.bashrc
 source ~/.bashrc
 
 # Check if a Docker image is provided
@@ -9,7 +9,7 @@ if [ -z "$1" ]; then
 fi
 
 echo "using docker image: $1"
-echo "creating new container with name: knr_drone"
+echo "creating new container with name: knr_drone_px4"
 
 docker run --gpus all \
     --shm-size=1g \
@@ -17,7 +17,8 @@ docker run --gpus all \
     --env="NVIDIA_VISIBLE_DEVICES=all" \
     -e DISPLAY=$DISPLAY \
     -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
-    --name knr_drone \
-    -v ./../src:/root/ros_ws/src:rw \
+    --name knr_drone_px4 \
+    -v ./../../src:/root/ros_ws/src:rw \
     -it \
+    --network host \
     $1

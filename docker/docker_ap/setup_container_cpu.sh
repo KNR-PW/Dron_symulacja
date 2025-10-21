@@ -1,4 +1,3 @@
-echo "xhost +local:docker" >> ~/.bashrc
 source ~/.bashrc
 
 # Check if a Docker image is provided
@@ -17,6 +16,8 @@ docker run \
     -e DISPLAY=$DISPLAY \
     -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
     --name knr_drone \
-    -v ./../src:/root/ros_ws/src:rw \
+    -v ./../    ../src:/root/ros_ws/src:rw \
+    -p 5763:5763 \
+    --add-host=host.docker.internal:host-gateway \
     -it \
     $1

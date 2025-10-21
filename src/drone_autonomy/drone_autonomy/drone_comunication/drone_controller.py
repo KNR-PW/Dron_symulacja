@@ -8,8 +8,10 @@ from drone_interfaces.srv import (
     SetMode,
     SetSpeed,
     MakePhoto,
+    ToggleVelocityControl
+
 )
-from drone_interfaces.msg import Telemetry
+from drone_interfaces.msg import Telemetry, VelocityVectors
 from drone_interfaces.action import (
     Arm,
     Takeoff,
@@ -29,6 +31,9 @@ class DroneController(Node):
         self._speed_client = self.create_client(SetSpeed, 'set_speed')
         self._start_video_client = self.create_client(TurnOnVideo, 'turn_on_video')
         self._stop_video_client = self.create_client(TurnOffVideo, 'turn_off_video')
+        self.toggle_velocity_control_cli = self.create_client(ToggleVelocityControl,'toggle_v_control')
+        self.velocity_publisher = self.create_publisher(VelocityVectors,'velocity_vectors', 10)
+
         self._wait_for_service(self._mode_client, 'set_mode')
         self._wait_for_service(self._gps_client, 'get_location_relative')
         self._wait_for_service(self._atti_client, 'get_attitude')
@@ -253,3 +258,21 @@ class DroneController(Node):
             return False
         self.get_logger().info(f'Stop video')
         return True
+    
+# functions to fly by vectors
+    def send_vectors(self, vx, vy, vz):
+        vectors = VelocityVectors()
+        vectors.vx = float(vx)
+        vectors.vy = float(vy)
+        vectors.vz = float(vz)
+        self.velocity_publisher.publish(vectors)
+        
+    def toggle_control(self):
+        req = ToggleVelocityControl.Request()
+        future = self.toggle_velocity_control_cli.call_async(req)
+        rclpy.spin_until_future_complete(self, future, timeout_sec=10)
+        if future.result().result:
+            self.get_logger().info("true")
+        else:
+            self.get_logger().info("false")
+        return future.result()

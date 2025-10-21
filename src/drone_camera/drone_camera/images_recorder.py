@@ -8,6 +8,7 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 from rcl_interfaces.msg import ParameterDescriptor, ParameterType
 from pathlib import Path
+# made by Stanisław Kołodziejski
 
 from drone_interfaces.srv import MakePhoto   # << serwis
 

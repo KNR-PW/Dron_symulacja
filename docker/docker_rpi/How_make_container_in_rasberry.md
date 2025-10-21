@@ -5,7 +5,7 @@ Pobierz najnowszą wersje naszego repo komendą
 git clone https://github.com/KNR-PW/Dron_symulacja.git
 ```
 ## Krok 2
-Wejdź w folder **Dron_symulacja/docker_rpi**\
+Wejdź w folder **Dron_symulacja/docker/docker_rpi**\
 i uruchom **build_image.sh** za pomocą komendy
 ```bash
 sudo ./build_image.sh
