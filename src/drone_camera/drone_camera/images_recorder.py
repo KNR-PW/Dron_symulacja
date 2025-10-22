@@ -105,7 +105,11 @@ class ImagesRecorder(Node):
                 return None
         else:
             self.get_logger().warn('No frame to save yet')
-            return None
+
+def main(args=None):
+    rclpy.init(args=args)
+
+    images_recorder = ImagesRecorder()
 
     # Obsluga service'u
     def make_photo(self, req, res):           #Req = request, req.prefix = 'Zdj#', req.ext = 'jpg'
