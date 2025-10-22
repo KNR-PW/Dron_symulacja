@@ -3,20 +3,9 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     return LaunchDescription([
-        # Node(
-        #     package='drone_hardware',
-        #     executable='drone_handler',
-        # ),
-        # Node(
-        #     package='drone_camera',
-        #     executable='camera_publisher',
-        # )
         Node(
-            package='ros2_aruco',
-            executable='aruco_node',
-            parameters=[{
-                'image_topic': '/oak/rgb/image_raw'
-            }]
+            package='drone_hardware',
+            executable='drone_handler',
         ),
         Node(
             package='drone_camera',
@@ -26,5 +15,13 @@ def generate_launch_description():
                 # {'camera_topic': 'camera/image_raw'}
                 # {'camera_topic': 'camera'}
             ]
-        )
+        ),
+        Node(
+            package='ros2_aruco',
+            executable='aruco_node',
+            parameters=[{
+                'image_topic': 'oak/rgb/image_raw'
+            }]
+        ),
+
     ])
