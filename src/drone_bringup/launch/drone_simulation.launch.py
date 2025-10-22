@@ -17,7 +17,19 @@ def generate_launch_description():
         world=PathJoinSubstitution([sim_package_dir, 'worlds', world]),
         ros2_supervisor=True
     )
-
+    mission_make_photo_server = Node(
+        package='drone_camera',
+        executable='images_recorder',
+        output='screen',
+        parameters=[{
+            'camera_topic': '/camera',
+            # katalog bazowy na misje
+            'save_directory_base': 'Dron_symulacja/src/drone_camera/drone_camera',
+            # nazwa serwisu z ImagesRecorder (Trigger), który zwraca "Saved: <ścieżka>"
+            'images_service_name': '/take_picture',
+            'move_instead_of_copy': False,
+    }],
+    )
     drone_handler_node = Node(
             package='drone_hardware',
             executable='drone_handler',
