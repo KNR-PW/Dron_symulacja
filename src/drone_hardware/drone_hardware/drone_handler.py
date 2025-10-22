@@ -26,28 +26,31 @@ class DroneHandler(Node):
         self.declare_parameter('fc_ip', '/dev/ttyACM0')
         self.declare_parameter('dev', 'false')
 
+        ## DECLARE NAMESPACE
+        NAMESPACE = 'knr_hardware/'
+
         ## DECLARE SERVICES
-        self.attitude = self.create_service(GetAttitude, 'get_attitude', self.get_attitude_callback)
-        self.gps = self.create_service(GetLocationRelative, 'get_location_relative', self.get_location_relative_callback)
-        self.gps_abs = self.create_service(GetGpsPos, 'get_gps', self.get_gps_callback)
-        self.servo = self.create_service(SetServo, 'set_servo', self.set_servo_callback)
-        self.create_service(SetSpeed, 'set_speed', self.set_speed_callback)
-        self.mode = self.create_service(SetMode, 'set_mode',self.set_mode_callback)
+        self.attitude = self.create_service(GetAttitude, NAMESPACE+'get_attitude', self.get_attitude_callback)
+        self.gps = self.create_service(GetLocationRelative, NAMESPACE+'get_location_relative', self.get_location_relative_callback)
+        self.gps_abs = self.create_service(GetGpsPos, NAMESPACE+'get_gps', self.get_gps_callback)
+        self.servo = self.create_service(SetServo, NAMESPACE+'set_servo', self.set_servo_callback)
+        self.create_service(SetSpeed, NAMESPACE+'set_speed', self.set_speed_callback)
+        self.mode = self.create_service(SetMode, NAMESPACE+'set_mode',self.set_mode_callback)
         
         ## DECLARE ACTIONS
-        self.goto_rel = ActionServer(self, GotoRelative, 'goto_relative', self.goto_relative_action, cancel_callback=self.cancel_callback)
-        self.goto_global = ActionServer(self, GotoGlobal, 'goto_global', self.goto_global_action, cancel_callback=self.cancel_callback)
-        self.arm = ActionServer(self,Arm, 'Arm',self.arm_callback)
-        self.takeoff = ActionServer(self, Takeoff, 'takeoff',self.takeoff_callback, cancel_callback=self.cancel_callback)
-        self.yaw = ActionServer(self, SetYawAction, 'Set_yaw', self.yaw_callback, cancel_callback=self.cancel_callback)
+        self.goto_rel = ActionServer(self, GotoRelative, NAMESPACE+'goto_relative', self.goto_relative_action, cancel_callback=self.cancel_callback)
+        self.goto_global = ActionServer(self, GotoGlobal, NAMESPACE+'goto_global', self.goto_global_action, cancel_callback=self.cancel_callback)
+        self.arm = ActionServer(self,Arm, NAMESPACE+'Arm',self.arm_callback)
+        self.takeoff = ActionServer(self, Takeoff, NAMESPACE+'takeoff',self.takeoff_callback, cancel_callback=self.cancel_callback)
+        self.yaw = ActionServer(self, SetYawAction, NAMESPACE+'Set_yaw', self.yaw_callback, cancel_callback=self.cancel_callback)
 
         #DECLARE PUBLISHER
-        self.telemetry_publisher = self.create_publisher(Telemetry, 'telemetry',10)
+        self.telemetry_publisher = self.create_publisher(Telemetry, NAMESPACE+'telemetry',10)
         
         #DECLARE VELOCITY CONTROL
-        self.vector_receiver = self.create_subscription(VelocityVectors, 'velocity_vectors', self.velocity_control_callback ,10)
+        self.vector_receiver = self.create_subscription(VelocityVectors, NAMESPACE+'velocity_vectors', self.velocity_control_callback ,10)
         self._velocity_control_flag = False
-        self.toggle_velocity_control_srv = self.create_service(ToggleVelocityControl, 'toggle_v_control', self.toggle_velocity_control)
+        self.toggle_velocity_control_srv = self.create_service(ToggleVelocityControl, NAMESPACE+'toggle_v_control', self.toggle_velocity_control)
 
         # ONLY FOR TEST IF YOU SEE HERE SOMETHING UNCOMMENTED TELL THIS TO HIS CREATOR
         #self._counter = 0

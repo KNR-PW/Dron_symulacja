@@ -23,35 +23,38 @@ from drone_interfaces.action import (
 class DroneController(Node):
     def __init__(self):
         super().__init__('drone_controller')
+        # --- Declare KNR Namespaces ---
+        NAMESPACE_HARDWARE = 'knr_hardware/'
+        NAMESPACE_VIDEO = 'knr_video/'
 
         # --- Service clients ---
-        self._mode_client = self.create_client(SetMode, 'set_mode')
-        self._gps_client  = self.create_client(GetLocationRelative, 'get_location_relative')
-        self._atti_client = self.create_client(GetAttitude, 'get_attitude')
-        self._speed_client = self.create_client(SetSpeed, 'set_speed')
-        self._start_video_client = self.create_client(TurnOnVideo, 'turn_on_video')
-        self._stop_video_client = self.create_client(TurnOffVideo, 'turn_off_video')
-        self.toggle_velocity_control_cli = self.create_client(ToggleVelocityControl,'toggle_v_control')
-        self.velocity_publisher = self.create_publisher(VelocityVectors,'velocity_vectors', 10)
+        self._mode_client = self.create_client(SetMode, NAMESPACE_HARDWARE+'set_mode')
+        self._gps_client  = self.create_client(GetLocationRelative, NAMESPACE_HARDWARE+'get_location_relative')
+        self._atti_client = self.create_client(GetAttitude, NAMESPACE_HARDWARE+'get_attitude')
+        self._speed_client = self.create_client(SetSpeed, NAMESPACE_HARDWARE+'set_speed')
+        self._start_video_client = self.create_client(TurnOnVideo, NAMESPACE_VIDEO+'turn_on_video')
+        self._stop_video_client = self.create_client(TurnOffVideo, NAMESPACE_VIDEO+'turn_off_video')
+        self.toggle_velocity_control_cli = self.create_client(ToggleVelocityControl,NAMESPACE_HARDWARE+'toggle_v_control')
+        self.velocity_publisher = self.create_publisher(VelocityVectors,NAMESPACE_HARDWARE+'velocity_vectors', 10)
 
-        self._wait_for_service(self._mode_client, 'set_mode')
-        self._wait_for_service(self._gps_client, 'get_location_relative')
-        self._wait_for_service(self._atti_client, 'get_attitude')
-        self._wait_for_service(self._speed_client, 'set_speed')
+        self._wait_for_service(self._mode_client, NAMESPACE_HARDWARE+'set_mode')
+        self._wait_for_service(self._gps_client, NAMESPACE_HARDWARE+'get_location_relative')
+        self._wait_for_service(self._atti_client, NAMESPACE_HARDWARE+'get_attitude')
+        self._wait_for_service(self._speed_client, NAMESPACE_HARDWARE+'set_speed')
         self._photo_client = self.create_client(MakePhoto, '/mission_make_photo')
         # self._wait_for_service(self._start_video_client, 'turn_on_video')
         # self._wait_for_service(self._stop_video_client, 'turn_off_video')
 
 
         # --- Action clients ---
-        self._arm_client    = ActionClient(self, Arm, 'Arm')
-        self._takeoff_client = ActionClient(self, Takeoff, 'takeoff')
-        self._goto_rel_client = ActionClient(self, GotoRelative, 'goto_relative')
-        self._goto_glob_client = ActionClient(self, GotoGlobal, 'goto_global')
-        self._yaw_client     = ActionClient(self, SetYawAction, 'Set_yaw')
+        self._arm_client    = ActionClient(self, Arm, NAMESPACE_HARDWARE+'Arm')
+        self._takeoff_client = ActionClient(self, Takeoff, NAMESPACE_HARDWARE+'takeoff')
+        self._goto_rel_client = ActionClient(self, GotoRelative, NAMESPACE_HARDWARE+'goto_relative')
+        self._goto_glob_client = ActionClient(self, GotoGlobal, NAMESPACE_HARDWARE+'goto_global')
+        self._yaw_client     = ActionClient(self, SetYawAction, NAMESPACE_HARDWARE+'Set_yaw')
 
         # --- Telemetry subscriber ---
-        self.create_subscription(Telemetry, 'telemetry', self._telemetry_cb, 10)
+        self.create_subscription(Telemetry, NAMESPACE_HARDWARE+'telemetry', self._telemetry_cb, 10)
 
         # --- State & fail‑safe ---
         self._busy = False
