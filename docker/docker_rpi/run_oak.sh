@@ -1,1 +1,1 @@
-docker run -it -v /dev/:/dev/ --privileged -e DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix -v /home/knr/Dron_symulacja/docker_rpi/rgb_only.yaml:/rgb_only.yaml depthai-ros ros2 launch depthai_ros_driver rgbd_pcl.launch.py params_file:=/rgb_only.yaml camera_model:=OAK-D-Pro
+docker run -it -v /dev/:/dev/ --privileged -e DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix -v /home/knr/Dron_symulacja/docker/docker_rpi/rgb_only.yaml:/rgb_only.yaml depthai-ros ros2 launch depthai_ros_driver rgbd_pcl.launch.py params_file:=/rgb_only.yaml camera_model:=OAK-D-Pro

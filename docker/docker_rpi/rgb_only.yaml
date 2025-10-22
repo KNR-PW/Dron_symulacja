@@ -1,6 +1,6 @@
 /oak:
   ros__parameters:
       rgb:
-        i_resolution: '4K'
+        i_resolution: '1080P'
 
     
