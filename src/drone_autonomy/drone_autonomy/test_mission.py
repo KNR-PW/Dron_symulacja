@@ -7,9 +7,9 @@ class Mission(DroneController):
     def __init__(self):
 
         super().__init__()
-        self.make_photo_cli = self.create_client(MakePhoto, '/make_photo')  # albo '/mission/mission_make_photo' jeśli masz namespace
+        # self.make_photo_cli = self.create_client(MakePhoto, '/make_photo')  # albo '/mission/mission_make_photo' jeśli masz namespace
 
-        self.make_photo_cli.wait_for_service(timeout_sec=5.0)
+        # self.make_photo_cli.wait_for_service(timeout_sec=5.0)
         
         self.photo_idx = 1  # licznik do Zdj1, Zdj2...
 
@@ -46,11 +46,11 @@ class Mission(DroneController):
 def main(args=None):
     rclpy.init(args=args)
     mission = Mission()
-    mission.make_photo()  # Powinno zrobic zdj1
+    # mission.make_photo()  # Powinno zrobic zdj1
     mission.arm()
     mission.takeoff(5.0)
     mission.send_goto_global(-35.363319396972656, 149.16531372070312, 5.0)
-    mission.make_photo_next()  #Powinno zrobic zdj2
+    # mission.make_photo_next()  #Powinno zrobic zdj2
     time.sleep(5)
     # mission.send_goto_relative( 8.0, 0.0, 0.0)
     # mission.send_set_yaw(3.14/2)

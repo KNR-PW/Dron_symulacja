@@ -40,9 +40,11 @@ class VideoRecorder(Node):
         
 
         self.br = CvBridge()
+        # declare namespace
+        NAMESPACE = 'knr_video/'
         #makes servise to start and end video
-        self.start_video_recorder = self.create_service(TurnOnVideo, 'turn_on_video', self.start_video_callback)
-        self.stop_video_recorder = self.create_service(TurnOffVideo, 'turn_off_video', self.stop_video_callback)
+        self.start_video_recorder = self.create_service(TurnOnVideo, NAMESPACE+'turn_on_video', self.start_video_callback)
+        self.stop_video_recorder = self.create_service(TurnOffVideo, NAMESPACE+'turn_off_video', self.stop_video_callback)
 
         #declare variables to make video
 
