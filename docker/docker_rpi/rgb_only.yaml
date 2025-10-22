@@ -1,6 +1,8 @@
 /oak:
   ros__parameters:
       rgb:
-        i_resolution: '1080P'
+        i_resolution: '720P'
+        i_height: 720
+        i_width: 1280
 
     
