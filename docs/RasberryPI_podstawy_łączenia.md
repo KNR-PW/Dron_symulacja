@@ -6,4 +6,5 @@
 6. W zależności od drona (MAMBA-OAK, WROBELEK-RPI CAM) 
 * WROBELEK: ros2 launch drone_bringup drone_wrobelek.launch.py
 * MAMBA: do napisania
+* 
 
