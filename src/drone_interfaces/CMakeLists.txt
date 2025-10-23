@@ -41,6 +41,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "action/SetYawAction.action"
   "action/Takeoff.action"
   "srv/TakePhoto.srv"
+  "srv/MakePhoto.srv"
   DEPENDENCIES
   geometry_msgs
   sensor_msgs

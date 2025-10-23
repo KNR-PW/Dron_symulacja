@@ -25,6 +25,7 @@ setup(
         'console_scripts': [
             "images_recorder=drone_camera.images_recorder:main",
             "video_recorder=drone_camera.video_recorder:main",
+            "make_photo=drone_camera.make_photo:main",
         ],
     },
 )

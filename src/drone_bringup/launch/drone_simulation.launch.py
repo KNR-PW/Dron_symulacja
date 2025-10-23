@@ -22,7 +22,7 @@ def generate_launch_description():
         executable='images_recorder',
         output='screen',
         parameters=[{
-            'camera_topic': '/camera',
+            'camera_topic': 'camera',
             # katalog bazowy na misje
             'save_directory_base': 'Dron_symulacja/src/drone_camera/drone_camera',
             # nazwa serwisu z ImagesRecorder (Trigger), który zwraca "Saved: <ścieżka>"
@@ -30,6 +30,16 @@ def generate_launch_description():
             'move_instead_of_copy': False,
     }],
     )
+    mission_take_photo_server = Node(
+        package='drone_camera',
+        executable='make_photo',
+        output='screen',
+        respawn=True,                      # auto-restart gdyby padł
+        parameters=[{
+            'camera_topic': 'camera',
+            'enable_timer': False
+    }],
+)
     drone_handler_node = Node(
             package='drone_hardware',
             executable='drone_handler',
@@ -107,6 +117,8 @@ def generate_launch_description():
         web_telemetry,
         # web_inspekcja,
         healthcheck_action,
+        mission_make_photo_server,
+        mission_take_photo_server,
         # mission_reporter,
         # host_bridge,
 

@@ -7,7 +7,8 @@ from drone_interfaces.srv import (
     GetAttitude,
     SetMode,
     SetSpeed,
-    ToggleVelocityControl
+    ToggleVelocityControl,
+    MakePhoto,
 )
 from drone_interfaces.msg import Telemetry, VelocityVectors
 from drone_interfaces.action import (
@@ -31,6 +32,7 @@ class DroneController(Node):
         self._stop_video_client = self.create_client(TurnOffVideo, 'turn_off_video')
         self.toggle_velocity_control_cli = self.create_client(ToggleVelocityControl,'toggle_v_control')
         self.velocity_publisher = self.create_publisher(VelocityVectors,'velocity_vectors', 10)
+        self._photo_client = self.create_client(MakePhoto, '/make_photo')
 
         self._wait_for_service(self._mode_client, 'set_mode')
         self._wait_for_service(self._gps_client, 'get_location_relative')
@@ -233,6 +235,25 @@ class DroneController(Node):
             return False
         self.get_logger().info(f'Stop video')
         return True
+    
+    def take_mission_photo(self, ext='jpg'):
+        req = MakePhoto.Request()
+        req.prefix = f'Zdj{self.photo_idx}'
+        req.ext = ext
+        future = self.photo_client.call_async(req)
+
+        def _done(_):
+            result = future.result()
+            if result is None:
+                self.get_logger().error('Brak odpowiedzi z mission_make_photo')
+                return
+            if result.success:
+                self.get_logger().info(f'Zrobione: {req.prefix}.{ext}')
+                self.photo_idx += 1
+            else:
+                self.get_logger().warn('Nie udało się zrobić zdjęcia')
+
+        future.add_done_callback(_done)
     
 # functions to fly by vectors
     def send_vectors(self, vx, vy, vz):

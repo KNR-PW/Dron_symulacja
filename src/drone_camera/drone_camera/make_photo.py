@@ -13,6 +13,7 @@ from drone_interfaces.srv import MakePhoto   # << serwis
 
 class ImagesRecorder(Node):
     def __init__(self):
+        self.current_frame = None
         super().__init__('images_recorder')
 
         self.declare_parameter('camera_topic', 'camera')
@@ -40,7 +41,7 @@ class ImagesRecorder(Node):
 
         ### Powiedzial, zeby dodac self.current_frame = None, przetestuje czy dziala bez itd.
         self.br = CvBridge()
-        self.current_frame = None
+        #self.current_frame = None
 
         # Timer staskowy opcjonalny
         if self.get_parameter('enable_timer').get_parameter_value().bool_value:
@@ -50,9 +51,11 @@ class ImagesRecorder(Node):
             self.get_logger().info('video_recorder timer enabled')
 
         # Service
-        self.srv = self.create_service(MakePhoto, 'make_photo', self.make_photo)
+        self.srv = self.create_service(MakePhoto, '/make_photo', self.make_photo)
 
         self.get_logger().info('ImagesRecorder node with service ready')
+        # Heartbeat so it does not close
+        self.heartbeat = self.create_timer(2.0, lambda: self.get_logger().debug("alive"))
 
     # --- helper: wyznacz + utwórz kolejny katalog Mission#idx ---
     def _create_next_mission_dir(self, base_dir: Path) -> str:
@@ -86,7 +89,7 @@ class ImagesRecorder(Node):
     # Callback
     def listener_callback(self, data: Image):
         # Twierdzi, ze trzeba wymusic ale imo to bujda sprawdze i dodam jakby nie dzialalo
-        # self.current_frame = self.br.imgmsg_to_cv2(data, desired_encoding='bgr8')
+        #self.current_frame = self.br.imgmsg_to_cv2(data, desired_encoding='bgr8')
         self.current_frame = self.br.imgmsg_to_cv2(data)
 
     # Save frame
@@ -116,3 +119,16 @@ class ImagesRecorder(Node):
         else:
             res.success = f'saved: {fpath}'
         return res
+def main(args=None):
+    rclpy.init(args=args)
+    node = ImagesRecorder()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        node.get_logger().info("Shutting down (Ctrl+C)")
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
