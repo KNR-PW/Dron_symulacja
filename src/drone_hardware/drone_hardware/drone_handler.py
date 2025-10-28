@@ -12,7 +12,7 @@ from rclpy.executors import MultiThreadedExecutor
 
 
 from drone_interfaces.msg import Telemetry, VelocityVectors
-from drone_interfaces.srv import GetAttitude, GetLocationRelative, SetServo, SetYaw, SetMode, SetSpeed, GetGpsPos, ToggleVelocityControl
+from drone_interfaces.srv import GetAttitude, GetLocationRelative, SetServo, SetMode, SetSpeed, GetGpsPos, ToggleVelocityControl
 from drone_interfaces.action import GotoRelative, GotoGlobal, Arm, Takeoff, SetYawAction
 
 import haversine as hv
@@ -26,30 +26,31 @@ class DroneHandler(Node):
         self.declare_parameter('fc_ip', '/dev/ttyACM0')
         self.declare_parameter('dev', 'false')
 
+        ## DECLARE NAMESPACE
+        NAMESPACE = 'knr_hardware/'
+
         ## DECLARE SERVICES
-        self.attitude = self.create_service(GetAttitude, 'get_attitude', self.get_attitude_callback)
-        self.gps = self.create_service(GetLocationRelative, 'get_location_relative', self.get_location_relative_callback)
-        self.gps_abs = self.create_service(GetGpsPos, 'get_gps', self.get_gps_callback)
-        self.servo = self.create_service(SetServo, 'set_servo', self.set_servo_callback)
-        self.create_service(SetSpeed, 'set_speed', self.set_speed_callback)
-        #self.yaw = self.create_service(SetYaw, 'set_yaw', self.set_yaw_callback)
-        self.mode = self.create_service(SetMode, 'set_mode',self.set_mode_callback)
+        self.attitude = self.create_service(GetAttitude, NAMESPACE+'get_attitude', self.get_attitude_callback)
+        self.gps = self.create_service(GetLocationRelative, NAMESPACE+'get_location_relative', self.get_location_relative_callback)
+        self.gps_abs = self.create_service(GetGpsPos, NAMESPACE+'get_gps', self.get_gps_callback)
+        self.servo = self.create_service(SetServo, NAMESPACE+'set_servo', self.set_servo_callback)
+        self.create_service(SetSpeed, NAMESPACE+'set_speed', self.set_speed_callback)
+        self.mode = self.create_service(SetMode, NAMESPACE+'set_mode',self.set_mode_callback)
         
         ## DECLARE ACTIONS
-        self.goto_rel = ActionServer(self, GotoRelative, 'goto_relative', self.goto_relative_action, cancel_callback=self.cancel_callback)
-        self.goto_global = ActionServer(self, GotoGlobal, 'goto_global', self.goto_global_action, cancel_callback=self.cancel_callback)
-        self.arm = ActionServer(self,Arm, 'Arm',self.arm_callback)
-        self.takeoff = ActionServer(self, Takeoff, 'takeoff',self.takeoff_callback, cancel_callback=self.cancel_callback)
-        # self.shoot = ActionServer(self, Shoot, 'shoot', self.shoot_callback)
-        self.yaw = ActionServer(self, SetYawAction, 'Set_yaw', self.yaw_callback, cancel_callback=self.cancel_callback)
+        self.goto_rel = ActionServer(self, GotoRelative, NAMESPACE+'goto_relative', self.goto_relative_action, cancel_callback=self.cancel_callback)
+        self.goto_global = ActionServer(self, GotoGlobal, NAMESPACE+'goto_global', self.goto_global_action, cancel_callback=self.cancel_callback)
+        self.arm = ActionServer(self,Arm, NAMESPACE+'Arm',self.arm_callback)
+        self.takeoff = ActionServer(self, Takeoff, NAMESPACE+'takeoff',self.takeoff_callback, cancel_callback=self.cancel_callback)
+        self.yaw = ActionServer(self, SetYawAction, NAMESPACE+'Set_yaw', self.yaw_callback, cancel_callback=self.cancel_callback)
 
         #DECLARE PUBLISHER
-        self.telemetry_publisher = self.create_publisher(Telemetry, 'telemetry',10)
+        self.telemetry_publisher = self.create_publisher(Telemetry, NAMESPACE+'telemetry',10)
         
         #DECLARE VELOCITY CONTROL
-        self.vector_receiver = self.create_subscription(VelocityVectors, 'velocity_vectors', self.velocity_control_callback ,10)
+        self.vector_receiver = self.create_subscription(VelocityVectors, NAMESPACE+'velocity_vectors', self.velocity_control_callback ,10)
         self._velocity_control_flag = False
-        self.toggle_velocity_control_srv = self.create_service(ToggleVelocityControl, 'toggle_v_control', self.toggle_velocity_control)
+        self.toggle_velocity_control_srv = self.create_service(ToggleVelocityControl, NAMESPACE+'toggle_v_control', self.toggle_velocity_control)
 
         # ONLY FOR TEST IF YOU SEE HERE SOMETHING UNCOMMENTED TELL THIS TO HIS CREATOR
         #self._counter = 0
@@ -111,40 +112,10 @@ class DroneHandler(Node):
             except Exception as e:
                 self.get_logger().info(f"Error while waiting for FC to be ready: {e}")
                 time.sleep(1)
+
     def __del__(self):
         if self.vehicle:
             self.vehicle.mode=VehicleMode("RTL")
-
-    # DEPRECATED SHOOT ACTION
-    # def shoot_callback(self, goal_handle):
-    #     self.get_logger().info(f"Incoming shoot goal for color: {goal_handle.request.color}")
-    #     stop = 1000
-    #     shoot = 1200
-    #     load =1500
-
-    #     left = 2000
-    #     mid = 1400
-    #     right = 800
-
-    #     self.set_servo(10,stop)
-    #     self.set_servo(11,stop)
-    #     time.sleep(1)
-    #     self.set_servo(9,left if goal_handle.request.color == 'yellow' else right)
-    #     self.set_servo(10,load)
-    #     self.set_servo(11,load)
-    #     time.sleep(2)
-    #     self.set_servo(10,shoot)
-    #     self.set_servo(11,shoot)
-    #     self.set_servo(9,mid - 300 if goal_handle.request.color == 'yellow' else mid+300)
-    #     time.sleep(1)
-    #     self.set_servo(10,stop)
-    #     self.set_servo(11,stop)
-    #     self.set_servo(9,mid)
-
-    #     self.get_logger().info("Shoot action completed:" + goal_handle.request.color)
-    #     goal_handle.succeed()
-    #     result = Shoot.Result()
-    #     return result
 
     ## INTERNAL HELPER METHODS
     def goto_position_target_local_ned( self, north, east, down=-1):
@@ -282,11 +253,6 @@ class DroneHandler(Node):
         self.get_logger().info(f"North: {response.north}")
         self.get_logger().info(f"East: {response.east}")
         self.get_logger().info(f"Down: {response.down}")
-        return response
-    
-    def set_yaw_callback(self, request, response):
-        self.set_yaw(request.yaw)
-        response = SetYaw.Response()
         return response
 
     def set_servo_callback(self, request, response):

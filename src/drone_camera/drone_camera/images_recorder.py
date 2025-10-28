@@ -59,6 +59,7 @@ class ImagesRecorder(Node):
             # self.get_logger().info(f'Saved frame: {filepath}')
         else:
             self.get_logger().warn('No frame to save yet')
+            
 def main(args=None):
     rclpy.init(args=args)
 
