@@ -1,1 +1,1 @@
-ros2 run drone_autonomy follow_aruco_centroid --ros-args -p image_width:=640 -p image_height:=480 -p aruco_topic:=/aruco_markers -p target_alt:=2.0 -p kp:=0.6 -p deadband_px:=20 -p max_vel:=1.0 -p lowpass:=0.3 -p lost_timeout:=0.8
+ros2 run drone_autonomy follow_aruco_centroid --ros-args -p image_width:=640 -p image_height:=480 -p aruco_topic:=/aruco_markers -p target_alt:=2.0 -p kp:=2.6 -p deadband_px:=20 -p max_vel:=0.5 -p lowpass:=0.3 -p lost_timeout:=1.8

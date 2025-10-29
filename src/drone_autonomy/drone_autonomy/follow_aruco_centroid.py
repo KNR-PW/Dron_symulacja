@@ -51,6 +51,10 @@ class FollowArucoCentroid(DroneController):
         self.ey_f = 0.0
         self.last_seen = time.time()
 
+        # Dodanie flag dotyczących osiągnięcia punktu celowego
+        self.x_flag = False
+        self.y_flag = False
+
         self.get_logger().info(
             f"Start follow_aruco_centroid: img=({self.img_w}x{self.img_h}) "
             f"kp={self.kp} max_vel={self.max_vel} deadband={self.deadband_px}px"
@@ -79,8 +83,10 @@ class FollowArucoCentroid(DroneController):
         # martwa strefa
         if abs(ex_px) < self.deadband_px:
             ex_px = 0.0
+            self.x_flag = True
         if abs(ey_px) < self.deadband_px:
             ey_px = 0.0
+            self.y_flag = True
 
         # normalizacja do [-1,1]
         ex = ex_px / (self.img_w / 2.0)
@@ -97,6 +103,7 @@ class FollowArucoCentroid(DroneController):
     def control_loop(self):
         # brak markera niedawno → wyhamuj
         if (time.time() - self.last_seen) > self.lost_timeout:
+            self.get_logger().warning("Brak markera zatrzymuję się")
             self.send_vectors(0.0, 0.0, 0.0)
             return
 
@@ -105,10 +112,14 @@ class FollowArucoCentroid(DroneController):
         vx = clamp(vx, -self.max_vel, self.max_vel)
         vy = +self.kp * self.ex_f
         vy = clamp(vy, -self.max_vel, self.max_vel)
-        if abs(self.ey_f) < 0.1 and abs(self.ex_f) < 0.1:
+        if self.x_flag and self.y_flag:
             self.send_vectors(0.0, 0.0, 0.0)
             self.state = "OK"
+            self.get_logger().info("Dotarlem nad cel")
+            self.x_flag = False
+            self.y_flag = False
             self.timer.cancel()
+            return
 
         self.send_vectors(vx, vy, 0.0)
 
