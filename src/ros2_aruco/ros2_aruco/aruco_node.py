@@ -77,7 +77,7 @@ class ArucoNode(rclpy.node.Node):
         )
         self.declare_parameter(
             name="image_topic",
-            value="/camera",
+            value="/gimbal_camera",
             descriptor=ParameterDescriptor(
                 type=ParameterType.PARAMETER_STRING,
                 description="Image topic to subscribe to."
@@ -155,7 +155,7 @@ class ArucoNode(rclpy.node.Node):
 
     def image_callback(self, img_msg: Image):
         # Upewnij się, że zdekodujemy poprawnie nawet przy encodingu 8UC3
-        self.get_logger().info("dziala?")
+        # self.get_logger().info("dziala?")
         try:
             cv_image_color = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding="bgr8")
         except Exception:

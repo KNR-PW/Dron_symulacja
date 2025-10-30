@@ -6,7 +6,7 @@ import rclpy
 from rclpy.node import Node
 
 from drone_interfaces.msg import MiddleOfAruco, VelocityVectors
-from drone_interfaces.srv import ToggleVelocityControl
+from drone_interfaces.srv import ToggleVelocityControl, SetGimbalAngle, GetAttitude
 from drone_autonomy.drone_comunication.drone_controller import DroneController
 
 
@@ -56,6 +56,15 @@ class FollowArucoCentroid(DroneController):
             f"kp={self.kp} max_vel={self.max_vel} deadband={self.deadband_px}px"
         )
 
+        self.set_gimbal_cli = self.create_client(SetGimbalAngle, 'set_gimbal_angle')
+        while not self.set_gimbal_cli.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('Gimbal control service unavailable, waiting...')
+
+        # self.atti_cli = self.create_client(GetAttitude, 'get_attitude')
+        # while not self.atti_cli.wait_for_service(timeout_sec=1.0):
+        #     self.get_logger().info('attitude service not available, waiting again...')
+
+
         #Definiowanie misji
 
         # Arm & takeoff — jak w repo
@@ -68,6 +77,23 @@ class FollowArucoCentroid(DroneController):
 
         # Spróbuj włączyć tryb sterowania wektorami (jeśli serwis istnieje)
 
+    def set_gimbal_angle(self, angle_degrees):
+        """Sends a request to set gimbal angle and waits for an answer."""
+        self.get_logger().info(f"Sending request to set the gimbal to {angle_degrees} degrees...")
+        req = SetGimbalAngle.Request()
+        req.angle_degrees = float(angle_degrees)
+        
+        future = self.set_gimbal_cli.call_async(req)
+        rclpy.spin_until_future_complete(self, future)
+        
+        try:
+            response = future.result()
+            if response.success:
+                self.get_logger().info("Gimbal servo control setting success.")
+            else:
+                self.get_logger().error(f"Gimbal servo control unsuccessful: {response.message}")
+        except Exception as e:
+            self.get_logger().error(f'Service calling unsuccessful: {e}')
 
 
     # ──────────────────────────────────────────────────────────
@@ -105,7 +131,7 @@ class FollowArucoCentroid(DroneController):
         vx = clamp(vx, -self.max_vel, self.max_vel)
         vy = +self.kp * self.ex_f
         vy = clamp(vy, -self.max_vel, self.max_vel)
-        if abs(self.ey_f) < 0.1 and abs(self.ex_f) < 0.1:
+        if abs(self.ey_f) < 0.05 and abs(self.ex_f) < 0.05:
             self.send_vectors(0.0, 0.0, 0.0)
             self.state = "OK"
             self.timer.cancel()
@@ -140,8 +166,12 @@ def main():
     mission = FollowArucoCentroid()
     mission.arm()
     mission.takeoff(5.0)
+
+    mission.get_logger().info("Pointing gimbal downwards")
+    mission.set_gimbal_angle(89.9)
     mission.toggle_control()
     mission.fly_to_aruco()
+
     mission.toggle_control()
     mission.land()
 
