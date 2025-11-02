@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import os
-import re
 import cv2
 import rclpy
 from rclpy.node import Node
@@ -9,7 +8,7 @@ from cv_bridge import CvBridge
 from rcl_interfaces.msg import ParameterDescriptor, ParameterType
 from pathlib import Path
 
-from drone_interfaces.srv import MakePhoto   # << serwis
+from drone_interfaces.srv import MakePhoto
 
 class ImagesRecorder(Node):
     def __init__(self):
@@ -21,78 +20,63 @@ class ImagesRecorder(Node):
             type=ParameterType.PARAMETER_DOUBLE,
             description="Frames per second for the video recording.",
         ))
-        ### Chat powiedzial, zeby dodac, zeby moc opcjonalnie wylaczyc stary timer
         self.declare_parameter('enable_timer', False)
 
         camera_topic = self.get_parameter('camera_topic').get_parameter_value().string_value
         self.get_logger().info(f'camera_topic: {camera_topic}')
+        self.subscription = self.create_subscription(Image, camera_topic, self.listener_callback, 10)
 
-        self.subscription = self.create_subscription(
-            Image, camera_topic, self.listener_callback, 10
-        )
+        # --- Struktura: saved_images/<nr_misji>/{mission_images,log_images} ---
+        base_root = Path.cwd() / "saved_images"
+        base_root.mkdir(parents=True, exist_ok=True)
 
-        # <<< TU ZMIANA: bazowy katalog na sztywno >>>
-        base_dir = Path.home() / "ros_ws" / "Mission_Photos"
-        base_dir.mkdir(parents=True, exist_ok=True)
-
-        # >>> NOWE: auto-inkrementacja Mission#idx przy każdym uruchomieniu
-        self.save_directory = self._create_next_mission_dir(base_dir)
+        # >>> ZAMIANA: używamy OSTATNIEJ istniejącej misji zamiast tworzyć nową
+        mission_dir, mission_images_dir = self._use_latest_mission_dirs(base_root)
+        self.mission_dir = mission_dir
+        self.save_directory = mission_images_dir  # ten node zapisuje do mission_images
+        self.get_logger().info(f'Using mission directory: {self.mission_dir}')
         self.get_logger().info(f'Saving images to {self.save_directory}')
 
-        ### Powiedzial, zeby dodac self.current_frame = None, przetestuje czy dziala bez itd.
         self.br = CvBridge()
-        #self.current_frame = None
 
-        # Timer staskowy opcjonalny
         if self.get_parameter('enable_timer').get_parameter_value().bool_value:
-            fps = self.get_parameter('fps').get_parameter_value().double_value
-            timer_period = 1.0 / max(fps, 1e-6)
+            fps = max(self.get_parameter('fps').get_parameter_value().double_value, 1e-6)
+            timer_period = 1.0 / fps
             self.timer = self.create_timer(timer_period, self.save_frame)
-            self.get_logger().info('video_recorder timer enabled')
+            self.get_logger().info('images_recorder timer enabled')
 
         # Service
         self.srv = self.create_service(MakePhoto, '/make_photo', self.make_photo)
-
         self.get_logger().info('ImagesRecorder node with service ready')
-        # Heartbeat so it does not close
         self.heartbeat = self.create_timer(2.0, lambda: self.get_logger().debug("alive"))
 
-    # --- helper: wyznacz + utwórz kolejny katalog Mission#idx ---
-    def _create_next_mission_dir(self, base_dir: Path) -> str:
-        """
-        Szuka podkatalogów Mission<liczba> i Mission#<liczba>,
-        wybiera najwyższy indeks i tworzy kolejny w formacie 'Mission#<idx>'.
-        Zwraca absolutną ścieżkę jako string.
-        """
-        import re
-        pattern = re.compile(r"^Mission#?(\d+)$")  # dopasuj Mission1 i Mission#1
+    # --- helper: użyj ostatniej misji; jeśli brak, utwórz '1' i podkatalogi ---
+    def _use_latest_mission_dirs(self, root: Path):
         max_idx = 0
+        for entry in root.iterdir():
+            if entry.is_dir() and entry.name.isdigit():
+                try:
+                    idx = int(entry.name)
+                    if idx > max_idx:
+                        max_idx = idx
+                except ValueError:
+                    pass
 
-        for entry in base_dir.iterdir():
-            if entry.is_dir():
-                m = pattern.match(entry.name)
-                if m:
-                    try:
-                        idx = int(m.group(1))
-                        if idx > max_idx:
-                            max_idx = idx
-                    except ValueError:
-                        pass
+        if max_idx == 0:
+            max_idx = 1  # pierwsza misja, jeśli żadnej nie ma
 
-        next_idx = max_idx + 1
-        name = f"Mission#{next_idx}"             # zawsze z '#'
-        mission_dir = base_dir / name
-        mission_dir.mkdir(parents=True, exist_ok=True)
-        self.get_logger().info(f'Created mission directory: {mission_dir}')
-        return str(mission_dir)
+        mission_dir = root / str(max_idx)
+        mission_images_dir = mission_dir / "mission_images"
+        log_images_dir = mission_dir / "log_images"
 
-    # Callback
+        mission_images_dir.mkdir(parents=True, exist_ok=True)
+        log_images_dir.mkdir(parents=True, exist_ok=True)
+
+        return str(mission_dir), str(mission_images_dir)
+
     def listener_callback(self, data: Image):
-        # Twierdzi, ze trzeba wymusic ale imo to bujda sprawdze i dodam jakby nie dzialalo
-        #self.current_frame = self.br.imgmsg_to_cv2(data, desired_encoding='bgr8')
         self.current_frame = self.br.imgmsg_to_cv2(data)
 
-    # Save frame
     def save_frame(self, filename=None):
         if self.current_frame is not None:
             if filename is None:
@@ -109,16 +93,14 @@ class ImagesRecorder(Node):
             self.get_logger().warn('No frame to save yet')
             return None
 
-    # Obsluga service'u
-    def make_photo(self, req, res):           #Req = request, req.prefix = 'Zdj#', req.ext = 'jpg'
-        fname = f'{req.prefix}.jpg'
+    def make_photo(self, req, res):
+        ext = getattr(req, "ext", "jpg") or "jpg"
+        fname = f'{req.prefix}.{ext}'
         fpath = self.save_frame(filename=fname)
 
-        if fpath is None:
-            res.success = 'error: no frame to save'
-        else:
-            res.success = f'saved: {fpath}'
+        res.success = 'error: no frame to save' if fpath is None else f'saved: {fpath}'
         return res
+
 def main(args=None):
     rclpy.init(args=args)
     node = ImagesRecorder()

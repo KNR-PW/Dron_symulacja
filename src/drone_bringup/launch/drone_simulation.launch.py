@@ -23,8 +23,6 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'camera_topic': 'camera',
-            # katalog bazowy na misje
-            'save_directory_base': 'Dron_symulacja/src/drone_camera/drone_camera',
             # nazwa serwisu z ImagesRecorder (Trigger), który zwraca "Saved: <ścieżka>"
             'images_service_name': '/take_picture',
             'move_instead_of_copy': False,
@@ -119,7 +117,7 @@ def generate_launch_description():
         healthcheck_action,
         mission_make_photo_server,
         mission_take_photo_server,
-        # mission_reporter,
+        mission_reporter,
         # host_bridge,
 
         # This action will kill all nodes once the Webots simulation has exited

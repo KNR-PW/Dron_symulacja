@@ -94,10 +94,6 @@ class Mission(DroneController):
             self.photo_idx += 1   # zwiększ po sukcesie
         return ok
 
-    def make_photo_next(self, ext: str = 'jpg') -> bool:
-        """Skrót: zawsze kolejne ZdjN."""
-        return self.make_photo(name=None, ext=ext)
-
 
     def point_of_aruco(self, msg):
         #self.get_logger().info(f"Point of middle [{msg.x}, {msg.y}]")
@@ -213,7 +209,7 @@ def main(args=None):
     rclpy.init(args=args)
     mission = Mission()
     mission.make_photo()  # Powinno zrobic zdj1
-    mission.make_photo_next()  #Powinno zrobic zdj2
+    mission.make_photo()  # Powinno zrobic zdj2
     mission.destroy_node()
     rclpy.shutdown()
 
