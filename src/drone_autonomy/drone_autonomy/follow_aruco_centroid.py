@@ -4,6 +4,7 @@
 import time
 import rclpy
 from rclpy.node import Node
+import math
 
 from drone_interfaces.msg import MiddleOfAruco, VelocityVectors
 from drone_interfaces.srv import ToggleVelocityControl, SetGimbalAngle, GetAttitude
@@ -74,6 +75,13 @@ class FollowArucoCentroid(DroneController):
         while not self.set_gimbal_cli.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('Gimbal control service unavailable, waiting...')
 
+        # persistent attitude client (used by control_loop)
+        self.atti_cli = self.create_client(GetAttitude, 'get_attitude')
+        while not self.atti_cli.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('Attitude service unavailable, waiting...')
+        # small guard so we don't spam logs if attitude temporarily fails
+        self._attitude_fail_count = 0
+
         # centering flag and gimbal timer (timer runs but only acts when centering=True)
         self.centering = False
         # ensure safe non-zero period
@@ -89,10 +97,6 @@ class FollowArucoCentroid(DroneController):
             self.set_gimbal_cli.call_async(req0)
         except Exception:
             pass
-
-        # self.atti_cli = self.create_client(GetAttitude, 'get_attitude')
-        # while not self.atti_cli.wait_for_service(timeout_sec=1.0):
-        #     self.get_logger().info('attitude service not available, waiting again...')
 
         #Definiowanie misji
 
@@ -177,45 +181,101 @@ class FollowArucoCentroid(DroneController):
         self.last_seen = time.time()
 
     # ──────────────────────────────────────────────────────────
+    def request_attitude(self, timeout_sec: float = 1.0):
+        """Request roll,pitch,yaw from get_attitude service. Returns tuple or (None,None,None) on failure."""
+        try:
+            req = GetAttitude.Request()
+            future = self.atti_cli.call_async(req)
+            rclpy.spin_until_future_complete(self, future, timeout_sec=timeout_sec)
+            resp = future.result()
+            if resp is None:
+                raise RuntimeError("GetAttitude returned None")
+            # assume response has roll,pitch,yaw floats
+            return float(resp.roll), float(resp.pitch), float(resp.yaw)
+        except Exception as e:
+            self._attitude_fail_count += 1
+            if self._attitude_fail_count <= 3:
+                self.get_logger().error(f'Attitude service failed: {e}')
+            return None, None, None
+
+    # ──────────────────────────────────────────────────────────
+
+    def degrees_to_radians(self, degrees: float) -> float:
+        return degrees * (math.pi / 180.0)
+
     def control_loop(self):
         # brak markera niedawno → wyhamuj
         if (time.time() - self.last_seen) > self.lost_timeout:
+            # lost marker: stop motion and stop approach
             self.send_vectors(0.0, 0.0, 0.0)
+            self.state = "OK"
+            self.centering = False
+            try:
+                self.timer.cancel()
+            except Exception:
+                pass
+            return
+        
+        h = getattr(self, 'alt', None)
+        if h is None:
+            self.get_logger().error('Altitude not available, skipping control step')
+            return
+        _, drone_pitch, _ = self.request_attitude()
+        if drone_pitch is None:
+            # attitude not available this tick — skip control to avoid bad math
             return
 
+        denom = math.tan(self.degrees_to_radians(self.gimbal_angle + drone_pitch))
+        if abs(denom) < 0.001:
+            d_ground = 100.0 # max distance to cover
+        else:
+            d_ground = h / denom
+ 
         # Proste P: ex -> vy, ey -> vx (kamera do przodu)
         vx = -self.kp * self.ey_f
         vx = clamp(vx, -self.max_vel, self.max_vel)
-        vy = +self.kp * self.ex_f
+        vy = +self.kp * d_ground
         vy = clamp(vy, -self.max_vel, self.max_vel)
         if abs(self.ey_f) < 0.05 and abs(self.ex_f) < 0.05:
+            # reached centering goal: stop motion and stop approach, keep gimbal centered
             self.send_vectors(0.0, 0.0, 0.0)
             self.state = "OK"
-            self.timer.cancel()
-
+            self.centering = False
+            try:
+                self.timer.cancel()
+            except Exception:
+                pass
+ 
         self.send_vectors(vx, vy, 0.0)
 
     # ──────────────────────────────────────────────────────────
     def fly_to_aruco(self):
+        # Start gimbal centering + drone approach (control loop)
         self.state = "BUSY"
-        self.get_logger().info("wlaczam nadlatywanie do aruco")
-        # Timer sterowania 10 Hz
+        self.centering = True
+        self.get_logger().info("wlaczam nadlatywanie do aruco (gimbal centering + approach)")
+        # start approach control loop at 10 Hz (or adjust)
         self.timer = self.create_timer(0.1, self.control_loop)
         self.wait_busy()
-
-
+ 
+ 
     def center_aruco(self):
         self.state = "BUSY"
         self.centering = True
-        self.get_logger().info("wlaczam centrowanie aruco (non-blocking)")
-        # do not block here; gimbal_control_loop will run in timer
-
+        self.get_logger().info("wlaczam centrowanie aruco (gimbal only, non-blocking)")
+        # gimbal_control_loop is already running on its own timer
+ 
     def stop_centering(self):
         """Stop gimbal centering (non-blocking)."""
         self.centering = False
         self.state = "OK"
         self.get_logger().info("zatrzymano centrowanie aruco")
-
+        # if approach control is running, stop it too
+        try:
+            if hasattr(self, 'timer'):
+                self.timer.cancel()
+        except Exception:
+            pass
 
     def wait_busy(self):
         self.get_logger().info("busy")
@@ -242,9 +302,9 @@ def main():
     # enable velocity/vector control if needed (single call)
     mission.toggle_control()
 
-    # mission.fly_to_aruco()
     # start centering (non-blocking)
-    mission.center_aruco()
+    mission.fly_to_aruco()
+    # mission.center_aruco()
 
     mission.toggle_control()
     # let centering run for N seconds (adjust as needed)

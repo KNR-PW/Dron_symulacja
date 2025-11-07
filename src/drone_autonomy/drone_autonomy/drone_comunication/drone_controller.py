@@ -218,6 +218,15 @@ class DroneController(Node):
             self.get_logger().error('Attitude service failed')
             return 0.0
         return fut.result().yaw
+    
+    def get_pitch(self) -> float:
+        req = GetAttitude.Request()
+        fut = self._atti_client.call_async(req)
+        rclpy.spin_until_future_complete(self, fut, timeout_sec=2.0)
+        if fut.result() is None:
+            self.get_logger().error('Attitude service failed')
+            return 0.0
+        return fut.result().pitch
 
     def _telemetry_cb(self, msg: Telemetry):
         # Unpack telemetry message and save as attributes
