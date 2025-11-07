@@ -95,7 +95,7 @@ class Mission(DroneController):
 
     def timer_callback(self):
         if self.i < 2:
-            self.get_logger().info("przud")
+            self.get_logger().info("przod")
             self.send_vectors(0.5,0,0)
         elif self.i < 4:
             self.get_logger().info("prawo")

@@ -29,6 +29,12 @@ class FollowArucoCentroid(DroneController):
         self.declare_parameter('lowpass', 0.3)
         self.declare_parameter('lost_timeout', 0.8)  # s
 
+        # Gimbal tracking params
+        self.declare_parameter('gimbal_kp_deg', 1.5)     # degrees per normalized image unit
+        self.declare_parameter('gimbal_min_deg', -45.0)
+        self.declare_parameter('gimbal_max_deg', 89.9)
+        self.declare_parameter('gimbal_rate_hz', 10.0)    # command rate
+
         self.img_w = int(self.get_parameter('image_width').value)
         self.img_h = int(self.get_parameter('image_height').value)
         self.cx = self.img_w / 2.0
@@ -40,6 +46,14 @@ class FollowArucoCentroid(DroneController):
         self.lost_timeout = float(self.get_parameter('lost_timeout').value)
         self.aruco_topic = str(self.get_parameter('aruco_topic').value)
         self.target_alt = float(self.get_parameter('target_alt').value)
+
+        # gimbal state
+        self.gimbal_kp_deg = float(self.get_parameter('gimbal_kp_deg').value)
+        self.gimbal_min_deg = float(self.get_parameter('gimbal_min_deg').value)
+        self.gimbal_max_deg = float(self.get_parameter('gimbal_max_deg').value)
+        self.gimbal_rate_hz = float(self.get_parameter('gimbal_rate_hz').value)
+        # start with a safe downwards angle (match webots default)
+        self.gimbal_angle = 89.9
 
         self.state = "OK"
 
@@ -60,10 +74,25 @@ class FollowArucoCentroid(DroneController):
         while not self.set_gimbal_cli.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('Gimbal control service unavailable, waiting...')
 
+        # centering flag and gimbal timer (timer runs but only acts when centering=True)
+        self.centering = False
+        # ensure safe non-zero period
+        period = max(0.01, 1.0 / float(self.gimbal_rate_hz))
+        self.gimbal_timer = self.create_timer(period, self.gimbal_control_loop)
+        # lightweight gimbal debug counter (log every N steps)
+        self._gimbal_dbg_cnt = 0
+
+        # set initial gimbal angle asynchronously (do not block)
+        try:
+            req0 = SetGimbalAngle.Request()
+            req0.angle_degrees = float(self.gimbal_angle)
+            self.set_gimbal_cli.call_async(req0)
+        except Exception:
+            pass
+
         # self.atti_cli = self.create_client(GetAttitude, 'get_attitude')
         # while not self.atti_cli.wait_for_service(timeout_sec=1.0):
         #     self.get_logger().info('attitude service not available, waiting again...')
-
 
         #Definiowanie misji
 
@@ -95,6 +124,34 @@ class FollowArucoCentroid(DroneController):
         except Exception as e:
             self.get_logger().error(f'Service calling unsuccessful: {e}')
 
+    # ──────────────────────────────────────────────────────────
+    def gimbal_control_loop(self):
+        """Periodically adjust gimbal pitch to keep the marker centered vertically.
+        Uses the filtered vertical error ey_f (normalized)."""
+        # only act when centering requested
+        if not getattr(self, "centering", False):
+            return
+        # only track when we have a recent detection
+        if (time.time() - self.last_seen) > self.lost_timeout:
+            return
+
+        delta_deg = self.gimbal_kp_deg * float(self.ey_f)
+        # integrate with a small step to avoid jumps
+        max_step = max(1.0, abs(self.gimbal_kp_deg) * 0.5)  # cap step to avoid jerks
+        delta_deg = max(-max_step, min(max_step, delta_deg))
+        self.gimbal_angle = clamp(self.gimbal_angle + delta_deg, self.gimbal_min_deg, self.gimbal_max_deg)
+
+        # send non-blocking request
+        try:
+            req = SetGimbalAngle.Request()
+            req.angle_degrees = float(self.gimbal_angle)
+            self.set_gimbal_cli.call_async(req)
+        except Exception:
+            pass
+        # debug log occasionally
+        self._gimbal_dbg_cnt += 1
+        if self._gimbal_dbg_cnt % max(1, int(self.gimbal_rate_hz)) == 0:
+            self.get_logger().info(f"gimbal: ey_f={self.ey_f:.3f} angle={self.gimbal_angle:.2f} last_seen={time.time()-self.last_seen:.2f}s")
 
     # ──────────────────────────────────────────────────────────
     def on_marker(self, msg: MiddleOfAruco):
@@ -147,6 +204,19 @@ class FollowArucoCentroid(DroneController):
         self.wait_busy()
 
 
+    def center_aruco(self):
+        self.state = "BUSY"
+        self.centering = True
+        self.get_logger().info("wlaczam centrowanie aruco (non-blocking)")
+        # do not block here; gimbal_control_loop will run in timer
+
+    def stop_centering(self):
+        """Stop gimbal centering (non-blocking)."""
+        self.centering = False
+        self.state = "OK"
+        self.get_logger().info("zatrzymano centrowanie aruco")
+
+
     def wait_busy(self):
         self.get_logger().info("busy")
         while self.state == "BUSY":
@@ -169,10 +239,27 @@ def main():
 
     mission.get_logger().info("Pointing gimbal downwards")
     mission.set_gimbal_angle(89.9)
+    # enable velocity/vector control if needed (single call)
     mission.toggle_control()
-    mission.fly_to_aruco()
+
+    # mission.fly_to_aruco()
+    # start centering (non-blocking)
+    mission.center_aruco()
 
     mission.toggle_control()
+    # let centering run for N seconds (adjust as needed)
+    try:
+        run_seconds = 60.0
+        mission.get_logger().info(f"Centering for {run_seconds}s...")
+        t0 = time.time()
+        while time.time() - t0 < run_seconds:
+            rclpy.spin_once(mission, timeout_sec=0.1)
+    except KeyboardInterrupt:
+        pass
+
+    # stop centering, then land
+    mission.stop_centering()
+    mission.get_logger().info("Stopping centering and landing")
     mission.land()
 
 
