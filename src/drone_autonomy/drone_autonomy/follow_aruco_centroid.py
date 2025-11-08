@@ -270,7 +270,7 @@ class FollowArucoCentroid(DroneController):
         # Dodatkowe logowanie do debugowania
         self.get_logger().info(f"Control: h={h:.2f}, pitch={drone_pitch:.2f}, gimbal={self.gimbal_angle:.2f} -> d={d_ground:.2f}, ex_f={self.ex_f:.2f} -> vx={vx:.2f}, vy={vy:.2f}")
         
-        if abs(d_ground) < 0.2 and abs(self.ex_f) < 0.05:
+        if abs(d_ground) < 0.05 and abs(self.ex_f) < 0.05:
             # Osiągnięto cel -> zatrzymaj ruch
             self.get_logger().info("Target reached, stopping approach.")
             self.send_vectors(0.0, 0.0, 0.0)
