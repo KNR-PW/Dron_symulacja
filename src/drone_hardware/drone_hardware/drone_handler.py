@@ -406,7 +406,7 @@ class DroneHandler(Node):
     def publish_gps_pos(self):
         gps_msg = GPSPos()
         GPSPos.gps_position = vehicle.location.local_frame
-        self.gps_publisher.piblish(GPSPos)
+        self.gps_publisher.publish(GPSPos)
 
     def calc_yaw(self, yaw: float, actual_yaw: float)->float:
         if not self.__relative:

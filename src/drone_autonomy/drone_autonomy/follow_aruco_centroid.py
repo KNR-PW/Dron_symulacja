@@ -7,7 +7,7 @@ from rclpy.node import Node
 import math
 
 from drone_interfaces.msg import MiddleOfAruco, VelocityVectors, Telemetry
-from drone_interfaces.srv import ToggleVelocityControl, SetGimbalAngle, GetAttitude
+from drone_interfaces.srv import ToggleVelocityControl, SetGimbalAngle # , GetAttitude
 from drone_autonomy.drone_comunication.drone_controller import DroneController
 
 
@@ -34,7 +34,7 @@ class FollowArucoCentroid(DroneController):
         self.declare_parameter('gimbal_kp_deg', 1.5)     # degrees per normalized image unit
         self.declare_parameter('gimbal_min_deg', -45.0)
         self.declare_parameter('gimbal_max_deg', 89.9)
-        self.declare_parameter('gimbal_rate_hz', 10.0)    # command rate
+        self.declare_parameter('gimbal_rate_hz', 15.0)    # command rate
 
         self.img_w = int(self.get_parameter('image_width').value)
         self.img_h = int(self.get_parameter('image_height').value)
@@ -55,6 +55,10 @@ class FollowArucoCentroid(DroneController):
         self.gimbal_rate_hz = float(self.get_parameter('gimbal_rate_hz').value)
         # start with a safe downwards angle (match webots default)
         self.gimbal_angle = 89.9
+
+        self.roll = None
+        self.pitch = None
+        self.yaw = None
 
         self.state = "OK"
 
@@ -88,10 +92,10 @@ class FollowArucoCentroid(DroneController):
         #     self.get_logger().info('GPS service not available, waiting again...')
 
         # Attitude client — block until available (simple pattern from example)
-        self.atti_cli = self.create_client(GetAttitude, 'knr_hardware/get_attitude')
-        while not self.atti_cli.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info('attitude service not available, waiting again...')
-        self._attitude_fail_count = 0
+        # self.atti_cli = self.create_client(GetAttitude, 'knr_hardware/get_attitude')
+        # while not self.atti_cli.wait_for_service(timeout_sec=1.0):
+        #     self.get_logger().info('attitude service not available, waiting again...')
+        # self._attitude_fail_count = 0
 
         # centering flag and gimbal timer (timer runs but only acts when centering=True)
         self.centering = False
@@ -112,6 +116,9 @@ class FollowArucoCentroid(DroneController):
     def telemetry_callback(self, msg):
         """Callback to update altitude from telemetry topic."""
         self.altitude = msg.alt
+        self.roll = msg.roll
+        self.pitch = msg.pitch
+        self.yaw = msg.yaw
 
         #Definiowanie misji
 
@@ -198,21 +205,22 @@ class FollowArucoCentroid(DroneController):
         self.last_seen = time.time()
 
     # ──────────────────────────────────────────────────────────
-    def request_attitude(self, timeout_sec: float = 1.0):
-        """Request roll,pitch,yaw from get_attitude service.
-        Blocking, returns (tuple | None,None,None) on failure."""
-        req = GetAttitude.Request()
-        future = self.atti_cli.call_async(req)
-        rclpy.spin_until_future_complete(self, future, timeout_sec=timeout_sec)
+    
+    # def request_attitude(self, timeout_sec: float = 1.0):
+    #     """Request roll,pitch,yaw from get_attitude service.
+    #     Blocking, returns (tuple | None,None,None) on failure."""
+    #     req = GetAttitude.Request()
+    #     future = self.atti_cli.call_async(req)
+    #     rclpy.spin_until_future_complete(self, future, timeout_sec=timeout_sec)
 
-        if future.result() is not None:
-            resp = future.result()
-            return (float(resp.roll), float(resp.pitch), float(resp.yaw))
-        else:
-            self._attitude_fail_count += 1
-            if self._attitude_fail_count >= 3:
-                self.get_logger().error("Attitude request failed")
-            return (None, None, None)
+    #     if future.result() is not None:
+    #         resp = future.result()
+    #         return (float(resp.roll), float(resp.pitch), float(resp.yaw))
+    #     else:
+    #         self._attitude_fail_count += 1
+    #         if self._attitude_fail_count >= 3:
+    #             self.get_logger().error("Attitude request failed")
+    #         return (None, None, None)
 
     def get_altitude(self) -> float | None:
         """Return the most recent altitude from the telemetry topic."""
@@ -224,9 +232,10 @@ class FollowArucoCentroid(DroneController):
         return degrees * (math.pi / 180.0)
 
     def control_loop(self):
-        # brak markera niedawno → wyhamuj
+
         if (time.time() - self.last_seen) > self.lost_timeout:
-            # lost marker: stop motion and stop approach
+            # brak markera niedawno -> wyhamuj
+            self.get_logger().warn(f"Aruco marker lost for more than {self.lost_timeout}s, stopping!")
             self.send_vectors(0.0, 0.0, 0.0)
             self.state = "OK"
             self.centering = False
@@ -235,29 +244,42 @@ class FollowArucoCentroid(DroneController):
             except Exception:
                 pass
             return
-        
+
         h = self.get_altitude()
         if h is None:
-            self.get_logger().error('Altitude not available, skipping control step')
+            self.get_logger().error("Altitude not available, skipping control step")
             return
-        _, drone_pitch, _ = self.request_attitude()
+            
+        _roll, drone_pitch, _yaw = self.request_attitude()
         if drone_pitch is None:
-            # attitude not available this tick — skip control to avoid bad math
+            # attitude not available this tick, skip control to avoid bad math
             return
 
-        denom = math.tan(self.degrees_to_radians(self.gimbal_angle + drone_pitch))
+        denom = math.tan(self.degrees_to_radians(self.gimbal_angle) - drone_pitch)
         if abs(denom) < 0.001:
             d_ground = 100.0 # max distance to cover
         else:
             d_ground = h / denom
- 
-        # Proste P: ex -> vy, ey -> vx (kamera do przodu)
-        vx = -self.kp * d_ground
-        vx = clamp(vx, -self.max_vel, self.max_vel)
-        vy = +self.kp * self.ex_f
+            
+        # Poprawiona logika sterowania:
+        # Błąd horyzontalny (ex_f) steruje prędkością boczną (vy)
+        # Odległość od celu (d_ground) steruje prędkością w przód (vx)
+        
+        # Prędkość w przód (vx) do zmniejszenia dystansu do markera
+        vx = self.kp * d_ground 
+        vx = clamp(vx, 0, self.max_vel) # Lecimy tylko do przodu
+
+        # Prędkość boczna (vy) do centrowania markera w poziomie
+        # Znak dodatni, bo dodatni błąd ex_f (marker po prawej) wymaga dodatniej prędkości vy (ruch w prawo)
+        vy = self.kp * self.ex_f 
         vy = clamp(vy, -self.max_vel, self.max_vel)
-        if abs(self.ey_f) < 0.05 and abs(self.ex_f) < 0.05:
-            # reached centering goal: stop motion and stop approach, keep gimbal centered
+
+        # Dodatkowe logowanie do debugowania
+        self.get_logger().info(f"Control: h={h:.2f}, pitch={drone_pitch:.2f}, gimbal={self.gimbal_angle:.2f} -> d={d_ground:.2f}, ex_f={self.ex_f:.2f} -> vx={vx:.2f}, vy={vy:.2f}")
+        
+        if abs(d_ground) < 0.2 and abs(self.ex_f) < 0.05:
+            # Osiągnięto cel -> zatrzymaj ruch
+            self.get_logger().info("Target reached, stopping approach.")
             self.send_vectors(0.0, 0.0, 0.0)
             self.state = "OK"
             self.centering = False
@@ -265,8 +287,9 @@ class FollowArucoCentroid(DroneController):
                 self.timer.cancel()
             except Exception:
                 pass
- 
-        self.send_vectors(vx, vy, 0.0)
+        else:
+            self.send_vectors(vx, vy, 0.0)
+
 
     # ──────────────────────────────────────────────────────────
     def fly_to_aruco(self):
@@ -276,7 +299,7 @@ class FollowArucoCentroid(DroneController):
         self.get_logger().info("wlaczam nadlatywanie do aruco (gimbal centering + approach)")
         # start approach control loop at 10 Hz (or adjust)
         self.timer = self.create_timer(0.1, self.control_loop)
-        self.wait_busy()
+        # self.wait_busy()
  
  
     def center_aruco(self):
@@ -314,32 +337,43 @@ class FollowArucoCentroid(DroneController):
 def main():
     rclpy.init()
     mission = FollowArucoCentroid()
-    mission.arm()
-    mission.takeoff(5.0)
-
-    mission.get_logger().info("Pointing gimbal downwards")
-    mission.set_gimbal_angle(89.9)
-    # enable velocity/vector control if needed (single call)
-    mission.toggle_control()
-
-    # start centering (non-blocking)
-    # mission.fly_to_aruco()
-    mission.center_aruco()
-
-    # let centering run for N seconds (adjust as needed)
+    
     try:
-        run_seconds = 60.0
-        mission.get_logger().info(f"Centering for {run_seconds}s...")
-        t0 = time.time()
-        while time.time() - t0 < run_seconds:
-            rclpy.spin_once(mission, timeout_sec=0.1)
-    except KeyboardInterrupt:
-        pass
+        mission.arm()
+        mission.takeoff(5.0)
 
-    # stop centering, then land
-    mission.stop_centering()
-    mission.get_logger().info("Stopping centering and landing")
-    mission.land()
+        mission.get_logger().info("Pointing gimbal downwards")
+        mission.set_gimbal_angle(89.9)
+
+        # Włącz sterowanie wektorami prędkości
+        mission.toggle_control()
+
+        # Uruchom tryb fly_to_aruco (teraz jest nieblokujący)
+        mission.fly_to_aruco()
+        
+        # Pętla główna do obsługi logiki misji
+        run_seconds = 60.0
+        mission.get_logger().info(f"Running fly_to_aruco mission for {run_seconds}s...")
+        t0 = time.time()
+
+        while rclpy.ok() and (time.time() - t0) < run_seconds:
+            rclpy.spin_once(mission, timeout_sec=0.1)
+            # Sprawdź, czy misja się zakończyła (np. dron dotarł do celu)
+            if mission.state != "BUSY":
+                mission.get_logger().info("Mission finished, proceeding to land.")
+                break
+        
+    except KeyboardInterrupt:
+        mission.get_logger().info("Keyboard interrupt, stopping mission.")
+    finally:
+        # Zawsze spróbuj bezpiecznie wylądować
+        mission.get_logger().info("Stopping any active loops and landing.")
+        mission.stop_centering() # Zatrzymuje zarówno gimbal, jak i pętlę sterowania
+        mission.land()
+        mission.destroy_node()
+        rclpy.shutdown()
+
+
 
 
 if __name__ == '__main__':
