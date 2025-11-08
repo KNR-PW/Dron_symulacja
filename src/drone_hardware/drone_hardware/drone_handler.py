@@ -496,6 +496,11 @@ class DroneHandler(Node):
             msg.lon = self.vehicle.location.global_relative_frame.lon
             msg.alt = self.vehicle.location.global_relative_frame.alt
 
+            # Attitude
+            msg.roll = self.vehicle.attitude.roll
+            msg.pitch = self.vehicle.attitude.pitch
+            msg.yaw = self.vehicle.attitude.yaw
+
             # Flight mode
             msg.flight_mode = str(self.vehicle.mode)
             

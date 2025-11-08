@@ -54,7 +54,7 @@ class FollowArucoCentroid(DroneController):
         self.gimbal_max_deg = float(self.get_parameter('gimbal_max_deg').value)
         self.gimbal_rate_hz = float(self.get_parameter('gimbal_rate_hz').value)
         # start with a safe downwards angle (match webots default)
-        self.gimbal_angle = 89.9
+        self.gimbal_angle = 80.0
 
         self.roll = None
         self.pitch = None
@@ -211,22 +211,6 @@ class FollowArucoCentroid(DroneController):
         self.last_seen = time.time()
 
     # ──────────────────────────────────────────────────────────
-    
-    # def request_attitude(self, timeout_sec: float = 1.0):
-    #     """Request roll,pitch,yaw from get_attitude service.
-    #     Blocking, returns (tuple | None,None,None) on failure."""
-    #     req = GetAttitude.Request()
-    #     future = self.atti_cli.call_async(req)
-    #     rclpy.spin_until_future_complete(self, future, timeout_sec=timeout_sec)
-
-    #     if future.result() is not None:
-    #         resp = future.result()
-    #         return (float(resp.roll), float(resp.pitch), float(resp.yaw))
-    #     else:
-    #         self._attitude_fail_count += 1
-    #         if self._attitude_fail_count >= 3:
-    #             self.get_logger().error("Attitude request failed")
-    #         return (None, None, None)
 
     def get_altitude(self) -> float | None:
         """Return the most recent altitude from the telemetry topic."""
@@ -256,7 +240,10 @@ class FollowArucoCentroid(DroneController):
             self.get_logger().error("Altitude not available, skipping control step")
             return
             
-        _roll, drone_pitch, _yaw = self.request_attitude()
+        drone_pitch = self.pitch
+
+        # _roll, drone_pitch, _yaw = self.request_attitude()
+
         if drone_pitch is None:
             # attitude not available this tick, skip control to avoid bad math
             return
