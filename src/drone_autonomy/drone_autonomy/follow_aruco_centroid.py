@@ -6,7 +6,7 @@ import rclpy
 from rclpy.node import Node
 import math
 
-from drone_interfaces.msg import MiddleOfAruco, VelocityVectors
+from drone_interfaces.msg import MiddleOfAruco, VelocityVectors, Telemetry
 from drone_interfaces.srv import ToggleVelocityControl, SetGimbalAngle, GetAttitude
 from drone_autonomy.drone_comunication.drone_controller import DroneController
 
@@ -66,6 +66,13 @@ class FollowArucoCentroid(DroneController):
         self.ey_f = 0.0
         self.last_seen = time.time()
 
+        self.altitude = None
+        self.telemetry_sub = self.create_subscription(
+            Telemetry,
+            '/knr_hardware/telemetry',
+            self.telemetry_callback,
+            10)
+
         self.get_logger().info(
             f"Start follow_aruco_centroid: img=({self.img_w}x{self.img_h}) "
             f"kp={self.kp} max_vel={self.max_vel} deadband={self.deadband_px}px"
@@ -75,11 +82,15 @@ class FollowArucoCentroid(DroneController):
         while not self.set_gimbal_cli.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('Gimbal control service unavailable, waiting...')
 
-        # persistent attitude client (used by control_loop)
-        self.atti_cli = self.create_client(GetAttitude, 'get_attitude')
+        # # GPS (get altitude) client — block until available (matches your example)
+        # self.gps_cli = self.create_client(GetLocationRelative, 'knr_hardware/get_location_relative')
+        # while not self.gps_cli.wait_for_service(timeout_sec=1.0):
+        #     self.get_logger().info('GPS service not available, waiting again...')
+
+        # Attitude client — block until available (simple pattern from example)
+        self.atti_cli = self.create_client(GetAttitude, 'knr_hardware/get_attitude')
         while not self.atti_cli.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info('Attitude service unavailable, waiting...')
-        # small guard so we don't spam logs if attitude temporarily fails
+            self.get_logger().info('attitude service not available, waiting again...')
         self._attitude_fail_count = 0
 
         # centering flag and gimbal timer (timer runs but only acts when centering=True)
@@ -97,6 +108,10 @@ class FollowArucoCentroid(DroneController):
             self.set_gimbal_cli.call_async(req0)
         except Exception:
             pass
+
+    def telemetry_callback(self, msg):
+        """Callback to update altitude from telemetry topic."""
+        self.altitude = msg.alt
 
         #Definiowanie misji
 
@@ -140,6 +155,7 @@ class FollowArucoCentroid(DroneController):
             return
 
         delta_deg = self.gimbal_kp_deg * float(self.ey_f)
+
         # integrate with a small step to avoid jumps
         max_step = max(1.0, abs(self.gimbal_kp_deg) * 0.5)  # cap step to avoid jerks
         delta_deg = max(-max_step, min(max_step, delta_deg))
@@ -152,9 +168,11 @@ class FollowArucoCentroid(DroneController):
             self.set_gimbal_cli.call_async(req)
         except Exception:
             pass
+
         # debug log occasionally
         self._gimbal_dbg_cnt += 1
-        if self._gimbal_dbg_cnt % max(1, int(self.gimbal_rate_hz)) == 0:
+        if self._gimbal_dbg_cnt >= max(1, int(self.gimbal_rate_hz)):
+            self._gimbal_dbg_cnt = 0
             self.get_logger().info(f"gimbal: ey_f={self.ey_f:.3f} angle={self.gimbal_angle:.2f} last_seen={time.time()-self.last_seen:.2f}s")
 
     # ──────────────────────────────────────────────────────────
@@ -177,26 +195,28 @@ class FollowArucoCentroid(DroneController):
         a = clamp(self.lowpass, 0.0, 1.0)
         self.ex_f = (1 - a) * self.ex_f + a * ex
         self.ey_f = (1 - a) * self.ey_f + a * ey
-
         self.last_seen = time.time()
 
     # ──────────────────────────────────────────────────────────
     def request_attitude(self, timeout_sec: float = 1.0):
-        """Request roll,pitch,yaw from get_attitude service. Returns tuple or (None,None,None) on failure."""
-        try:
-            req = GetAttitude.Request()
-            future = self.atti_cli.call_async(req)
-            rclpy.spin_until_future_complete(self, future, timeout_sec=timeout_sec)
+        """Request roll,pitch,yaw from get_attitude service.
+        Blocking, returns (tuple | None,None,None) on failure."""
+        req = GetAttitude.Request()
+        future = self.atti_cli.call_async(req)
+        rclpy.spin_until_future_complete(self, future, timeout_sec=timeout_sec)
+
+        if future.result() is not None:
             resp = future.result()
-            if resp is None:
-                raise RuntimeError("GetAttitude returned None")
-            # assume response has roll,pitch,yaw floats
-            return float(resp.roll), float(resp.pitch), float(resp.yaw)
-        except Exception as e:
+            return (float(resp.roll), float(resp.pitch), float(resp.yaw))
+        else:
             self._attitude_fail_count += 1
-            if self._attitude_fail_count <= 3:
-                self.get_logger().error(f'Attitude service failed: {e}')
-            return None, None, None
+            if self._attitude_fail_count >= 3:
+                self.get_logger().error("Attitude request failed")
+            return (None, None, None)
+
+    def get_altitude(self) -> float | None:
+        """Return the most recent altitude from the telemetry topic."""
+        return self.altitude
 
     # ──────────────────────────────────────────────────────────
 
@@ -216,7 +236,7 @@ class FollowArucoCentroid(DroneController):
                 pass
             return
         
-        h = getattr(self, 'alt', None)
+        h = self.get_altitude()
         if h is None:
             self.get_logger().error('Altitude not available, skipping control step')
             return
@@ -232,9 +252,9 @@ class FollowArucoCentroid(DroneController):
             d_ground = h / denom
  
         # Proste P: ex -> vy, ey -> vx (kamera do przodu)
-        vx = -self.kp * self.ey_f
+        vx = -self.kp * d_ground
         vx = clamp(vx, -self.max_vel, self.max_vel)
-        vy = +self.kp * d_ground
+        vy = +self.kp * self.ex_f
         vy = clamp(vy, -self.max_vel, self.max_vel)
         if abs(self.ey_f) < 0.05 and abs(self.ex_f) < 0.05:
             # reached centering goal: stop motion and stop approach, keep gimbal centered
@@ -303,10 +323,9 @@ def main():
     mission.toggle_control()
 
     # start centering (non-blocking)
-    mission.fly_to_aruco()
-    # mission.center_aruco()
+    # mission.fly_to_aruco()
+    mission.center_aruco()
 
-    mission.toggle_control()
     # let centering run for N seconds (adjust as needed)
     try:
         run_seconds = 60.0
