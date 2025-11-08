@@ -70,6 +70,10 @@ class FollowArucoCentroid(DroneController):
         self.ey_f = 0.0
         self.last_seen = time.time()
 
+        # Dodanie flag dotyczących osiągnięcia punktu celowego
+        self.x_flag = False
+        self.y_flag = False
+
         self.altitude = None
         self.telemetry_sub = self.create_subscription(
             Telemetry,
@@ -191,8 +195,10 @@ class FollowArucoCentroid(DroneController):
         # martwa strefa
         if abs(ex_px) < self.deadband_px:
             ex_px = 0.0
+            self.x_flag = True
         if abs(ey_px) < self.deadband_px:
             ey_px = 0.0
+            self.y_flag = True
 
         # normalizacja do [-1,1]
         ex = ex_px / (self.img_w / 2.0)
