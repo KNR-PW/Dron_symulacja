@@ -54,16 +54,19 @@ class FollowArucoCentroid(DroneController):
         self.gimbal_max_deg = float(self.get_parameter('gimbal_max_deg').value)
         self.gimbal_rate_hz = float(self.get_parameter('gimbal_rate_hz').value)
         # start with a safe downwards angle (match webots default)
-        self.gimbal_angle = 80.0
+        self.gimbal_angle_deg = 80.0
 
         self.roll = None
-        self.pitch = None
+        self.pitch_rad = None
         self.yaw = None
 
         self.state = "OK"
 
         # ---- Subskrypcja markera ----
         self.sub = self.create_subscription(MiddleOfAruco, self.aruco_topic, self.on_marker, 10)
+
+        self.ex_px = 0.0
+        self.ey_px = 0.0
 
         # Stan filtrowany błędu (normalized)
         self.ex_f = 0.0
@@ -112,7 +115,7 @@ class FollowArucoCentroid(DroneController):
         # set initial gimbal angle asynchronously (do not block)
         try:
             req0 = SetGimbalAngle.Request()
-            req0.angle_degrees = float(self.gimbal_angle)
+            req0.angle_degrees = float(self.gimbal_angle_deg)
             self.set_gimbal_cli.call_async(req0)
         except Exception:
             pass
@@ -121,7 +124,7 @@ class FollowArucoCentroid(DroneController):
         """Callback to update altitude from telemetry topic."""
         self.altitude = msg.alt
         self.roll = msg.roll
-        self.pitch = msg.pitch
+        self.pitch_rad = msg.pitch
         self.yaw = msg.yaw
 
         #Definiowanie misji
@@ -170,12 +173,12 @@ class FollowArucoCentroid(DroneController):
         # integrate with a small step to avoid jumps
         max_step = max(1.0, abs(self.gimbal_kp_deg) * 0.5)  # cap step to avoid jerks
         delta_deg = max(-max_step, min(max_step, delta_deg))
-        self.gimbal_angle = clamp(self.gimbal_angle + delta_deg, self.gimbal_min_deg, self.gimbal_max_deg)
+        self.gimbal_angle_deg = clamp(self.gimbal_angle_deg + delta_deg, self.gimbal_min_deg, self.gimbal_max_deg)
 
         # send non-blocking request
         try:
             req = SetGimbalAngle.Request()
-            req.angle_degrees = float(self.gimbal_angle)
+            req.angle_degrees = float(self.gimbal_angle_deg)
             self.set_gimbal_cli.call_async(req)
         except Exception:
             pass
@@ -184,24 +187,24 @@ class FollowArucoCentroid(DroneController):
         self._gimbal_dbg_cnt += 1
         if self._gimbal_dbg_cnt >= max(1, int(self.gimbal_rate_hz)):
             self._gimbal_dbg_cnt = 0
-            self.get_logger().info(f"gimbal: ey_f={self.ey_f:.3f} angle={self.gimbal_angle:.2f} last_seen={time.time()-self.last_seen:.2f}s")
+            self.get_logger().info(f"gimbal: ey_f={self.ey_f:.3f} angle={self.gimbal_angle_deg:.2f} last_seen={time.time()-self.last_seen:.2f}s")
 
     # ──────────────────────────────────────────────────────────
     def on_marker(self, msg: MiddleOfAruco):
         # błąd w pikselach względem środka obrazu
-        ex_px = float(msg.x) - self.cx
+        self.ex_px = float(msg.x) - self.cx
         ey_px = float(msg.y) - self.cy
 
         # martwa strefa
-        if abs(ex_px) < self.deadband_px:
-            ex_px = 0.0
+        if abs(self.ex_px) < self.deadband_px:
+            self.ex_px = 0.0
             self.x_flag = True
         if abs(ey_px) < self.deadband_px:
             ey_px = 0.0
             self.y_flag = True
 
         # normalizacja do [-1,1]
-        ex = ex_px / (self.img_w / 2.0)
+        ex = self.ex_px / (self.img_w / 2.0)
         ey = ey_px / (self.img_h / 2.0)
 
         # low-pass
@@ -220,6 +223,9 @@ class FollowArucoCentroid(DroneController):
 
     def degrees_to_radians(self, degrees: float) -> float:
         return degrees * (math.pi / 180.0)
+    
+    def radians_to_degrees(self, degrees: float) -> float:
+        return degrees * (180.0 / math.pi)
 
     def control_loop(self):
 
@@ -235,42 +241,46 @@ class FollowArucoCentroid(DroneController):
                 pass
             return
 
-        h = self.get_altitude()
-        if h is None:
+        h_m = self.get_altitude()
+        if h_m is None:
             self.get_logger().error("Altitude not available, skipping control step")
             return
             
-        drone_pitch = self.pitch
+        drone_pitch_rad = self.pitch_rad
 
-        # _roll, drone_pitch, _yaw = self.request_attitude()
-
-        if drone_pitch is None:
+        if drone_pitch_rad is None:
             # attitude not available this tick, skip control to avoid bad math
             return
 
-        denom = math.tan(self.degrees_to_radians(self.gimbal_angle) - drone_pitch)
-        if abs(denom) < 0.001:
-            d_ground = 100.0 # max distance to cover
-        else:
-            d_ground = h / denom
-            
-        # Poprawiona logika sterowania:
-        # Błąd horyzontalny (ex_f) steruje prędkością boczną (vy)
-        # Odległość od celu (d_ground) steruje prędkością w przód (vx)
-        
-        # Prędkość w przód (vx) do zmniejszenia dystansu do markera
-        vx = self.kp * d_ground 
-        vx = clamp(vx, 0, self.max_vel) # Lecimy tylko do przodu
+        overall_pitch_rad = self.degrees_to_radians(self.gimbal_angle_deg) - drone_pitch_rad # drone's pitch is in radians and inverted (negative pitch = nose down)
 
-        # Prędkość boczna (vy) do centrowania markera w poziomie
-        # Znak dodatni, bo dodatni błąd ex_f (marker po prawej) wymaga dodatniej prędkości vy (ruch w prawo)
-        vy = self.kp * self.ex_f 
-        vy = clamp(vy, -self.max_vel, self.max_vel)
+        denom = math.tan(overall_pitch_rad)
+        if abs(denom) < 0.001:
+            d_ground_m = 100.0 # max distance to cover
+        else:
+            d_ground_m = h_m / denom
+        
+        # Front speed (vx) to reduce ground distance to marker
+        vx = self.kp * d_ground_m 
+        vx = clamp(vx, -self.max_vel, self.max_vel)
+
+        # Yaw control to center marker horizontally
+        # r = h_m / math.sin(overall_pitch_rad)
+
+        HFOV_RAD = self.degrees_to_radians(100.0)
+        horizontal_pixel_count = 640.0
+
+        d_yaw_rad = self.ex_px * HFOV_RAD / horizontal_pixel_count
+
+        # # Prędkość boczna (vy) do centrowania markera w poziomie
+        # # Znak dodatni, bo dodatni błąd ex_f (marker po prawej) wymaga dodatniej prędkości vy (ruch w prawo)
+        # vy = self.kp * self.ex_f 
+        # vy = clamp(vy, -self.max_vel, self.max_vel)
 
         # Dodatkowe logowanie do debugowania
-        self.get_logger().info(f"Control: h={h:.2f}, pitch={drone_pitch:.2f}, gimbal={self.gimbal_angle:.2f} -> d={d_ground:.2f}, ex_f={self.ex_f:.2f} -> vx={vx:.2f}, vy={vy:.2f}")
+        self.get_logger().info(f"Control: h={h_m:.2f}, pitch={self.radians_to_degrees(drone_pitch_rad):.2f} deg, gimbal={self.gimbal_angle_deg:.2f} -> d={d_ground_m:.2f}, ex_f={self.ex_f:.2f} -> vx={vx:.2f}, delta yaw={self.radians_to_degrees(d_yaw_rad):.2f} deg")
         
-        if abs(d_ground) < 0.05 and abs(self.ex_f) < 0.05:
+        if abs(d_ground_m) < 0.001 and abs(self.ex_f) < 0.001:
             # Osiągnięto cel -> zatrzymaj ruch
             self.get_logger().info("Target reached, stopping approach.")
             self.send_vectors(0.0, 0.0, 0.0)
@@ -281,7 +291,8 @@ class FollowArucoCentroid(DroneController):
             except Exception:
                 pass
         else:
-            self.send_vectors(vx, vy, 0.0)
+            self.send_vectors(vx, 0.0, 0.0)
+            self.send_set_yaw(d_yaw_rad, relative = True)
 
 
     # ──────────────────────────────────────────────────────────
@@ -333,13 +344,22 @@ def main():
     
     try:
         mission.arm()
-        mission.takeoff(5.0)
+        mission.takeoff(3.0)
 
         mission.get_logger().info("Pointing gimbal downwards")
-        mission.set_gimbal_angle(89.9)
+        mission.set_gimbal_angle(80.0)
 
         # Włącz sterowanie wektorami prędkości
         mission.toggle_control()
+
+        # mission.send_set_yaw(1.57, True)
+        # # time.sleep(3)
+        # mission.send_vectors(1.0, 0.0, 0.0)
+        # # time.sleep(3)
+        # mission.send_set_yaw(-1.57, True)
+        # # time.sleep(3)
+        # mission.send_vectors(1.0, 0.0, 0.0)
+        # time.sleep(3)
 
         # Uruchom tryb fly_to_aruco (teraz jest nieblokujący)
         mission.fly_to_aruco()
@@ -349,7 +369,7 @@ def main():
         mission.get_logger().info(f"Running fly_to_aruco mission for {run_seconds}s...")
         t0 = time.time()
 
-        while rclpy.ok() and (time.time() - t0) < run_seconds:
+        while rclpy.ok(): # and (time.time() - t0) < run_seconds:
             rclpy.spin_once(mission, timeout_sec=0.1)
             # Sprawdź, czy misja się zakończyła (np. dron dotarł do celu)
             if mission.state != "BUSY":
@@ -363,10 +383,9 @@ def main():
         mission.get_logger().info("Stopping any active loops and landing.")
         mission.stop_centering() # Zatrzymuje zarówno gimbal, jak i pętlę sterowania
         mission.land()
+        mission.toggle_control()
         mission.destroy_node()
         rclpy.shutdown()
-
-
 
 
 if __name__ == '__main__':
