@@ -193,19 +193,19 @@ class FollowArucoCentroid(DroneController):
     def on_marker(self, msg: MiddleOfAruco):
         # błąd w pikselach względem środka obrazu
         self.ex_px = float(msg.x) - self.cx
-        ey_px = float(msg.y) - self.cy
+        self.ey_px = float(msg.y) - self.cy
 
         # martwa strefa
         if abs(self.ex_px) < self.deadband_px:
             self.ex_px = 0.0
             self.x_flag = True
-        if abs(ey_px) < self.deadband_px:
-            ey_px = 0.0
+        if abs(self.ey_px) < self.deadband_px:
+            self.ey_px = 0.0
             self.y_flag = True
 
         # normalizacja do [-1,1]
         ex = self.ex_px / (self.img_w / 2.0)
-        ey = ey_px / (self.img_h / 2.0)
+        ey = self.ey_px / (self.img_h / 2.0)
 
         # low-pass
         a = clamp(self.lowpass, 0.0, 1.0)
@@ -254,33 +254,47 @@ class FollowArucoCentroid(DroneController):
 
         overall_pitch_rad = self.degrees_to_radians(self.gimbal_angle_deg) - drone_pitch_rad # drone's pitch is in radians and inverted (negative pitch = nose down)
 
-        denom = math.tan(overall_pitch_rad)
-        if abs(denom) < 0.001:
-            d_ground_m = 100.0 # max distance to cover
+        if (self.radians_to_degrees(overall_pitch_rad) >= 89.0): # to enable going back
+            vertical_pixel_count = 480.0
+            # horizontal_pixel_count = 640.0
+            # VFOV_RAD = self.degrees_to_radians(100.0) * vertical_pixel_count / horizontal_pixel_count # vertical field of view in radians (approx for Webots camera)
+
+            # VFOV = 100 deg * 480/640 = 75 deg
+            # tan(37.5 deg) = 0.7673270030049353
+
+            # Przy pitchu większym niż 90 stopni, odległość do markera na ziemi jest przybliżona przez:
+            cam_half_vertical_range_m = h_m * 0.767327
+
+            d_ground_m = - cam_half_vertical_range_m * self.ey_px / (vertical_pixel_count / 2.0) # negative because ey_px positive means marker is below center
+
+            # d_ground_m = self.ey_f
         else:
-            d_ground_m = h_m / denom
-        
+            denom = math.tan(overall_pitch_rad)
+            if abs(denom) < 0.001:
+                d_ground_m = 100.0 # max distance to cover
+            else:
+                d_ground_m = h_m / denom
+
         # Front speed (vx) to reduce ground distance to marker
         vx = self.kp * d_ground_m 
         vx = clamp(vx, -self.max_vel, self.max_vel)
 
         # Yaw control to center marker horizontally
         # r = h_m / math.sin(overall_pitch_rad)
+        # HFOV_RAD = self.degrees_to_radians(100.0)
+        # horizontal_pixel_count = 640.0
+        # d_yaw_rad = self.ex_px * HFOV_RAD / horizontal_pixel_count
 
-        HFOV_RAD = self.degrees_to_radians(100.0)
-        horizontal_pixel_count = 640.0
-
-        d_yaw_rad = self.ex_px * HFOV_RAD / horizontal_pixel_count
-
-        # # Prędkość boczna (vy) do centrowania markera w poziomie
-        # # Znak dodatni, bo dodatni błąd ex_f (marker po prawej) wymaga dodatniej prędkości vy (ruch w prawo)
-        # vy = self.kp * self.ex_f 
-        # vy = clamp(vy, -self.max_vel, self.max_vel)
+        # Prędkość boczna (vy) do centrowania markera w poziomie
+        # Znak dodatni, bo dodatni błąd ex_f (marker po prawej) wymaga dodatniej prędkości vy (ruch w prawo)
+        vy = self.kp * self.ex_f 
+        vy = clamp(vy, -self.max_vel, self.max_vel)
 
         # Dodatkowe logowanie do debugowania
-        self.get_logger().info(f"Control: h={h_m:.2f}, pitch={self.radians_to_degrees(drone_pitch_rad):.2f} deg, gimbal={self.gimbal_angle_deg:.2f} -> d={d_ground_m:.2f}, ex_f={self.ex_f:.2f} -> vx={vx:.2f}, delta yaw={self.radians_to_degrees(d_yaw_rad):.2f} deg")
+        self.get_logger().info(f"Control: h={h_m:.2f}, pitch={self.radians_to_degrees(drone_pitch_rad):.2f} deg, gimbal={self.gimbal_angle_deg:.2f} ->"
+                               f"d={d_ground_m:.2f}, ex_f={self.ex_f:.2f} -> vx={vx:.2f}, vy ={vy:.2f}") # delta yaw={self.radians_to_degrees(d_yaw_rad):.2f} deg")
         
-        if abs(d_ground_m) < 0.001 and abs(self.ex_f) < 0.001:
+        if abs(d_ground_m) < 0.001 and abs(self.ex_px) < 10:
             # Osiągnięto cel -> zatrzymaj ruch
             self.get_logger().info("Target reached, stopping approach.")
             self.send_vectors(0.0, 0.0, 0.0)
@@ -291,8 +305,8 @@ class FollowArucoCentroid(DroneController):
             except Exception:
                 pass
         else:
-            self.send_vectors(vx, 0.0, 0.0)
-            self.send_set_yaw(d_yaw_rad, relative = True)
+            self.send_vectors(vx, vy, 0.0)
+            # self.send_set_yaw(d_yaw_rad, relative = True)
 
 
     # ──────────────────────────────────────────────────────────
