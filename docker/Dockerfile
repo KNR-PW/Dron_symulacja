@@ -84,6 +84,6 @@ USER root
 WORKDIR /root
 
 # Ultralytics
-# RUN pip install ultralytics
+RUN pip install ultralytics
 
 CMD ["/bin/bash"]
