@@ -83,4 +83,7 @@ RUN git clone --recurse-submodules --depth=1 https://github.com/ArduPilot/ardupi
 USER root
 WORKDIR /root
 
+# Ultralytics
+RUN pip install ultralytics
+
 CMD ["/bin/bash"]

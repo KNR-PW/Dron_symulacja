@@ -397,25 +397,17 @@ def main():
     
     try:
         mission.arm()
-        mission.takeoff(3.0)
+        mission.set_gimbal_angle(35.0)
+        mission.takeoff(5.0)
 
         mission.get_logger().info("Pointing gimbal downwards")
-        mission.set_gimbal_angle(80.0)
+
 
         # Włącz sterowanie wektorami prędkości
         mission.toggle_control()
 
-        # mission.send_set_yaw(1.57, True)
-        # # time.sleep(3)
-        # mission.send_vectors(1.0, 0.0, 0.0)
-        # # time.sleep(3)
-        # mission.send_set_yaw(-1.57, True)
-        # # time.sleep(3)
-        # mission.send_vectors(1.0, 0.0, 0.0)
-        # time.sleep(3)
-
-        # Uruchom tryb fly_to_aruco (teraz jest nieblokujący)
         mission.fly_to_detection()
+        time.sleep(2.0)  
         
         # Pętla główna do obsługi logiki misji
         run_seconds = 60.0

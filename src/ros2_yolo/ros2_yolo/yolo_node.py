@@ -4,6 +4,7 @@ from sensor_msgs.msg import Image
 from vision_msgs.msg import Detection2D, Detection2DArray, BoundingBox2D, ObjectHypothesisWithPose
 from cv_bridge import CvBridge
 from drone_detector.yolo_detector import YoloDetector  # Import ze swojej biblioteki
+import cv2
 
 class YoloNode(Node):
     def __init__(self):
@@ -39,6 +40,11 @@ class YoloNode(Node):
             hyp.hypothesis.class_id = str(det['class_id'])
             hyp.hypothesis.score = det['confidence']
             d.results.append(hyp)
+
+            # annotated_frame = results[0].plot()  # Rysuje bounding boxy i etykiety
+            # cv2.imshow("YOLO Detection", annotated_frame)
+            # cv2.waitKey(1)  # Potrzebne do odświeżania okna
+
             # Opcjonalny ID śledzenia
             if det['tracking_id']:
                 d.id = str(det['tracking_id'])
