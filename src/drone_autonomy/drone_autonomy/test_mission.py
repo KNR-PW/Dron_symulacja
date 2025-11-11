@@ -73,9 +73,9 @@ def main(args=None):
     # mission.send_mode('LAND')
     mission = DroneController()
     mission.arm()
-    # mission.takeoff(5.0)
+    mission.takeoff(5.0)
     # # mission.send_goto_global(-35.363319396972656, 149.16531372070312, 5.0)
-    # time.sleep(5)
+    time.sleep(5)
     # # mission.send_goto_relative( 8.0, 0.0, 0.0)
     # # mission.send_set_yaw(3.14/2)
     # # mission.toggle_control()
@@ -86,8 +86,8 @@ def main(args=None):
     # # mission.send_vectors(1.0,0.0,0.0)
     # # time.sleep(1)
     # # mission.toggle_control()
-    # mission.land()
-    # mission.destroy_node()
+    mission.land()
+    mission.destroy_node()
     rclpy.shutdown()
 
 

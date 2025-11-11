@@ -4,14 +4,19 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
 from rclpy.executors import MultiThreadedExecutor
-from rclpy.action import ActionServer
+from rclpy.action import ActionServer,  CancelResponse
 
 
 from drone_interfaces.srv import SetMode
 from drone_interfaces.action import  Arm, Takeoff
 
-from px4_msgs.msg import VehicleStatus, VehicleCommand, OffboardControlMode
+from px4_msgs.msg import VehicleStatus, VehicleCommand, OffboardControlMode, VehicleGlobalPosition, TrajectorySetpoint, VehicleLocalPosition
 
+class GlobalPosition():
+    def __init__(self):
+        self.alt = float(0.0)
+        self.lat = float(0.0)
+        self.lon = float(0.0)
 
 class DroneHandlerPX4(Node):
     def __init__(self):
@@ -29,13 +34,17 @@ class DroneHandlerPX4(Node):
 
         #declare actions
         self.arm = ActionServer(self,Arm, NAMESPACE+'Arm',self.arm_callback)
+        self.takeoff = ActionServer(self, Takeoff, NAMESPACE+'takeoff',self.takeoff_callback, cancel_callback=self.cancel_callback)
         
         #declare subcriptions
         self.status_sub = self.create_subscription(VehicleStatus, '/fmu/out/vehicle_status_v1', self.vehicle_status_callback, qos_profile)
+        self.global_position_sub = self.create_subscription(VehicleGlobalPosition, '/fmu/out/vehicle_global_position', self.vehicle_global_position_callback, qos_profile)
+        self.global_position_sub = self.create_subscription(VehicleLocalPosition, '/fmu/out/vehicle_local_position_v1', self.vehicle_local_position_callback, qos_profile)
 
         # # Create publishers
         self.offboard_control_mode_publisher = self.create_publisher(OffboardControlMode, '/fmu/in/offboard_control_mode', qos_profile)
         self.vehicle_command_publisher = self.create_publisher(VehicleCommand, '/fmu/in/vehicle_command', qos_profile)
+        self.trajectory_setpoint_publisher = self.create_publisher(TrajectorySetpoint, '/fmu/in/trajectory_setpoint', qos_profile)
         #declare Main loop in timer
         self.timer = self.create_timer(0.1, self.timer_callback)
 
@@ -49,6 +58,9 @@ class DroneHandlerPX4(Node):
         self.flightCheck = False #if true drone can be armed
         self.offboard_setpoint_counter = 0
 
+        #data structure
+        self.global_position = GlobalPosition()
+        self.heading = None
         self.dev_mode = False
 
     #for some reason to work with px4 offboard (guided) mode FC must recevied with minimum 2Hz control topic
@@ -98,6 +110,13 @@ class DroneHandlerPX4(Node):
         self.failsafe = msg.failsafe
         self.flightCheck = msg.pre_flight_checks_pass
 
+    def vehicle_global_position_callback(self, msg):
+        self.global_position.alt = msg.alt
+        self.global_position.lat = msg.lat
+        self.global_position.lon = msg.lon
+
+    def vehicle_local_position_callback(self, msg):
+        self.heading = msg.heading
 
     # function to send to drone command in MAVLINK style
     def publish_vehicle_command(self, command, **params) -> None:
@@ -117,6 +136,15 @@ class DroneHandlerPX4(Node):
         msg.from_external = True
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         self.vehicle_command_publisher.publish(msg)
+    
+    def publish_position_setpoint(self, x: float, y: float, z: float):
+        """Publish the trajectory setpoint."""
+        msg = TrajectorySetpoint()
+        msg.position = [x, y, z]
+        msg.yaw = self.heading  # (90 degree)
+        msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
+        self.trajectory_setpoint_publisher.publish(msg)
+        self.get_logger().info(f"Publishing position setpoints {[x, y, z]}")
         
     #declare services callbback
     def set_mode_callback(self, request, response):
@@ -130,7 +158,7 @@ class DroneHandlerPX4(Node):
         response = SetMode.Response()
         return response
     
-    #declare actions collback
+    #declare actions callback
     def arm_callback(self, goal_handle):
         self.get_logger().info(f'-- Arm action registered --')
         feedback_msg = Arm.Feedback()
@@ -160,6 +188,36 @@ class DroneHandlerPX4(Node):
 
         return result
     
+    def takeoff_callback(self, goal_handle):
+        feedback_msg = Takeoff.Feedback()
+
+        self.publish_position_setpoint(0.0, 0.0, -goal_handle.request.altitude)
+        # Wait until the vehicle reaches a safe height before processing the goto (otherwise the command
+        #  after Vehicle.simple_takeoff will execute immediately).
+        while self.global_position.alt <= goal_handle.request.altitude:
+            self.publish_position_setpoint(0.0, 0.0, -goal_handle.request.altitude)
+            if goal_handle.is_cancel_requested:
+                goal_handle.canceled()
+                self.get_logger().info('Goal canceled')
+                return Takeoff.Result()
+
+            feedback_msg.altitude = self.global_position.alt
+            self.get_logger().info(f"Altitude: {feedback_msg.altitude}")
+            time.sleep(1)
+
+        self.get_logger().info("Reached target altitude")
+        
+        goal_handle.succeed()
+        result = Takeoff.Result()
+        result.result = 1
+
+        return result
+
+    #special method to cancel the action
+    def cancel_callback(self, goal_handle):
+        """Accept or reject a client request to cancel an action."""
+        self.get_logger().info('Received cancel request')
+        return CancelResponse.ACCEPT
 
 def main():
     rclpy.init()
