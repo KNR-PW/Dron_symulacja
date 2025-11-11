@@ -31,10 +31,10 @@ def generate_launch_description():
             executable='aruco_node',
         )
     
-    # yolo_node = Node(
-    #         package = 'ros2_yolo',
-    #         executable = 'yolo_node',
-    # )
+    yolo_node = Node(
+            package = 'ros2_yolo',
+            executable = 'yolo_node',
+    )
     
     mission_make_photo_server = Node(
         package='drone_camera',
@@ -53,7 +53,7 @@ def generate_launch_description():
             package='drone_hardware',
             executable='healthcheck',
             parameters=[
-                {"required_nodes": ['aruco_node', 'ros_mission_website', 'ros_report_website', 'mission_reporter']},
+                {"required_nodes": ['aruco_node', 'yolo_node', 'ros_mission_website', 'ros_report_website', 'mission_reporter']},
             ]
         )
     # Delay running drone_handler to wait for  webots init
@@ -62,7 +62,7 @@ def generate_launch_description():
             actions=[
                 drone_handler_node,
                 aruco_node,
-                # yolo_node
+                yolo_node
             ]
         )
 
