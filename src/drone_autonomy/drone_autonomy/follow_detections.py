@@ -65,7 +65,7 @@ class FollowDetections(DroneController):
 
         # ---- Subskrypcja markera ----
         # self.sub = self.create_subscription(MiddleOfAruco, self.detections_topic, self.on_marker, 10)
-        self.sub = self.create_subscription(Detection2DArray, '/detections', self.on_detection, 10)
+        self.sub = self.create_subscription(Detection2DArray, self.detections_topic, self.on_detection, 10)
 
         self.ex_px = 0.0
         self.ey_px = 0.0
@@ -216,6 +216,8 @@ class FollowDetections(DroneController):
     #     self.last_seen = time.time()
 
     def on_detection(self, msg: Detection2DArray):
+        self.get_logger().debug(f"Received {len(msg.detections)} detections")
+        
         if len(msg.detections) == 0:
             return  # no detections
 

@@ -12,7 +12,7 @@ class YoloNode(Node):
         self.bridge = CvBridge()
         self.detector = YoloDetector(weights_path='yolov8n.pt', target_class_ids=[2])  # np. tylko 'car'
         self.image_sub = self.create_subscription(
-            Image, '/camera/image_raw', self.image_callback, 10)
+            Image, '/gimbal_camera', self.image_callback, 10)
         self.detection_pub = self.create_publisher(
             Detection2DArray, '/detections', 10)
 
