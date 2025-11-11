@@ -2,15 +2,18 @@ import rclpy
 import time
 from drone_comunication import DroneController
 from drone_interfaces.srv import SetGimbalAngle, MakePhoto # Upewnij się, że nazwa pakietu jest poprawna
+from drone_interfaces.msg import VelocityVectors
+from drone_interfaces.srv import ToggleVelocityControl
 
 TIME_STEP = 2
 class Mission(DroneController):
     def __init__(self):
 
         super().__init__()
-        # self.make_photo_cli = self.create_client(MakePhoto, '/make_photo')  # albo '/mission/mission_make_photo' jeśli masz namespace
+        self.make_photo_cli = self.create_client(MakePhoto, '/make_photo')  # albo '/mission/mission_make_photo' jeśli masz namespace
 
-        # self.make_photo_cli.wait_for_service(timeout_sec=5.0)
+        self.make_photo_cli.wait_for_service(timeout_sec=5.0)
+
         self.photo_idx = 1  # licznik do Zdj1, Zdj2...
 
         self.toggle_velocity_control_cli = self.create_client(ToggleVelocityControl,'toggle_v_control')
@@ -122,12 +125,12 @@ class Mission(DroneController):
 def main(args=None):
     rclpy.init(args=args)
     mission = Mission()
-    # mission.make_photo()  # Powinno zrobic zdj1
+    mission.make_photo()  # Powinno zrobic zdj1
     mission.arm()
     mission.takeoff(5.0)
 
     # mission.send_goto_global(-35.363319396972656, 149.16531372070312, 5.0)
-    # mission.make_photo_next()  #Powinno zrobic zdj2
+    mission.make_photo_next()  #Powinno zrobic zdj2
     # time.sleep(5)
 
     # mission.send_goto_relative( 8.0, 0.0, 0.0)

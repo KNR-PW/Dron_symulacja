@@ -358,7 +358,7 @@ def main():
     
     try:
         mission.arm()
-        mission.takeoff(3.0)
+        mission.takeoff(1.5)
 
         mission.get_logger().info("Pointing gimbal downwards")
         mission.set_gimbal_angle(80.0)

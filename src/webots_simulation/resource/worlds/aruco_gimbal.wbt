@@ -18,8 +18,8 @@ WorldInfo {
   FPS 100
 }
 Viewpoint {
-  orientation -0.19850973173545222 -0.04007536701238742 0.9792792509622276 3.5319548817446313
-  position 9.00613215698041 2.0210944479844715 4.70989937415781
+  orientation -0.2519776989942157 0.04605959421923216 0.9666363085410873 2.7918154929795262
+  position 3.806248290297395 -11.070326868574906 4.872191599298846
   follow "Iris"
   followSmoothness 0.01
 }
@@ -112,7 +112,7 @@ DEF Iris Iris {
                               DEF gimbalCamera Camera {
                                 rotation 0.5773509358560258 0.577349935856137 0.577349935856137 -2.094395307179586
                                 name "gimbalCamera"
-                                fieldOfView 1.7453
+                                fieldOfView 0.785
                                 width 640
                                 height 480
                               }
@@ -147,18 +147,18 @@ DEF Iris Iris {
   ]
 }
 ArucoMarker {
-  translation -5.5 -7.5 0.001
+  translation -5.5 -7.5 0.005
 }
 Pedestrian {
   translation -1 -7 1.27
 }
 ArucoMarker {
-  translation -5.5 -10.5 0.001
+  translation -5.5 -10.5 0.005
   name "aruco(1)"
   markerId "1"
 }
 ArucoMarker {
-  translation -2 -10.5 0.001
+  translation -2 -10.5 0.005
   name "aruco(2)"
   markerId "2"
 }
