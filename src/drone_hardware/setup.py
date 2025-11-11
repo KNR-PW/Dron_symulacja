@@ -25,7 +25,7 @@ setup(
             "host_bridge=drone_hardware.host_hardware:main",
             "uart_bridge = drone_hardware.uartbridge:main",
             "hbridge = drone_hardware.hbridge:main",
-
+            "drone_handler_px4=drone_hardware.drone_handler_px4:main"
         ],
     },
 )
