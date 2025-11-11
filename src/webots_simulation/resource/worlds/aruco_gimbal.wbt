@@ -1,0 +1,205 @@
+#VRML_SIM R2025a utf8
+
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackground.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/floors/protos/Floor.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/appearances/protos/Grass.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/factory/pipes/protos/PipeSection.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/factory/manhole/protos/SquareManhole.proto"
+IMPORTABLE EXTERNPROTO "/root/ros_ws/install/webots_simulation/share/webots_simulation/protos/Iris.proto"
+IMPORTABLE EXTERNPROTO "/root/ros_ws/install/webots_simulation/share/webots_simulation/protos/ArucoMarker.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/factory/containers/protos/PlasticCrate.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/humans/pedestrian/protos/Pedestrian.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/vehicles/protos/tesla/TeslaModel3.proto"
+
+WorldInfo {
+  title "Iris Mines"
+  basicTimeStep 2
+  FPS 100
+}
+Viewpoint {
+  orientation -0.19850973173545222 -0.04007536701238742 0.9792792509622276 3.5319548817446313
+  position 9.00613215698041 2.0210944479844715 4.70989937415781
+  follow "Iris"
+  followSmoothness 0.01
+}
+TexturedBackground {
+}
+TeslaModel3 {
+  translation -6 0 0.4
+  color 0.666667 0 0
+}
+TexturedBackgroundLight {
+}
+Floor {
+  size 1000 1000
+  appearance Grass {
+  }
+}
+PipeSection {
+  translation 0 20 0.3
+  radius 0.2
+  subdivision 20
+  appearance PBRAppearance {
+    baseColor 0 0 1
+    roughness 1
+    metalness 0
+  }
+}
+SquareManhole {
+  translation -6.5 -6.5 0
+  name "drone takeoff(1)"
+  size 0.5 0.5 0.1
+}
+DEF Iris Iris {
+  translation -6.487827768237703 -6.526208998693831 0.10496319054102521
+  rotation 1 2.1778578138681003e-14 3.7825479526676684e-13 3.918097537718031e-06
+  controller "ardupilot_sitl_controller"
+  controllerArgs [
+    "--motors"
+    "m1_motor, m2_motor, m3_motor, m4_motor"
+    "--camera"
+    "camera"
+    "--camera-port"
+    "5599"
+  ]
+  extensionSlot [
+    DEF Gimbal Group {
+      children [
+        Pose {
+          translation 0.09 0 0
+          children [
+            Shape {
+              appearance PBRAppearance {
+                baseColor 0.270588 0.270588 0.270588
+              }
+              geometry Box {
+                size 0.07 0.07 0.01
+              }
+            }
+            Pose {
+              translation 0.035 0 0
+              rotation 1 0 0 1.5708
+              children [
+                HingeJoint {
+                  jointParameters HingeJointParameters {
+                    axis 0 0 -1
+                  }
+                  device [
+                    RotationalMotor {
+                      name "servo"
+                    }
+                  ]
+                  endPoint Solid {
+                    rotation 0 0 -1 0
+                    children [
+                      Shape {
+                        appearance PBRAppearance {
+                          baseColor 0.270588 0.270588 0.270588
+                        }
+                        geometry Cylinder {
+                          height 0.07
+                          radius 0.012
+                        }
+                      }
+                      Pose {
+                        translation 0.01 0 0
+                        rotation 0 1 0 1.5708
+                        children [
+                          Pose {
+                            translation 0 0 0.01
+                            children [
+                              DEF gimbalCamera Camera {
+                                rotation 0.5773509358560258 0.577349935856137 0.577349935856137 -2.094395307179586
+                                name "gimbalCamera"
+                                fieldOfView 1.7453
+                                width 640
+                                height 480
+                              }
+                            ]
+                          }
+                          Shape {
+                            appearance PBRAppearance {
+                              baseColor 0.270588 0.270588 0.270588
+                            }
+                            geometry Cylinder {
+                              height 0.02
+                              radius 0.012
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+    DEF camera Camera {
+      translation 0.05 0 -0.05
+      rotation 0 1 0 1.57
+      width 640
+      height 480
+    }
+  ]
+}
+ArucoMarker {
+  translation -5.5 -7.5 0.001
+}
+Pedestrian {
+  translation -1 -7 1.27
+}
+ArucoMarker {
+  translation -5.5 -10.5 0.001
+  name "aruco(1)"
+  markerId "1"
+}
+ArucoMarker {
+  translation -2 -10.5 0.001
+  name "aruco(2)"
+  markerId "2"
+}
+PlasticCrate {
+  translation -4 -5 0
+  size 1 1 0.4
+}
+Solid {
+  translation -8 -9 0
+  children [
+    Shape {
+      appearance Appearance {
+        material Material {
+          diffuseColor 0 0.3 1
+        }
+      }
+      geometry Cylinder {
+        height 0.2
+        radius 0.5
+      }
+    }
+  ]
+}
+Pose {
+  translation -5 -8.5 0
+  children [
+    Shape {
+      appearance Appearance {
+        material Material {
+          diffuseColor 1 0.4 0.1
+          shininess 1
+        }
+      }
+      geometry Sphere {
+        radius 0.15
+      }
+    }
+  ]
+}
+Robot {
+  name "Ros2Supervisor"
+  controller "<extern>"
+  supervisor TRUE
+}

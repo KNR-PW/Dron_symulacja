@@ -31,11 +31,6 @@ def generate_launch_description():
             executable='aruco_node',
         )
     
-    # yolo_node = Node(
-    #         package = 'ros2_yolo',
-    #         executable = 'yolo_node',
-    # )
-    
     mission_make_photo_server = Node(
         package='drone_camera',
         executable='images_recorder',
@@ -56,13 +51,12 @@ def generate_launch_description():
                 {"required_nodes": ['aruco_node', 'ros_mission_website', 'ros_report_website', 'mission_reporter']},
             ]
         )
-    # Delay running drone_handler to wait for  webots init
+    # Delay running drone_handler to wain for  webots init
     drone_handler_node_action = TimerAction(
             period=10.0,
             actions=[
                 drone_handler_node,
-                aruco_node,
-                # yolo_node
+                aruco_node
             ]
         )
 
@@ -105,7 +99,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
             'world',
-            default_value='aruco_tests.wbt',
+            default_value='aruco_gimbal.wbt',
             description='Choose one of the world files from `/webots_simulation/resource/worlds` directory'
         ),
         webots,
