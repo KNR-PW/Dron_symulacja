@@ -39,8 +39,8 @@ class DroneController(Node):
         self.toggle_velocity_control_cli = self.create_client(ToggleVelocityControl,NAMESPACE_HARDWARE+'toggle_v_control')
         self.velocity_publisher = self.create_publisher(VelocityVectors,NAMESPACE_HARDWARE+'velocity_vectors', 10)
 
+        self._wait_for_service(self._mode_client, NAMESPACE_HARDWARE+'set_mode')
         if not DEV:
-            self._wait_for_service(self._mode_client, NAMESPACE_HARDWARE+'set_mode')
             self._wait_for_service(self._gps_client, NAMESPACE_HARDWARE+'get_location_relative')
             self._wait_for_service(self._atti_client, NAMESPACE_HARDWARE+'get_attitude')
             self._wait_for_service(self._speed_client, NAMESPACE_HARDWARE+'set_speed')
@@ -98,7 +98,7 @@ class DroneController(Node):
         while not client.wait_for_service(timeout_sec=1.0):
             self.get_logger().warn(f'Waiting for {name} service...')
 
-    def _set_mode(self, mode: str, timeout: float = 15.0) -> bool:
+    def _set_mode(self, mode: str, timeout: float = 5.0) -> bool:
         req = SetMode.Request()
         req.mode = mode
         fut = self._mode_client.call_async(req)

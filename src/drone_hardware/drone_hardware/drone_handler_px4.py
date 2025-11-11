@@ -155,7 +155,6 @@ class DroneHandlerPX4(Node):
         self.get_logger().info(feedback_msg.feedback)
 
         goal_handle.succeed()
-        self.state = "OK"
         result = Arm.Result()
         result.result = 1
 
