@@ -58,7 +58,7 @@ def get_args():
 
     parser.add_argument("--gimbal-camera",
                         type=str,
-                        default="gimbalCamera",  
+                        default="gimbal_camera",  
                         help="Webots gimbal camera name (optional)")
 
     parser.add_argument("--gimbal-servo",

@@ -358,13 +358,16 @@ def main():
     
     try:
         mission.arm()
-        mission.takeoff(1.5)
+        mission.takeoff(4.0)
 
         mission.get_logger().info("Pointing gimbal downwards")
         mission.set_gimbal_angle(80.0)
 
         # Włącz sterowanie wektorami prędkości
         mission.toggle_control()
+
+        # mission.get_logger().info("KUTAS")
+        # mission.send_vectors(0.0, -6.0, 0.0)
 
         # mission.send_set_yaw(1.57, True)
         # # time.sleep(3)

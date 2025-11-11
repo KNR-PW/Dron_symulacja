@@ -18,8 +18,8 @@ WorldInfo {
   FPS 100
 }
 Viewpoint {
-  orientation -0.2519776989942157 0.04605959421923216 0.9666363085410873 2.7918154929795262
-  position 3.806248290297395 -11.070326868574906 4.872191599298846
+  orientation -0.24218068523369912 0.055632188501659456 0.9686349029960937 2.7037090374964805
+  position 3.593463092747241 -11.888474878168223 4.686433798662883
   follow "Iris"
   followSmoothness 0.01
 }
@@ -109,9 +109,9 @@ DEF Iris Iris {
                           Pose {
                             translation 0 0 0.01
                             children [
-                              DEF gimbalCamera Camera {
+                              DEF gimbal_camera Camera {
                                 rotation 0.5773509358560258 0.577349935856137 0.577349935856137 -2.094395307179586
-                                name "gimbalCamera"
+                                name "gimbal_camera"
                                 fieldOfView 0.785
                                 width 640
                                 height 480

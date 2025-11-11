@@ -7,5 +7,5 @@ centralWidgetVisible: 1
 orthographicViewHeight: 1
 textFiles: -1
 consoles: Console:All:All
-renderingDevicePerspectives: Iris:camera;1;0.307256;0;0.653975
-renderingDevicePerspectives: Iris:gimbalCamera;1;0.51875;0;0
+renderingDevicePerspectives: Iris:camera;1;0.313948;0.00170648;0.646539
+renderingDevicePerspectives: Iris:gimbal_camera;1;0.716667;0;0

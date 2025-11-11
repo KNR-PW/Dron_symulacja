@@ -36,7 +36,7 @@ def generate_launch_description():
         executable='images_recorder',
         output='screen',
         parameters=[{
-            'camera_topic': '/camera',
+            'camera_topic': '/gimbal_camera',
             # katalog bazowy na misje
             # 'save_directory_base': 'Dron_symulacja/src/drone_camera/drone_camera',
             # nazwa serwisu z ImagesRecorder (Trigger), który zwraca "Saved: <ścieżka>"

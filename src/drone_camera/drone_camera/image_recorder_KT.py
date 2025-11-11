@@ -16,7 +16,7 @@ class ImagesRecorder(Node):
     def __init__(self):
         super().__init__('images_recorder')
 
-        self.declare_parameter('camera_topic', 'camera')
+        self.declare_parameter('camera_topic', 'gimbal_camera')
         self.declare_parameter('fps', 1.0, descriptor=ParameterDescriptor(
             type=ParameterType.PARAMETER_DOUBLE,
             description="Frames per second for the video recording.",
