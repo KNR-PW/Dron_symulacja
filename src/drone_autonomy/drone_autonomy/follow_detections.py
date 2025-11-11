@@ -400,8 +400,10 @@ def main():
         mission.set_gimbal_angle(35.0)
         mission.takeoff(5.0)
 
-        mission.get_logger().info("Pointing gimbal downwards")
+        # mission.send_set_yaw(290.0, True)
+        time.sleep(3)
 
+        mission.get_logger().info("Pointing gimbal downwards")
 
         # Włącz sterowanie wektorami prędkości
         mission.toggle_control()

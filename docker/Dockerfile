@@ -83,7 +83,11 @@ RUN git clone --recurse-submodules --depth=1 https://github.com/ArduPilot/ardupi
 USER root
 WORKDIR /root
 
-# Ultralytics
-RUN pip install ultralytics
+# System dependencies for OpenCV
+RUN apt-get update && apt-get install -y libopencv-dev python3-opencv
+
+# Python dependencies
+RUN pip install --no-cache-dir "numpy==1.26.4"
+RUN pip install --no-cache-dir ultralytics "numpy<2"
 
 CMD ["/bin/bash"]
