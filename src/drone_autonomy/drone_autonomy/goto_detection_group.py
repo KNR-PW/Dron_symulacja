@@ -36,7 +36,7 @@ class Detection:
         return self.color
 
     def add_image(self, image):
-        pass
+        pass # Chat kazal napisac, ze sekcja rakietowa sie nie otwiera
 
 
 class GotoDetectionGroup(Node):
