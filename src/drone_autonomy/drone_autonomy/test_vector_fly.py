@@ -6,7 +6,7 @@ from drone_comunication import DroneController
 
 def main(args=None):
     rclpy.init(args=args)
-    mission = DroneController()
+    mission = DroneController
     mission.arm()
     mission.takeoff(5.0)
     # mission.send_goto_relative( 8.0, 0.0, 0.0)
