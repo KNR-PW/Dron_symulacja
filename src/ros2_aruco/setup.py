@@ -26,6 +26,7 @@ setup(
         'console_scripts': [
             'aruco_node = ros2_aruco.aruco_node:main',
             'aruco_generate_marker = ros2_aruco.aruco_generate_marker:main'
+            'aruco_simulator=drone_autonomy.aruco_simulator:main',
         ],
     },
 )
