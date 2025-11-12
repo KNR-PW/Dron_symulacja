@@ -1,4 +1,6 @@
 import time
+import math
+import haversine as hv
 
 import rclpy
 from rclpy.node import Node
@@ -8,7 +10,7 @@ from rclpy.action import ActionServer,  CancelResponse
 
 
 from drone_interfaces.srv import SetMode
-from drone_interfaces.action import  Arm, Takeoff
+from drone_interfaces.action import  Arm, Takeoff, GotoGlobal
 
 from px4_msgs.msg import VehicleStatus, VehicleCommand, OffboardControlMode, VehicleGlobalPosition, TrajectorySetpoint, VehicleLocalPosition
 
@@ -35,16 +37,18 @@ class DroneHandlerPX4(Node):
         #declare actions
         self.arm = ActionServer(self,Arm, NAMESPACE+'Arm',self.arm_callback)
         self.takeoff = ActionServer(self, Takeoff, NAMESPACE+'takeoff',self.takeoff_callback, cancel_callback=self.cancel_callback)
-        
+        self.goto_global = ActionServer(self, GotoGlobal, NAMESPACE+'goto_global', self.goto_global_action, cancel_callback=self.cancel_callback)
+
         #declare subcriptions
         self.status_sub = self.create_subscription(VehicleStatus, '/fmu/out/vehicle_status_v1', self.vehicle_status_callback, qos_profile)
         self.global_position_sub = self.create_subscription(VehicleGlobalPosition, '/fmu/out/vehicle_global_position', self.vehicle_global_position_callback, qos_profile)
-        self.global_position_sub = self.create_subscription(VehicleLocalPosition, '/fmu/out/vehicle_local_position_v1', self.vehicle_local_position_callback, qos_profile)
+        self.local_position_sub = self.create_subscription(VehicleLocalPosition, '/fmu/out/vehicle_local_position_v1', self.vehicle_local_position_callback, qos_profile)
 
         # # Create publishers
         self.offboard_control_mode_publisher = self.create_publisher(OffboardControlMode, '/fmu/in/offboard_control_mode', qos_profile)
         self.vehicle_command_publisher = self.create_publisher(VehicleCommand, '/fmu/in/vehicle_command', qos_profile)
         self.trajectory_setpoint_publisher = self.create_publisher(TrajectorySetpoint, '/fmu/in/trajectory_setpoint', qos_profile)
+
         #declare Main loop in timer
         self.timer = self.create_timer(0.1, self.timer_callback)
 
@@ -114,6 +118,13 @@ class DroneHandlerPX4(Node):
         self.global_position.alt = msg.alt
         self.global_position.lat = msg.lat
         self.global_position.lon = msg.lon
+        # self.get_logger().info("aktualna pozycja")
+        # self.get_logger().info(f"lon: {self.global_position.lon}")
+        # self.get_logger().info(f"lat: {self.global_position.lat}")
+        # self.get_logger().info(f"alt: {self.global_position.alt}")
+
+
+        
 
     def vehicle_local_position_callback(self, msg):
         self.heading = msg.heading
@@ -141,11 +152,11 @@ class DroneHandlerPX4(Node):
         """Publish the trajectory setpoint."""
         msg = TrajectorySetpoint()
         msg.position = [x, y, z]
-        msg.yaw = self.heading  # (90 degree)
+        msg.yaw = self.heading
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         self.trajectory_setpoint_publisher.publish(msg)
         self.get_logger().info(f"Publishing position setpoints {[x, y, z]}")
-        
+
     #declare services callbback
     def set_mode_callback(self, request, response):
         self.get_logger().info("zmieniam tryb")
@@ -212,6 +223,73 @@ class DroneHandlerPX4(Node):
         result.result = 1
 
         return result
+    
+    def goto_global_action(self, goal_handle):
+        self.get_logger().info(f'-- Goto global action registered. Destination in global frame: --')
+
+        request_position = GlobalPosition()
+        request_position.lat = goal_handle.request.lat
+        request_position.lon = goal_handle.request.lon
+        request_position.alt = goal_handle.request.alt
+
+        self.get_logger().info(f'Latitude: {request_position.lat}')
+        self.get_logger().info(f'Longitude: {request_position.lon}')
+        self.get_logger().info(f'Altitude: {request_position.alt}')
+
+        self.publish_position_setpoint(request_position.lat,request_position.lon, -request_position.alt)
+
+        feedback_msg = GotoGlobal.Feedback()
+        # feedback_msg.distance = self.calculate_remaining_distance_global(request_position)
+        feedback_msg.distance = self.get_distance_global(self.global_position, request_position)
+        self.get_logger().info(f"Distance remaining: {feedback_msg.distance} m")
+
+        while feedback_msg.distance>2:
+            if goal_handle.is_cancel_requested:
+                goal_handle.canceled()
+                self.get_logger().info('Goal canceled')
+                return GotoGlobal.Result()
+
+            self.publish_position_setpoint(request_position.lat,request_position.lon, -request_position.alt)
+            # feedback_msg.distance = self.calculate_remaining_distance_global(request_position)
+            feedback_msg.distance = self.get_distance_global(self.global_position, request_position)
+            self.get_logger().info(f"Distance remaining: {feedback_msg.distance} m")
+            time.sleep(1)
+
+        goal_handle.succeed()
+        result = GotoGlobal.Result()
+        result.result = 1
+
+        return result
+
+    def calculate_remaining_distance_global(self, location: GlobalPosition):
+        # distance between latitudes
+        # and longitudes
+        dLat = (location.lat - self.global_position.lat) * math.pi / 180.0
+        dLon = (location.lon - self.global_position.lon) * math.pi / 180.0
+
+        # convert to radians
+        lat1 = (self.global_position.lat) * math.pi / 180.0
+        lat2 = (location.lat) * math.pi / 180.0
+
+        # apply formulae
+        a = (pow(math.sin(dLat / 2), 2) + 
+            pow(math.sin(dLon / 2), 2) * 
+                math.cos(lat1) * math.cos(lat2));
+        rad = 6371
+        c = 2 * math.asin(math.sqrt(a)) * 1000 # conwerts to meters methods get from geeks for geeks
+        length = rad * c
+        height = abs(self.global_position.alt - location.alt)
+        total_distance = math.sqrt(length**2 + height**2)
+        return total_distance
+    
+    def get_distance_global(self, aLocation1, aLocation2):
+        self.get_logger().info(f"lon: {aLocation1.lon}")
+        self.get_logger().info(f"lat: {aLocation1.lat}")
+        self.get_logger().info(f"alt: {aLocation1.alt}")
+        coord1 = (aLocation1.lat, aLocation1.lon)
+        coord2 = (aLocation2.lat, aLocation2.lon)
+
+        return hv.haversine(coord1, coord2)*1000 # because we want it in metres
 
     #special method to cancel the action
     def cancel_callback(self, goal_handle):
