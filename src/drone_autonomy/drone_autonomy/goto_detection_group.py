@@ -2,7 +2,7 @@ import rclpy  # Python Client Library for ROS 2
 from rclpy.node import Node  # Handles the creation of nodes
 from cv_bridge import CvBridge  # Package to convert between ROS and OpenCV Images
 import cv2  # OpenCV library
-import numpy as np
+import numpy as np  #np to znaczy duzo numpy
 
 # from detection import Detection
 from drone_interfaces.msg import DetectionMsg, DetectionsList
