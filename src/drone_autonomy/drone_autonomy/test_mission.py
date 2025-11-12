@@ -74,11 +74,13 @@ def main(args=None):
     mission = DroneController()
     mission.arm()
     mission.takeoff(5.0)
+    # time.sleep(30)
+
     mission.send_goto_global(47.398183, 8.54611, 5.0)
 
-    # time.sleep(5)
+    time.sleep(30)
 
-    # mission.send_goto_global(47.39797127066047, 8.54616274676383, 5.0)
+    mission.send_goto_global(47.39797127066047, 8.54616274676383, 5.0)
     # # mission.send_goto_relative( 8.0, 0.0, 0.0)
     # # mission.send_set_yaw(3.14/2)
     # # mission.toggle_control()

@@ -20,6 +20,20 @@ class GlobalPosition():
         self.lat = float(0.0)
         self.lon = float(0.0)
 
+class LocalPosition():
+    def __init__(self):
+        # Position in local NED frame
+        self.x = float(0.0) # North position in NED earth-fixed frame, (metres)
+        self.y = float(0.0) # East position in NED earth-fixed frame, (metres)
+        self.z = float(0.0) # Down position (negative altitude) in NED earth-fixed frame, (metres)
+
+        # Velocity in NED frame
+        self.vx = float(0.0) # North velocity in NED earth-fixed frame, (metres/sec)
+        self.vy = float(0.0) # East velocity in NED earth-fixed frame, (metres/sec)
+        self.vz = float(0.0) # Down velocity in NED earth-fixed frame, (metres/sec)
+
+        self.heading = float(0.0)
+
 class DroneHandlerPX4(Node):
     def __init__(self):
         super().__init__('drone_handler_px4')
@@ -64,7 +78,7 @@ class DroneHandlerPX4(Node):
 
         #data structure
         self.global_position = GlobalPosition()
-        self.heading = None
+        self.local_position = LocalPosition()
         self.dev_mode = False
 
     #for some reason to work with px4 offboard (guided) mode FC must recevied with minimum 2Hz control topic
@@ -127,7 +141,16 @@ class DroneHandlerPX4(Node):
         
 
     def vehicle_local_position_callback(self, msg):
-        self.heading = msg.heading
+        self.local_position.x = msg.x
+        self.local_position.y = msg.y
+        self.local_position.z = msg.z
+
+        self.local_position.vx = msg.vx
+        self.local_position.vy = msg.vy
+        self.local_position.vz = msg.vz
+
+        self.local_position.heading = msg.heading
+
 
     # function to send to drone command in MAVLINK style
     def publish_vehicle_command(self, command, **params) -> None:
@@ -152,7 +175,7 @@ class DroneHandlerPX4(Node):
         """Publish the trajectory setpoint."""
         msg = TrajectorySetpoint()
         msg.position = [x, y, z]
-        msg.yaw = self.heading
+        msg.yaw = self.local_position.heading
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         self.trajectory_setpoint_publisher.publish(msg)
         self.get_logger().info(f"Publishing position setpoints {[x, y, z]}")
@@ -202,11 +225,10 @@ class DroneHandlerPX4(Node):
     def takeoff_callback(self, goal_handle):
         feedback_msg = Takeoff.Feedback()
 
-        self.publish_position_setpoint(0.0, 0.0, -goal_handle.request.altitude)
-        # Wait until the vehicle reaches a safe height before processing the goto (otherwise the command
-        #  after Vehicle.simple_takeoff will execute immediately).
+        self.publish_position_setpoint(self.local_position.x, self.local_position.y, -goal_handle.request.altitude)
+
         while self.global_position.alt <= goal_handle.request.altitude:
-            self.publish_position_setpoint(0.0, 0.0, -goal_handle.request.altitude)
+            self.publish_position_setpoint(self.local_position.x, self.local_position.y, -goal_handle.request.altitude)
             if goal_handle.is_cancel_requested:
                 goal_handle.canceled()
                 self.get_logger().info('Goal canceled')
@@ -236,11 +258,13 @@ class DroneHandlerPX4(Node):
         self.get_logger().info(f'Longitude: {request_position.lon}')
         self.get_logger().info(f'Altitude: {request_position.alt}')
 
-        self.publish_position_setpoint(request_position.lat,request_position.lon, -request_position.alt)
+        self.publish_position_setpoint(request_position.lat, request_position.lon, -request_position.alt)
+        self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_REPOSITION, param1 = -1.0, param2 = 1.0,
+                                     param5 = request_position.lat, param6 = request_position.lon, param7 = request_position.alt)
 
         feedback_msg = GotoGlobal.Feedback()
-        # feedback_msg.distance = self.calculate_remaining_distance_global(request_position)
         feedback_msg.distance = self.get_distance_global(self.global_position, request_position)
+
         self.get_logger().info(f"Distance remaining: {feedback_msg.distance} m")
 
         while feedback_msg.distance>2:
@@ -249,43 +273,23 @@ class DroneHandlerPX4(Node):
                 self.get_logger().info('Goal canceled')
                 return GotoGlobal.Result()
 
-            self.publish_position_setpoint(request_position.lat,request_position.lon, -request_position.alt)
-            # feedback_msg.distance = self.calculate_remaining_distance_global(request_position)
+            self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_REPOSITION, param1 = -1.0, param2 = 1.0,
+                                     param5 = request_position.lat, param6 = request_position.lon, param7 = request_position.alt)
             feedback_msg.distance = self.get_distance_global(self.global_position, request_position)
             self.get_logger().info(f"Distance remaining: {feedback_msg.distance} m")
             time.sleep(1)
 
+        self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, param1=1.0, param2=6.0)
+        self.publish_position_setpoint(self.local_position.x, 
+                                       self.local_position.y,
+                                       -request_position.alt)
         goal_handle.succeed()
         result = GotoGlobal.Result()
         result.result = 1
 
         return result
-
-    def calculate_remaining_distance_global(self, location: GlobalPosition):
-        # distance between latitudes
-        # and longitudes
-        dLat = (location.lat - self.global_position.lat) * math.pi / 180.0
-        dLon = (location.lon - self.global_position.lon) * math.pi / 180.0
-
-        # convert to radians
-        lat1 = (self.global_position.lat) * math.pi / 180.0
-        lat2 = (location.lat) * math.pi / 180.0
-
-        # apply formulae
-        a = (pow(math.sin(dLat / 2), 2) + 
-            pow(math.sin(dLon / 2), 2) * 
-                math.cos(lat1) * math.cos(lat2));
-        rad = 6371
-        c = 2 * math.asin(math.sqrt(a)) * 1000 # conwerts to meters methods get from geeks for geeks
-        length = rad * c
-        height = abs(self.global_position.alt - location.alt)
-        total_distance = math.sqrt(length**2 + height**2)
-        return total_distance
     
-    def get_distance_global(self, aLocation1, aLocation2):
-        self.get_logger().info(f"lon: {aLocation1.lon}")
-        self.get_logger().info(f"lat: {aLocation1.lat}")
-        self.get_logger().info(f"alt: {aLocation1.alt}")
+    def get_distance_global(self, aLocation1: GlobalPosition, aLocation2: GlobalPosition):
         coord1 = (aLocation1.lat, aLocation1.lon)
         coord2 = (aLocation2.lat, aLocation2.lon)
 
