@@ -10,9 +10,14 @@ from rclpy.action import ActionServer,  CancelResponse
 
 
 from drone_interfaces.srv import SetMode
-from drone_interfaces.action import  Arm, Takeoff, GotoGlobal
+from drone_interfaces.action import  Arm, Takeoff, GotoGlobal, GotoRelative
 
 from px4_msgs.msg import VehicleStatus, VehicleCommand, OffboardControlMode, VehicleGlobalPosition, TrajectorySetpoint, VehicleLocalPosition
+#TODO 
+#1. makes check if we get a new topic before we send mode to offboard
+#2. still rebuilding the drone handler to px4
+#3. convert the flight mode in NAV state to string to be readable for a man
+#4. add more flight modes minimum is RTL
 
 class GlobalPosition():
     def __init__(self):
@@ -22,7 +27,7 @@ class GlobalPosition():
 
 class LocalPosition():
     def __init__(self):
-        # Position in local NED frame
+        # Position in local NED frame counts from start point, coordinates of start point is (0,0) 
         self.x = float(0.0) # North position in NED earth-fixed frame, (metres)
         self.y = float(0.0) # East position in NED earth-fixed frame, (metres)
         self.z = float(0.0) # Down position (negative altitude) in NED earth-fixed frame, (metres)
@@ -52,6 +57,7 @@ class DroneHandlerPX4(Node):
         self.arm = ActionServer(self,Arm, NAMESPACE+'Arm',self.arm_callback)
         self.takeoff = ActionServer(self, Takeoff, NAMESPACE+'takeoff',self.takeoff_callback, cancel_callback=self.cancel_callback)
         self.goto_global = ActionServer(self, GotoGlobal, NAMESPACE+'goto_global', self.goto_global_action, cancel_callback=self.cancel_callback)
+        self.goto_rel = ActionServer(self, GotoRelative, NAMESPACE+'goto_relative', self.goto_relative_action, cancel_callback=self.cancel_callback)
 
         #declare subcriptions
         self.status_sub = self.create_subscription(VehicleStatus, '/fmu/out/vehicle_status_v1', self.vehicle_status_callback, qos_profile)
@@ -294,6 +300,51 @@ class DroneHandlerPX4(Node):
         coord2 = (aLocation2.lat, aLocation2.lon)
 
         return hv.haversine(coord1, coord2)*1000 # because we want it in metres
+    
+    ## ACTION CALLBACKS
+    def goto_relative_action(self, goal_handle):
+        self.get_logger().info(f'-- Goto relative action registered. Destination in local frame: --')
+
+        north = self.local_position.x + goal_handle.request.north
+        east = self.local_position.y + goal_handle.request.east
+        down = self.local_position.z + goal_handle.request.down
+        #velocity = goal_handle.request.velocity
+        destination = LocalPosition()
+        destination.x = north
+        destination.y = east
+        destination.z = down
+
+        self.get_logger().info(f'North: {destination.x}')
+        self.get_logger().info(f'East: {destination.y}')
+        self.get_logger().info(f'Down: {destination.z}')
+
+        self.publish_position_setpoint(destination.x, destination.y, destination.z)
+
+        feedback_msg = GotoRelative.Feedback()
+        feedback_msg.distance = self.calculate_remaining_distance_rel(destination)
+        self.get_logger().info(f"Distance remaining: {feedback_msg.distance} m")
+
+        while feedback_msg.distance>0.5:
+            if goal_handle.is_cancel_requested:
+                goal_handle.canceled()
+                self.get_logger().info('Goal goto rel canceled')
+                return GotoRelative.Result()
+
+            self.publish_position_setpoint(destination.x, destination.y, destination.z)
+            feedback_msg.distance = self.calculate_remaining_distance_rel(destination)
+            time.sleep(1)
+
+        goal_handle.succeed()
+        result = GotoRelative.Result()
+        result.result=1
+
+        return result
+    
+    def calculate_remaining_distance_rel(self, destination: LocalPosition):
+        dnorth = destination.x - self.local_position.x
+        deast = destination.y - self.local_position.y
+        ddown = destination.z - self.local_position.z
+        return math.sqrt(dnorth*dnorth + deast*deast + ddown*ddown)
 
     #special method to cancel the action
     def cancel_callback(self, goal_handle):
