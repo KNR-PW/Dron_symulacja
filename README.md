@@ -106,3 +106,5 @@ docker stop knr_drone
 - Your development code should be placed inside this directory to be visible in the container.
 - After stopping the container, its memory persists. However, if the container is removed, all data outside the shared `src` directory will be lost.
 - **Keep everything in the `src` directory** to prevent data loss.
+- **If you encounter any issues, contact: piotrek2995 / UwURetardOwO / DieRust on Discord.**
+
