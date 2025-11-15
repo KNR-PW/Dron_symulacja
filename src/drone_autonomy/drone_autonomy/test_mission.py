@@ -76,7 +76,7 @@ def main(args=None):
     mission.takeoff(5.0)
     # time.sleep(30)
 
-    # mission.send_goto_global(47.398183, 8.54611, 5.0)
+    mission.send_goto_global(47.398183, 8.54611, 5.0)
 
     # time.sleep(30)
 
@@ -85,9 +85,9 @@ def main(args=None):
     time.sleep(5)
     mission.send_goto_relative( 0.0, 8.0, 0.0)
     time.sleep(5)
-    mission.send_goto_relative( -8.0, 0.0, 0.0)
-    time.sleep(5)
-    mission.send_goto_relative( 0.0, -8.0, 0.0)
+    # mission.send_goto_relative( -8.0, 0.0, 0.0)
+    # time.sleep(5)
+    # mission.send_goto_relative( 0.0, -8.0, 0.0)
     # time.sleep(5)
 
     # mission.send_set_yaw(3.14/2)
@@ -103,7 +103,8 @@ def main(args=None):
     # # mission.send_vectors(1.0,0.0,0.0)
     # # time.sleep(1)
     # # mission.toggle_control()
-    mission.land()
+    # mission.land()
+    mission.rtl()
     mission.destroy_node()
     rclpy.shutdown()
 

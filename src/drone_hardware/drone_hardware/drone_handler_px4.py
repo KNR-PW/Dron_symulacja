@@ -14,7 +14,7 @@ from drone_interfaces.action import  Arm, Takeoff, GotoGlobal, GotoRelative, Set
 
 from px4_msgs.msg import VehicleStatus, VehicleCommand, OffboardControlMode, VehicleGlobalPosition, TrajectorySetpoint, VehicleLocalPosition
 #TODO 
-#1. makes check if we get a new topic before we send mode to offboard
+#1. (DONE)makes check if we get a new topic before we send mode to offboard
 #2. still rebuilding the drone handler to px4
 #3. convert the flight mode in NAV state to string to be readable for a man
 #4. add more flight modes minimum is RTL
@@ -58,7 +58,7 @@ class DroneHandlerPX4(Node):
         self.takeoff = ActionServer(self, Takeoff, NAMESPACE+'takeoff',self.takeoff_callback, cancel_callback=self.cancel_callback)
         self.goto_global = ActionServer(self, GotoGlobal, NAMESPACE+'goto_global', self.goto_global_action, cancel_callback=self.cancel_callback)
         self.goto_rel = ActionServer(self, GotoRelative, NAMESPACE+'goto_relative', self.goto_relative_action, cancel_callback=self.cancel_callback)
-        self.yaw = ActionServer(self, SetYawAction, NAMESPACE+'Set_yaw', self.yaw_callback, cancel_callback=self.cancel_callback)
+        #self.yaw = ActionServer(self, SetYawAction, NAMESPACE+'Set_yaw', self.yaw_callback, cancel_callback=self.cancel_callback)
 
         #declare subcriptions
         self.status_sub = self.create_subscription(VehicleStatus, '/fmu/out/vehicle_status_v1', self.vehicle_status_callback, qos_profile)
@@ -115,7 +115,7 @@ class DroneHandlerPX4(Node):
             if self.offboard_setpoint_counter == 10:
                 self.get_logger().info("Vehicle is ready to be set into offboard mode")
         
-            if self.get_clock().now().nanoseconds - self.px4_watchdog > 0.5e9:
+            if self.get_clock().now().nanoseconds - self.px4_watchdog > 1e9:
                 self.px4_alive_flag = False
                 self.get_logger().warn("Vehicle is missing ERROR PX4 not found")
                 self.offboard_setpoint_counter = 0
@@ -201,6 +201,8 @@ class DroneHandlerPX4(Node):
             self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, param1=1.0, param2=6.0)
         if (request.mode == 'LAND'):
             self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_LAND)
+        if (request.mode == 'RTL'):
+            self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_RETURN_TO_LAUNCH)
 
         response = SetMode.Response()
         return response
@@ -234,7 +236,7 @@ class DroneHandlerPX4(Node):
         result.result = 1
 
         return result
-    
+    #not working yet
     def takeoff_callback(self, goal_handle):
         feedback_msg = Takeoff.Feedback()
 
