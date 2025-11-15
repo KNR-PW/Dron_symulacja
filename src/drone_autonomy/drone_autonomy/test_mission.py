@@ -88,9 +88,13 @@ def main(args=None):
     mission.send_goto_relative( -8.0, 0.0, 0.0)
     time.sleep(5)
     mission.send_goto_relative( 0.0, -8.0, 0.0)
-    time.sleep(5)
+    # time.sleep(5)
 
-    # # mission.send_set_yaw(3.14/2)
+    # mission.send_set_yaw(3.14/2)
+    # time.sleep(5)
+    # mission.send_set_yaw(-3.14/2)
+    # time.sleep(5)
+
     # # mission.toggle_control()
     # # mission.send_vectors(1.0,0.0,0.0)
     # # time.sleep(1)

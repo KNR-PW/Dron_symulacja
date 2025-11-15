@@ -10,7 +10,7 @@ from rclpy.action import ActionServer,  CancelResponse
 
 
 from drone_interfaces.srv import SetMode
-from drone_interfaces.action import  Arm, Takeoff, GotoGlobal, GotoRelative
+from drone_interfaces.action import  Arm, Takeoff, GotoGlobal, GotoRelative, SetYawAction
 
 from px4_msgs.msg import VehicleStatus, VehicleCommand, OffboardControlMode, VehicleGlobalPosition, TrajectorySetpoint, VehicleLocalPosition
 #TODO 
@@ -58,6 +58,7 @@ class DroneHandlerPX4(Node):
         self.takeoff = ActionServer(self, Takeoff, NAMESPACE+'takeoff',self.takeoff_callback, cancel_callback=self.cancel_callback)
         self.goto_global = ActionServer(self, GotoGlobal, NAMESPACE+'goto_global', self.goto_global_action, cancel_callback=self.cancel_callback)
         self.goto_rel = ActionServer(self, GotoRelative, NAMESPACE+'goto_relative', self.goto_relative_action, cancel_callback=self.cancel_callback)
+        self.yaw = ActionServer(self, SetYawAction, NAMESPACE+'Set_yaw', self.yaw_callback, cancel_callback=self.cancel_callback)
 
         #declare subcriptions
         self.status_sub = self.create_subscription(VehicleStatus, '/fmu/out/vehicle_status_v1', self.vehicle_status_callback, qos_profile)
@@ -76,6 +77,8 @@ class DroneHandlerPX4(Node):
 
         #define the variables
         # self.current_state = "IDLE"
+        self.px4_alive_flag = False #this flag will check if we received any data from  drone
+        self.px4_watchdog = 0 #this variable will check if we still getting new topics
         self.nav_state = VehicleStatus.NAVIGATION_STATE_MAX
         self.arm_state = VehicleStatus.ARMING_STATE_ARMED
         self.failsafe = False # if true that means drone is in failsafe mode
@@ -103,13 +106,19 @@ class DroneHandlerPX4(Node):
     #timer loop to publish above function to drone
     def timer_callback(self) -> None:
         """Callback function for the timer."""
-        self.publish_offboard_control_heartbeat_signal()
+        if self.px4_alive_flag:
+            self.publish_offboard_control_heartbeat_signal()
 
-        if self.offboard_setpoint_counter < 11:
-            self.offboard_setpoint_counter += 1
+            if self.offboard_setpoint_counter < 11:
+                self.offboard_setpoint_counter += 1
+            
+            if self.offboard_setpoint_counter == 10:
+                self.get_logger().info("Vehicle is ready to be set into offboard mode")
         
-        if self.offboard_setpoint_counter == 10:
-            self.get_logger().info("Vehicle is ready to be set into offboard mode")
+            if self.get_clock().now().nanoseconds - self.px4_watchdog > 0.5e9:
+                self.px4_alive_flag = False
+                self.get_logger().warn("Vehicle is missing ERROR PX4 not found")
+                self.offboard_setpoint_counter = 0
 
 
     #Print status of the drone
@@ -138,13 +147,6 @@ class DroneHandlerPX4(Node):
         self.global_position.alt = msg.alt
         self.global_position.lat = msg.lat
         self.global_position.lon = msg.lon
-        # self.get_logger().info("aktualna pozycja")
-        # self.get_logger().info(f"lon: {self.global_position.lon}")
-        # self.get_logger().info(f"lat: {self.global_position.lat}")
-        # self.get_logger().info(f"alt: {self.global_position.alt}")
-
-
-        
 
     def vehicle_local_position_callback(self, msg):
         self.local_position.x = msg.x
@@ -156,6 +158,9 @@ class DroneHandlerPX4(Node):
         self.local_position.vz = msg.vz
 
         self.local_position.heading = msg.heading
+
+        self.px4_alive_flag = True
+        self.px4_watchdog = self.get_clock().now().nanoseconds
 
 
     # function to send to drone command in MAVLINK style
@@ -177,11 +182,13 @@ class DroneHandlerPX4(Node):
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         self.vehicle_command_publisher.publish(msg)
     
-    def publish_position_setpoint(self, x: float, y: float, z: float):
+    def publish_position_setpoint(self, x: float, y: float, z: float, yaw = "ORIGINAL"):
         """Publish the trajectory setpoint."""
+        if yaw == "ORIGINAL":
+            yaw = self.local_position.heading
         msg = TrajectorySetpoint()
         msg.position = [x, y, z]
-        msg.yaw = self.local_position.heading
+        msg.yaw = yaw
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         self.trajectory_setpoint_publisher.publish(msg)
         self.get_logger().info(f"Publishing position setpoints {[x, y, z]}")
@@ -264,7 +271,6 @@ class DroneHandlerPX4(Node):
         self.get_logger().info(f'Longitude: {request_position.lon}')
         self.get_logger().info(f'Altitude: {request_position.alt}')
 
-        self.publish_position_setpoint(request_position.lat, request_position.lon, -request_position.alt)
         self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_REPOSITION, param1 = -1.0, param2 = 1.0,
                                      param5 = request_position.lat, param6 = request_position.lon, param7 = request_position.alt)
 
@@ -345,6 +351,71 @@ class DroneHandlerPX4(Node):
         deast = destination.y - self.local_position.y
         ddown = destination.z - self.local_position.z
         return math.sqrt(dnorth*dnorth + deast*deast + ddown*ddown)
+    
+
+    def yaw_callback(self, goal_handle):
+        self.get_logger().info(f'-- Set yaw action registered. --')
+        self.__relative = goal_handle.request.relative
+        setted_yaw = goal_handle.request.yaw
+        actual_yaw = self.local_position.heading
+        cw = 1
+
+        requested_yaw = self.calc_yaw(setted_yaw, actual_yaw)
+
+        if requested_yaw<0:
+            requested_yaw+=6.283185
+        if setted_yaw < 0:
+            setted_yaw = -setted_yaw
+            cw = -1
+        yaw_deg = requested_yaw / 3.141592 * 180
+        # self.set_yaw(requested_yaw, cw)
+        self.get_logger().info(f'd')
+        self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_CONDITION_YAW, param1 = yaw_deg, param3 = float(cw), param4 = 0.0)
+        self.get_logger().info(f't')
+        feefback_msg = SetYawAction.Feedback()
+        feefback_msg.angle = self.calc_remaning_yaw(requested_yaw, actual_yaw, cw)
+        self.get_logger().info(f"Angle remainig: {feefback_msg.angle}")
+
+        #self._counter += 1
+
+        while feefback_msg.angle > 0.5:
+            if goal_handle.is_cancel_requested:
+                goal_handle.canceled()
+                self.get_logger().info('Goal canceled')
+                return SetYawAction.Result()
+
+            self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_CONDITION_YAW, param1 = yaw_deg, param3 = float(cw), param4 = 0.0)
+
+            actual_yaw = self.local_position.heading
+            feefback_msg.angle = self.calc_remaning_yaw(requested_yaw, actual_yaw, cw)
+            self.get_logger().info(f"Angle remainig: {feefback_msg.angle}")
+            time.sleep(1)
+
+        self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, param1=1.0, param2=6.0)
+        self.publish_position_setpoint(self.local_position.x, 
+                                       self.local_position.y,
+                                       self.local_position.z)
+
+        self.get_logger().info(f"Angle remainig: {feefback_msg.angle}")
+        goal_handle.succeed()
+        result = SetYawAction.Result()
+        result.result = 1
+
+        return result
+    
+    def calc_yaw(self, yaw: float, actual_yaw: float)->float:
+        if not self.__relative:
+            return yaw
+        return yaw+actual_yaw
+    
+    def calc_remaning_yaw(self, yaw: float, actual_yaw: float, cw)->float:
+        if cw > 0:
+            if actual_yaw < 0:
+                actual_yaw = 2*math.pi + actual_yaw
+            return abs(yaw-actual_yaw)
+        if actual_yaw < 0:
+            actual_yaw = 2*math.pi - actual_yaw
+        return abs(-yaw+actual_yaw)
 
     #special method to cancel the action
     def cancel_callback(self, goal_handle):
