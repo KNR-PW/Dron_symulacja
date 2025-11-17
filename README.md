@@ -78,10 +78,14 @@ To start the ArduPilot SITL environment, open new terminal and run the following
 ```
 First run can take a while since ardupilot will build required components.
 
-### 8. Control the Drone
-You can now control the drone using:
-- **Command-line interface**
-- **ROS2 interface**
+### 8. Drone control
+
+You have two options to control the drone:
+
+- **Option A – custom mission**  
+  Write your own `test_mission` node/script and run it using:
+  ```bash
+  ./run_test_mission.sh
 
 ### 9. Managing the Docker Container
 #### Detach from the container (keep it running):
