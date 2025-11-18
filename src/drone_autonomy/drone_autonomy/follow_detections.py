@@ -32,10 +32,10 @@ class FollowDetections(DroneController):
         self.declare_parameter('lost_timeout', 0.8)  # s
 
         # Gimbal tracking params
-        self.declare_parameter('gimbal_kp_deg', 1.5)     # degrees per normalized image unit
+        self.declare_parameter('gimbal_kp_deg', 2.0)     # degrees per normalized image unit
         self.declare_parameter('gimbal_min_deg', -45.0)
         self.declare_parameter('gimbal_max_deg', 89.9)
-        self.declare_parameter('gimbal_rate_hz', 15.0)    # command rate
+        self.declare_parameter('gimbal_rate_hz', 30.0)    # command rate
 
         self.img_w = int(self.get_parameter('image_width').value)
         self.img_h = int(self.get_parameter('image_height').value)
@@ -144,6 +144,9 @@ class FollowDetections(DroneController):
     def set_gimbal_angle(self, angle_degrees):
         """Sends a request to set gimbal angle and waits for an answer."""
         self.get_logger().info(f"Sending request to set the gimbal to {angle_degrees} degrees...")
+        
+        self.gimbal_angle_deg = float(angle_degrees)
+
         req = SetGimbalAngle.Request()
         req.angle_degrees = float(angle_degrees)
         
@@ -236,22 +239,24 @@ class FollowDetections(DroneController):
         self.ex_px = float(cx) - self.cx
         self.ey_px = float(cy) - self.cy
 
-        # # martwa strefa
-        # if abs(self.ex_px) < self.deadband_px:
-        #     self.ex_px = 0.0
-        #     self.x_flag = True
-        # if abs(self.ey_px) < self.deadband_px:
-        #     self.ey_px = 0.0
-        #     self.y_flag = True
+        self.get_logger().info(f"Detection error: ex_px={self.ex_px}, ey_px={self.ey_px}")
 
-        # # normalizacja do [-1,1]
-        # ex = self.ex_px / (self.img_w / 2.0)
-        # ey = self.ey_px / (self.img_h / 2.0)
+        # martwa strefa
+        if abs(self.ex_px) < self.deadband_px:
+            self.ex_px = 0.0
+            self.x_flag = True
+        if abs(self.ey_px) < self.deadband_px:
+            self.ey_px = 0.0
+            self.y_flag = True
 
-        # # low-pass
-        # a = clamp(self.lowpass, 0.0, 1.0)
-        # self.ex_f = (1 - a) * self.ex_f + a * ex
-        # self.ey_f = (1 - a) * self.ey_f + a * ey
+        # normalizacja do [-1,1]
+        ex = self.ex_px / (self.img_w / 2.0)
+        ey = self.ey_px / (self.img_h / 2.0)
+
+        # low-pass
+        a = clamp(self.lowpass, 0.0, 1.0)
+        self.ex_f = (1 - a) * self.ex_f + a * ex
+        self.ey_f = (1 - a) * self.ey_f + a * ey
         self.last_seen = time.time()
 
     # ──────────────────────────────────────────────────────────
@@ -403,15 +408,20 @@ def main():
         mission.takeoff(5.0)
 
         # mission.send_set_yaw(290.0, True)
-        time.sleep(3)
+        # time.sleep(3)
 
-        mission.get_logger().info("Pointing gimbal downwards")
+        # mission.get_logger().info("Pointing gimbal downwards")
 
         # Włącz sterowanie wektorami prędkości
         mission.toggle_control()
 
-        mission.fly_to_detection()
+        # mission.fly_to_detection()
+        mission.center_detection()
+
         time.sleep(2.0)  
+
+        # mission.stop_centering() # Zatrzymuje zarówno gimbal, jak i pętlę sterowania
+        # mission.set_gimbal_angle(0.0)
         
         # Pętla główna do obsługi logiki misji
         run_seconds = 60.0
@@ -430,8 +440,8 @@ def main():
     finally:
         # Zawsze spróbuj bezpiecznie wylądować
         mission.get_logger().info("Stopping any active loops and landing.")
-        mission.stop_centering() # Zatrzymuje zarówno gimbal, jak i pętlę sterowania
         mission.land()
+        mission.stop_centering() # Zatrzymuje zarówno gimbal, jak i pętlę sterowania
         mission.toggle_control()
         mission.destroy_node()
         rclpy.shutdown()
