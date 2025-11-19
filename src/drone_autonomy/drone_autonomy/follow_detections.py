@@ -25,7 +25,7 @@ class FollowDetections(DroneController):
         self.declare_parameter('image_height', 480)
         self.declare_parameter('detections_topic', '/detections')
         self.declare_parameter('target_alt', 2.0)
-        self.declare_parameter('kp', 0.005)
+        self.declare_parameter('kp', 0.003)
         self.declare_parameter('deadband_px', 20)
         self.declare_parameter('max_vel', 1.0)
         self.declare_parameter('lowpass', 0.3)
@@ -325,20 +325,19 @@ class FollowDetections(DroneController):
         vx = self.kp * d_ground_m 
         vx = clamp(vx, -self.max_vel, self.max_vel)
 
-        # Yaw control to center marker horizontally
-        # r = h_m / math.sin(overall_pitch_rad)
-        # HFOV_RAD = self.degrees_to_radians(100.0)
-        # horizontal_pixel_count = 640.0
-        # d_yaw_rad = self.ex_px * HFOV_RAD / horizontal_pixel_count
-
-        # Prędkość boczna (vy) do centrowania markera w poziomie
-        # Znak dodatni, bo dodatni błąd ex_f (marker po prawej) wymaga dodatniej prędkości vy (ruch w prawo)
-        vy = self.kp * self.ex_f 
-        vy = clamp(vy, -self.max_vel, self.max_vel)
+        # --- YAW RATE CONTROL (Visual Servoing) ---
+        # Calculate Yaw Rate based on horizontal pixel error
+        # ex_f is normalized [-1, 1]. 
+        # If ex_f is positive (object on right), we need positive yaw rate (turn right).
+        
+        YAW_KP = 0.5  # Tuning parameter: Rad/s per normalized error
+        yaw_rate = YAW_KP * self.ex_f
+        
+        # Clamp yaw rate to reasonable speed (e.g., 45 deg/s = ~0.8 rad/s)
+        yaw_rate = clamp(yaw_rate, -0.8, 0.8)
 
         # Dodatkowe logowanie do debugowania
-        self.get_logger().info(f"Control: h={h_m:.2f}, pitch={self.radians_to_degrees(drone_pitch_rad):.2f} deg, gimbal={self.gimbal_angle_deg:.2f} ->"
-                               f"d={d_ground_m:.2f}, ex_f={self.ex_f:.2f} -> vx={vx:.2f}, vy ={vy:.2f}") # delta yaw={self.radians_to_degrees(d_yaw_rad):.2f} deg")
+        self.get_logger().info(f"Control: h={h_m:.2f}, d={d_ground_m:.2f} -> vx={vx:.2f}, yaw_rate={yaw_rate:.2f}")
         
         if abs(d_ground_m) < 0.001 and abs(self.ex_px) < 10:
             # Osiągnięto cel -> zatrzymaj ruch
@@ -351,9 +350,11 @@ class FollowDetections(DroneController):
             except Exception:
                 pass
         else:
-            self.send_vectors(vx, vy, 0.0)
-            # self.send_set_yaw(d_yaw_rad, relative = True)
-
+            # Send vectors. 
+            # ARGUMENTS: (Forward_Speed, Yaw_Rate, Vertical_Speed)
+            # We are passing yaw_rate in the second argument because we modified drone_handler.py
+            self.send_vectors(vx, yaw_rate, 0.0)
+            
 
     # ──────────────────────────────────────────────────────────
     def fly_to_detection(self):
@@ -415,8 +416,8 @@ def main():
         # Włącz sterowanie wektorami prędkości
         mission.toggle_control()
 
-        # mission.fly_to_detection()
-        mission.center_detection()
+        mission.fly_to_detection()
+        # mission.center_detection()
 
         time.sleep(2.0)  
 

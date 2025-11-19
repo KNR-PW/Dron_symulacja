@@ -536,42 +536,49 @@ class DroneHandler(Node):
 
     #velocty control definitions
 
-    def send_global_velocity(self,velocity_x, velocity_y, velocity_z):
+    def send_body_velocity(self, velocity_x, velocity_y, velocity_z, yaw_rate):
         """
-        Move vehicle in direction based on specified velocity vectors.
+        Move vehicle in direction based on specified velocity vectors in BODY frame.
+        velocity_x: Forward (m/s)
+        velocity_y: Right (m/s)
+        velocity_z: Down (m/s)
+        yaw_rate:   Turn Rate (rad/s)
         """
-        msg = self.vehicle.message_factory.set_position_target_global_int_encode(
+        # MAVLink type_mask for SET_POSITION_TARGET_LOCAL_NED
+        # We want to IGNORE: Pos (0,1,2), Accel (6,7,8), Force (9), Yaw Angle (10)
+        # We want to ENABLE: Vel (3,4,5) and Yaw Rate (11)
+        # Binary: 0101 1100 0111 = 1479
+        type_mask = 1479
+
+        msg = self.vehicle.message_factory.set_position_target_local_ned_encode(
             0,       # time_boot_ms (not used)
             0, 0,    # target system, target component
-            mavutil.mavlink.MAV_FRAME_LOCAL_NED  , # frame
-            0b0000111111000111, # type_mask (only speeds enabled)
-            0, # lat_int - X Position in WGS84 frame in 1e7 * meters
-            0, # lon_int - Y Position in WGS84 frame in 1e7 * meters
-            0, # alt - Altitude in meters in AMSL altitude(not WGS84 if absolute or relative)
-            # altitude above terrain if GLOBAL_TERRAIN_ALT_INT
-            velocity_x, # X velocity in NED frame in m/s
-            velocity_y, # Y velocity in NED frame in m/s
-            velocity_z, # Z velocity in NED frame in m/s
-            0, 0, 0, # afx, afy, afz acceleration (not supported yet, ignored in GCS_Mavlink)
-            0, 0)    # yaw, yaw_rate (not supported yet, ignored in GCS_Mavlink)
-
-        # send command to vehicle on 1 Hz cycle
+            mavutil.mavlink.MAV_FRAME_BODY_OFFSET_NED, # Frame 9: Body Frame (X=Forward, Y=Right)
+            type_mask, # type_mask
+            0, 0, 0, # x, y, z positions (not used)
+            velocity_x, # x velocity (Forward)
+            velocity_y, # y velocity (Right)
+            velocity_z, # z velocity (Down)
+            0, 0, 0, # x, y, z acceleration (not used)
+            0, yaw_rate)    # yaw, yaw_rate (rad/s)
 
         self.vehicle.send_mavlink(msg)
 
 
     def velocity_control_callback(self, msg):
         if self._velocity_control_flag:
-            self.get_logger().info(f"i receive x:{msg.vx} y:{msg.vy} z:{msg.vz}")
+            # ROS Message Mapping:
+            # msg.vx -> Forward Speed
+            # msg.vy -> YAW RATE (repurposed)
+            # msg.vz -> Vertical Speed
             
-            yaw = math.radians(self.vehicle.heading)
+            forward_vel = msg.vx
+            yaw_rate = msg.vy 
+            vertical_vel = msg.vz
 
-            v_n = msg.vx * math.cos(yaw) - msg.vy * math.sin(yaw)
-            v_e = msg.vx * math.sin(yaw) + msg.vy * math.cos(yaw)
-            v_d = msg.vz
-
-            self.send_global_velocity(v_n, v_e, v_d)
-
+            # Send directly in Body Frame. 
+            # We pass 0.0 for lateral velocity (Body Y) because we are turning to face the target.
+            self.send_body_velocity(forward_vel, 0.0, vertical_vel, yaw_rate)
     def toggle_velocity_control(self, request, response):
 
         self._velocity_control_flag = False if self._velocity_control_flag else True
