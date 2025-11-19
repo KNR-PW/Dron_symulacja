@@ -92,6 +92,13 @@ class DroneHandler(Node):
                 self.get_logger().error(f"Connecting failed with error: {e}")
                 self.get_logger().info("Retrying to connect in {3} seconds...")
                 time.sleep(3)
+
+        try:
+            self.vehicle.parameters['WP_YAW_BEHAVIOR'] = 0
+            self.get_logger().info("Set WP_YAW_BEHAVIOR = 0 (Strafing enabled)")
+        except Exception as e:
+            self.get_logger().warn(f"Could not set WP_YAW_BEHAVIOR: {e}")
+        
         if not self.dev_mode:
             self.wait_fc_ready()
         self.state = "OK"
