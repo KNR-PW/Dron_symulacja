@@ -32,10 +32,10 @@ class FollowDetections(DroneController):
         self.declare_parameter('lost_timeout', 0.8)  # s
 
         # Gimbal tracking params
-        self.declare_parameter('gimbal_kp_deg', 2.0)     # degrees per normalized image unit
-        self.declare_parameter('gimbal_min_deg', -45.0)
+        self.declare_parameter('gimbal_kp_deg', 0.7)     # degrees per normalized image unit
+        self.declare_parameter('gimbal_min_deg', -15.0)
         self.declare_parameter('gimbal_max_deg', 89.9)
-        self.declare_parameter('gimbal_rate_hz', 30.0)    # command rate
+        self.declare_parameter('gimbal_rate_hz', 50.0)    # command rate
 
         self.img_w = int(self.get_parameter('image_width').value)
         self.img_h = int(self.get_parameter('image_height').value)
@@ -362,8 +362,8 @@ class FollowDetections(DroneController):
         self.state = "BUSY"
         self.centering = True
         self.get_logger().info("wlaczam nadlatywanie do detekcji (gimbal centering + approach)")
-        # start approach control loop at 10 Hz (or adjust)
-        self.timer = self.create_timer(0.1, self.control_loop)
+        # start approach control loop at 50 Hz (or adjust)
+        self.timer = self.create_timer(0.02, self.control_loop)
         # self.wait_busy()
  
  
