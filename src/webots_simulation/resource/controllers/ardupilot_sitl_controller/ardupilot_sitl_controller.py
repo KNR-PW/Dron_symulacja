@@ -68,8 +68,8 @@ def get_args():
 
     parser.add_argument("--camera-fps",
                         type=int,
-                        default=10,
-                        help="Camera FPS. Note lower FPS is faster")
+                        default=30,
+                        help="Camera FPS.")
     parser.add_argument("--camera-port",
                         type=int,
                         default=None,

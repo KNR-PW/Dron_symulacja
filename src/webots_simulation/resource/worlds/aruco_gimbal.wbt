@@ -112,7 +112,7 @@ DEF Iris Iris {
                               DEF gimbal_camera Camera {
                                 rotation 0.5773509358560258 0.577349935856137 0.577349935856137 -2.094395307179586
                                 name "gimbal_camera"
-                                fieldOfView 0.785
+                                fieldOfView 1.7453
                                 width 640
                                 height 480
                               }
