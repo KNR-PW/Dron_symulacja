@@ -224,11 +224,13 @@ class FollowDetections(DroneController):
         if len(msg.detections) == 0:
             return  # no detections
 
-        # # Use the first detection (could be improved to select best one)
-        # det = msg.detections[0]
-        # bbox = det.bbox
-
+        # Select the best detection based on score
         best = max(msg.detections, key=lambda d: d.results[0].hypothesis.score)
+        
+        # Access the class name from the hypothesis
+        obj_name = best.results[0].hypothesis.class_id
+        score = best.results[0].hypothesis.score
+    
         cx = best.bbox.center.position.x
         cy = best.bbox.center.position.y
 
@@ -239,7 +241,7 @@ class FollowDetections(DroneController):
         self.ex_px = float(cx) - self.cx
         self.ey_px = float(cy) - self.cy
 
-        self.get_logger().info(f"Detection error: ex_px={self.ex_px}, ey_px={self.ey_px}")
+        self.get_logger().info(f"Tracking: {obj_name} with score: {score:.2f}, detection error: ex_px={self.ex_px}, ey_px={self.ey_px}")
 
         # martwa strefa
         if abs(self.ex_px) < self.deadband_px:
@@ -327,11 +329,6 @@ class FollowDetections(DroneController):
         vx = self.kp * d_ground_m 
         vx = clamp(vx, -self.max_vel, self.max_vel)
 
-        # --- YAW RATE CONTROL (Visual Servoing) ---
-        # Calculate Yaw Rate based on horizontal pixel error
-        # ex_f is normalized [-1, 1]. 
-        # If ex_f is positive (object on right), we need positive yaw rate (turn right).
-        
         YAW_KP = 1.0  # Tuning parameter: Rad/s per normalized error
         yaw_rate = YAW_KP * self.ex_f
         
@@ -344,8 +341,8 @@ class FollowDetections(DroneController):
         vz = 0.0
 
         # if (abs(d_ground_m) < 3.0):
-        # vz = self.kp * (h_m - self.target_alt)
-        # vz = clamp(vz, -self.max_vel, self.max_vel)
+        vz = self.kp * (h_m - self.target_alt)
+        vz = clamp(vz, -self.max_vel, self.max_vel)
         
         if abs(d_ground_m) < 0.2 and abs(self.ex_px) < 20:
             # Osiągnięto cel -> zatrzymaj ruch

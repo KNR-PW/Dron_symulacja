@@ -38,13 +38,15 @@ class YoloNode(Node):
             d.bbox.size_y = h
             # Hipoteza klasy
             hyp = ObjectHypothesisWithPose()
-            hyp.hypothesis.class_id = str(det['class_id'])
+            
+            # Use the name instead of the ID number
+            hyp.hypothesis.class_id = det['class_name'] 
+            
             hyp.hypothesis.score = det['confidence']
             d.results.append(hyp)
 
-            # annotated_frame = results[0].plot()  # Rysuje bounding boxy i etykiety
-            # cv2.imshow("YOLO Detection", annotated_frame)
-            # cv2.waitKey(1)  # Potrzebne do odświeżania okna
+            # Optional: Log what was detected to the console
+            # self.get_logger().info(f"Detected: {det['class_name']} ({det['confidence']:.2f})")
 
             # Opcjonalny ID śledzenia
             if det['tracking_id']:

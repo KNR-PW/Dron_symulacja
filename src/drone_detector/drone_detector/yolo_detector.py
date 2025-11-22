@@ -25,10 +25,15 @@ class YoloDetector:
                     continue
                 if conf < self.conf_threshold:
                     continue
+                
+                # Retrieve the human-readable name (e.g., 'person', 'car')
+                class_name = self.model.names[cls_id]
+
                 x1, y1, x2, y2 = map(float, box.xyxy[0])
                 tid = int(box.id[0]) if box.id is not None else None
                 detections.append({
                     'class_id': cls_id,
+                    'class_name': class_name,  # <--- Add this field
                     'confidence': conf,
                     'bbox': (x1, y1, x2, y2),
                     'tracking_id': tid
