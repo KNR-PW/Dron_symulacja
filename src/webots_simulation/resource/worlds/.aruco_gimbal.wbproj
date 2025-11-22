@@ -8,4 +8,4 @@ orthographicViewHeight: 1
 textFiles: -1
 consoles: Console:All:All
 renderingDevicePerspectives: Iris:camera;1;0.137218;0.00170648;0.646538
-renderingDevicePerspectives: Iris:gimbal_camera;1;0.395833;0;0
+renderingDevicePerspectives: Iris:gimbal_camera;1;0.585417;0;0

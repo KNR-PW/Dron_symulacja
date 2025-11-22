@@ -25,8 +25,8 @@ class FollowDetections(DroneController):
         self.declare_parameter('image_height', 480)
         self.declare_parameter('detections_topic', '/detections')
         self.declare_parameter('target_alt', 2.0)
-        self.declare_parameter('kp', 0.003)
-        self.declare_parameter('deadband_px', 20)
+        self.declare_parameter('kp', 0.05) # declared as input parameter, currently 0.6
+        self.declare_parameter('deadband_px', 0)
         self.declare_parameter('max_vel', 1.0)
         self.declare_parameter('lowpass', 0.3)
         self.declare_parameter('lost_timeout', 0.8)  # s
@@ -34,7 +34,7 @@ class FollowDetections(DroneController):
         # Gimbal tracking params
         self.declare_parameter('gimbal_kp_deg', 0.7)     # degrees per normalized image unit
         self.declare_parameter('gimbal_min_deg', -15.0)
-        self.declare_parameter('gimbal_max_deg', 89.9)
+        self.declare_parameter('gimbal_max_deg', 90.0)
         self.declare_parameter('gimbal_rate_hz', 50.0)    # command rate
 
         self.img_w = int(self.get_parameter('image_width').value)
@@ -270,10 +270,10 @@ class FollowDetections(DroneController):
     def degrees_to_radians(self, degrees: float) -> float:
         return degrees * (math.pi / 180.0)
     
-    def radians_to_degrees(self, degrees: float) -> float:
-        return degrees * (180.0 / math.pi)
+    def radians_to_degrees(self, radians: float) -> float:
+        return radians * (180.0 / math.pi)
 
-    def control_loop(self):
+    def drone_control_loop(self):
 
         if (time.time() - self.last_seen) > self.lost_timeout:
             # brak markera niedawno -> wyhamuj
@@ -298,28 +298,30 @@ class FollowDetections(DroneController):
             # attitude not available this tick, skip control to avoid bad math
             return
 
-        overall_pitch_rad = self.degrees_to_radians(self.gimbal_angle_deg) - drone_pitch_rad # drone's pitch is in radians and inverted (negative pitch = nose down)
+        gimbal_angle_rad = self.degrees_to_radians(self.gimbal_angle_deg)
 
-        if (self.radians_to_degrees(overall_pitch_rad) >= 89.0): # to enable going back
-            vertical_pixel_count = 480.0
-            # horizontal_pixel_count = 640.0
-            # VFOV_RAD = self.degrees_to_radians(100.0) * vertical_pixel_count / horizontal_pixel_count # vertical field of view in radians (approx for Webots camera)
+        overall_pitch_rad = gimbal_angle_rad - drone_pitch_rad # drone's pitch is in radians and inverted (negative pitch = nose down)
 
-            # VFOV = 100 deg * 480/640 = 75 deg
-            # tan(37.5 deg) = 0.7673270030049353
+        if (self.gimbal_angle_deg >= 89.0 and self.radians_to_degrees(overall_pitch_rad) >= 90.0): # to enable going back
+            half_vertical_pixel_count = 240.0 # for 480p
 
-            # Przy pitchu większym niż 90 stopni, odległość do markera na ziemi jest przybliżona przez:
-            cam_half_vertical_range_m = h_m * 0.767327
+            # different approach:
+            # pitch / half VFOV = ey_px / (vertical_pixel_count / 2.0)
+            # vfov = 75 deg -> 37.5 deg to rad -> 0.6545 radians
+            pitch = 0.6545 * self.ey_px / half_vertical_pixel_count
 
-            d_ground_m = - cam_half_vertical_range_m * self.ey_px / (vertical_pixel_count / 2.0) # negative because ey_px positive means marker is below center
+            overall_pitch_rad += pitch
+ 
+        # else:
 
-            # d_ground_m = self.ey_f
+        denom = math.tan(overall_pitch_rad)
+        if abs(denom) < 0.01:
+            d_ground_m = 20.0 # max distance to cover
         else:
-            denom = math.tan(overall_pitch_rad)
-            if abs(denom) < 0.001:
-                d_ground_m = 100.0 # max distance to cover
-            else:
-                d_ground_m = h_m / denom
+            d_ground_m = h_m / denom
+            
+        # drone's gimbal is 0.035m off center in the x direction
+        d_ground_m -= 0.05
 
         # Front speed (vx) to reduce ground distance to marker
         vx = self.kp * d_ground_m 
@@ -330,7 +332,7 @@ class FollowDetections(DroneController):
         # ex_f is normalized [-1, 1]. 
         # If ex_f is positive (object on right), we need positive yaw rate (turn right).
         
-        YAW_KP = 0.5  # Tuning parameter: Rad/s per normalized error
+        YAW_KP = 1.0  # Tuning parameter: Rad/s per normalized error
         yaw_rate = YAW_KP * self.ex_f
         
         # Clamp yaw rate to reasonable speed (e.g., 45 deg/s = ~0.8 rad/s)
@@ -338,8 +340,14 @@ class FollowDetections(DroneController):
 
         # Dodatkowe logowanie do debugowania
         self.get_logger().info(f"Control: h={h_m:.2f}, d={d_ground_m:.2f} -> vx={vx:.2f}, yaw_rate={yaw_rate:.2f}")
+
+        vz = 0.0
+
+        # if (abs(d_ground_m) < 3.0):
+        # vz = self.kp * (h_m - self.target_alt)
+        # vz = clamp(vz, -self.max_vel, self.max_vel)
         
-        if abs(d_ground_m) < 0.001 and abs(self.ex_px) < 10:
+        if abs(d_ground_m) < 0.2 and abs(self.ex_px) < 20:
             # Osiągnięto cel -> zatrzymaj ruch
             self.get_logger().info("Target reached, stopping approach.")
             self.send_vectors(0.0, 0.0, 0.0)
@@ -353,7 +361,7 @@ class FollowDetections(DroneController):
             # Send vectors. 
             # ARGUMENTS: (Forward_Speed, Yaw_Rate, Vertical_Speed)
             # We are passing yaw_rate in the second argument because we modified drone_handler.py
-            self.send_vectors(vx, yaw_rate, 0.0)
+            self.send_vectors(vx, yaw_rate, vz)
             
 
     # ──────────────────────────────────────────────────────────
@@ -363,7 +371,7 @@ class FollowDetections(DroneController):
         self.centering = True
         self.get_logger().info("wlaczam nadlatywanie do detekcji (gimbal centering + approach)")
         # start approach control loop at 50 Hz (or adjust)
-        self.timer = self.create_timer(0.02, self.control_loop)
+        self.timer = self.create_timer(0.02, self.drone_control_loop)
         # self.wait_busy()
  
  
