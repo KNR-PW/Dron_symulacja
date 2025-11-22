@@ -323,7 +323,7 @@ class FollowDetections(DroneController):
             d_ground_m = h_m / denom
             
         # drone's gimbal is 0.035m off center in the x direction
-        d_ground_m -= 0.05
+        # d_ground_m -= 0.05 # TODO correct landing so it lands on target not 'behind' the target
 
         # Front speed (vx) to reduce ground distance to marker
         vx = self.kp * d_ground_m 

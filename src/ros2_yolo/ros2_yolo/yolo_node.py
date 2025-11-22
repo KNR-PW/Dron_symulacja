@@ -16,16 +16,24 @@ class YoloNode(Node):
             Image, '/gimbal_camera', self.image_callback, 10)
         self.detection_pub = self.create_publisher(
             Detection2DArray, '/detections', 10)
+        
+        self.debug_image_pub = self.create_publisher(Image, '/detections/annotated', 10)
 
     def image_callback(self, msg):
         cv_image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
-        detections = self.detector.detect(cv_image)
+        detections, annotated_frame = self.detector.detect(cv_image)
+
+        if annotated_frame is not None:
+            debug_msg = self.bridge.cv2_to_imgmsg(annotated_frame, encoding="bgr8")
+            debug_msg.header = msg.header
+            self.debug_image_pub.publish(debug_msg)
+
         msg_out = Detection2DArray()
         msg_out.header = msg.header
-        # Konwersja detekcji
+        # detection conversion
         for det in detections:
             d = Detection2D()
-            # Bounding box (środek, szerokość, wysokość)
+            # Bounding box (middle, width, height)
             x1, y1, x2, y2 = det['bbox']
             cx = (x1 + x2) / 2.0
             cy = (y1 + y2) / 2.0
@@ -36,7 +44,7 @@ class YoloNode(Node):
             d.bbox.center.position.y = cy
             d.bbox.size_x = w
             d.bbox.size_y = h
-            # Hipoteza klasy
+            # Hypothesis of class
             hyp = ObjectHypothesisWithPose()
             
             # Use the name instead of the ID number
@@ -48,7 +56,7 @@ class YoloNode(Node):
             # Optional: Log what was detected to the console
             # self.get_logger().info(f"Detected: {det['class_name']} ({det['confidence']:.2f})")
 
-            # Opcjonalny ID śledzenia
+            # Optional tracking ID
             if det['tracking_id']:
                 d.id = str(det['tracking_id'])
             msg_out.detections.append(d)
