@@ -58,7 +58,7 @@ class DroneHandlerPX4(Node):
         self.takeoff = ActionServer(self, Takeoff, NAMESPACE+'takeoff',self.takeoff_callback, cancel_callback=self.cancel_callback)
         self.goto_global = ActionServer(self, GotoGlobal, NAMESPACE+'goto_global', self.goto_global_action, cancel_callback=self.cancel_callback)
         self.goto_rel = ActionServer(self, GotoRelative, NAMESPACE+'goto_relative', self.goto_relative_action, cancel_callback=self.cancel_callback)
-        #self.yaw = ActionServer(self, SetYawAction, NAMESPACE+'Set_yaw', self.yaw_callback, cancel_callback=self.cancel_callback)
+        self.yaw = ActionServer(self, SetYawAction, NAMESPACE+'Set_yaw', self.yaw_callback, cancel_callback=self.cancel_callback)
 
         #declare subcriptions
         self.status_sub = self.create_subscription(VehicleStatus, '/fmu/out/vehicle_status_v1', self.vehicle_status_callback, qos_profile)
@@ -76,7 +76,6 @@ class DroneHandlerPX4(Node):
         self.get_logger().info("starting knr drone handler px4")
 
         #define the variables
-        # self.current_state = "IDLE"
         self.px4_alive_flag = False #this flag will check if we received any data from  drone
         self.px4_watchdog = 0 #this variable will check if we still getting new topics
         self.nav_state = VehicleStatus.NAVIGATION_STATE_MAX
@@ -84,6 +83,8 @@ class DroneHandlerPX4(Node):
         self.failsafe = False # if true that means drone is in failsafe mode
         self.flightCheck = False #if true drone can be armed
         self.offboard_setpoint_counter = 0
+        self.flight_mode_flag = False #False = position points trajectory mode
+                                      #True = velocity vectors trajectory mode
 
         #data structure
         self.global_position = GlobalPosition()
@@ -95,8 +96,12 @@ class DroneHandlerPX4(Node):
     def publish_offboard_control_heartbeat_signal(self):
         """Publish the offboard control mode."""
         msg = OffboardControlMode()
-        msg.position = True
-        msg.velocity = False
+        if self.flight_mode_flag:
+            msg.position = False
+            msg.velocity = True
+        else:
+            msg.position = True
+            msg.velocity = False
         msg.acceleration = False
         msg.attitude = False
         msg.body_rate = False
@@ -183,7 +188,7 @@ class DroneHandlerPX4(Node):
         self.vehicle_command_publisher.publish(msg)
     
     def publish_position_setpoint(self, x: float, y: float, z: float, yaw = "ORIGINAL"):
-        """Publish the trajectory setpoint."""
+        """Publish the trajectory setpoint in the NED frame"""
         if yaw == "ORIGINAL":
             yaw = self.local_position.heading
         msg = TrajectorySetpoint()
@@ -192,6 +197,23 @@ class DroneHandlerPX4(Node):
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         self.trajectory_setpoint_publisher.publish(msg)
         self.get_logger().info(f"Publishing position setpoints {[x, y, z]}")
+
+    def publish_velocity_setpoint(self, x: float = 0.0, y: float = 0.0, z: float = 0.0, yaw_speed: float = 0.0):
+        """Publish the trajectory in velocity vectors in the NED frame"""
+        msg = TrajectorySetpoint()
+        msg.velocity = [x, y, z]
+        msg.position = [float('nan'), float('nan'), float('nan')]
+        msg.yaw = float('nan')
+        msg.yawspeed = yaw_speed
+        msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
+        self.trajectory_setpoint_publisher.publish(msg)
+        self.get_logger().info(f"Publishing velocity vectors {[x, y, z]} m/s, yaw_speed {yaw_speed} deg/s")
+
+    def change_flight_mode_flag(self):
+        if self.flight_mode_flag:
+            self.flight_mode_flag = False
+        else:
+            self.flight_mode_flag = True
 
     #declare services callbback
     def set_mode_callback(self, request, response):
@@ -236,7 +258,7 @@ class DroneHandlerPX4(Node):
         result.result = 1
 
         return result
-    #not working yet
+    
     def takeoff_callback(self, goal_handle):
         feedback_msg = Takeoff.Feedback()
 
@@ -360,7 +382,8 @@ class DroneHandlerPX4(Node):
         self.__relative = goal_handle.request.relative
         setted_yaw = goal_handle.request.yaw
         actual_yaw = self.local_position.heading
-        cw = 1
+        YAW_SPEED = 0.2
+        cw = YAW_SPEED
 
         requested_yaw = self.calc_yaw(setted_yaw, actual_yaw)
 
@@ -368,37 +391,45 @@ class DroneHandlerPX4(Node):
             requested_yaw+=6.283185
         if setted_yaw < 0:
             setted_yaw = -setted_yaw
-            cw = -1
+            cw = -cw
         yaw_deg = requested_yaw / 3.141592 * 180
-        # self.set_yaw(requested_yaw, cw)
+        
         self.get_logger().info(f'd')
-        self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_CONDITION_YAW, param1 = yaw_deg, param3 = float(cw), param4 = 0.0)
-        self.get_logger().info(f't')
-        feefback_msg = SetYawAction.Feedback()
-        feefback_msg.angle = self.calc_remaning_yaw(requested_yaw, actual_yaw, cw)
-        self.get_logger().info(f"Angle remainig: {feefback_msg.angle}")
+        # self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_CONDITION_YAW, param1 = yaw_deg, param3 = float(cw), param4 = 0.0)
+        
+        if not self.flight_mode_flag:
+            prev_flight_mode_flag = self.flight_mode_flag
+            self.change_flight_mode_flag()
 
-        #self._counter += 1
+        self.publish_velocity_setpoint(yaw_speed=cw)
 
-        while feefback_msg.angle > 0.5:
+        feedback_msg = SetYawAction.Feedback()
+        feedback_msg.angle = self.calc_remaning_yaw(requested_yaw, actual_yaw, cw)
+        self.get_logger().info(f"Angle remainig: {feedback_msg.angle}")
+
+
+        while feedback_msg.angle > 0.5:
             if goal_handle.is_cancel_requested:
                 goal_handle.canceled()
                 self.get_logger().info('Goal canceled')
                 return SetYawAction.Result()
 
-            self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_CONDITION_YAW, param1 = yaw_deg, param3 = float(cw), param4 = 0.0)
-
+            # self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_CONDITION_YAW, param1 = yaw_deg, param3 = float(cw), param4 = 0.0)
+            self.publish_velocity_setpoint(yaw_speed=cw)
             actual_yaw = self.local_position.heading
-            feefback_msg.angle = self.calc_remaning_yaw(requested_yaw, actual_yaw, cw)
-            self.get_logger().info(f"Angle remainig: {feefback_msg.angle}")
+            feedback_msg.angle = self.calc_remaning_yaw(requested_yaw, actual_yaw, cw)
+            self.get_logger().info(f"Angle remainig: {feedback_msg.angle}")
             time.sleep(1)
 
-        self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, param1=1.0, param2=6.0)
-        self.publish_position_setpoint(self.local_position.x, 
-                                       self.local_position.y,
-                                       self.local_position.z)
+        if not prev_flight_mode_flag:
+            self.change_flight_mode_flag()
 
-        self.get_logger().info(f"Angle remainig: {feefback_msg.angle}")
+        # self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, param1=1.0, param2=6.0)
+        # self.publish_position_setpoint(self.local_position.x, 
+        #                                self.local_position.y,
+        #                                self.local_position.z)
+
+        # self.get_logger().info(f"Angle remainig: {feedback_msg.angle}")
         goal_handle.succeed()
         result = SetYawAction.Result()
         result.result = 1
