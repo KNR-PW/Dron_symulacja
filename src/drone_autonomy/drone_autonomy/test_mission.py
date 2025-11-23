@@ -90,19 +90,17 @@ def main(args=None):
     # mission.send_goto_relative( 0.0, -8.0, 0.0)
     # time.sleep(5)
 
-    mission.send_set_yaw(3.14/2)
-    time.sleep(5)
+    # mission.send_set_yaw(3.14/2)
+    # time.sleep(5)
     # mission.send_set_yaw(-3.14/2)
     # time.sleep(5)
 
-    # # mission.toggle_control()
-    # # mission.send_vectors(1.0,0.0,0.0)
-    # # time.sleep(1)
-    # # mission.send_vectors(1.0,0.0,0.0)
-    # # time.sleep(1)
-    # # mission.send_vectors(1.0,0.0,0.0)
-    # # time.sleep(1)
-    # # mission.toggle_control()
+    mission.toggle_control()
+    for x in range(100):
+        mission.send_vectors(0.0,0.5,0.0)
+        time.sleep(0.1)
+
+    mission.toggle_control()
     mission.land()
     # mission.rtl()
     mission.destroy_node()

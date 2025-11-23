@@ -1,6 +1,7 @@
 import time
 import math
 import haversine as hv
+import numpy as np
 
 import rclpy
 from rclpy.node import Node
@@ -8,11 +9,11 @@ from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDur
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.action import ActionServer,  CancelResponse
 
-
-from drone_interfaces.srv import SetMode
+from drone_interfaces.msg import VelocityVectors
+from drone_interfaces.srv import SetMode, ToggleVelocityControl
 from drone_interfaces.action import  Arm, Takeoff, GotoGlobal, GotoRelative, SetYawAction
 
-from px4_msgs.msg import VehicleStatus, VehicleCommand, OffboardControlMode, VehicleGlobalPosition, TrajectorySetpoint, VehicleLocalPosition
+from px4_msgs.msg import VehicleStatus, VehicleCommand, OffboardControlMode, VehicleGlobalPosition, TrajectorySetpoint, VehicleLocalPosition, VehicleAttitude
 #TODO 
 #1. (DONE)makes check if we get a new topic before we send mode to offboard
 #2. still rebuilding the drone handler to px4
@@ -52,6 +53,7 @@ class DroneHandlerPX4(Node):
         NAMESPACE = 'knr_hardware/'
         #declare services
         self.mode = self.create_service(SetMode, NAMESPACE+'set_mode',self.set_mode_callback)
+        self.toggle_velocity_control_srv = self.create_service(ToggleVelocityControl, NAMESPACE+'toggle_v_control', self.toggle_velocity_control)
 
         #declare actions
         self.arm = ActionServer(self,Arm, NAMESPACE+'Arm',self.arm_callback)
@@ -64,6 +66,8 @@ class DroneHandlerPX4(Node):
         self.status_sub = self.create_subscription(VehicleStatus, '/fmu/out/vehicle_status_v1', self.vehicle_status_callback, qos_profile)
         self.global_position_sub = self.create_subscription(VehicleGlobalPosition, '/fmu/out/vehicle_global_position', self.vehicle_global_position_callback, qos_profile)
         self.local_position_sub = self.create_subscription(VehicleLocalPosition, '/fmu/out/vehicle_local_position_v1', self.vehicle_local_position_callback, qos_profile)
+        self.attitude_sub = self.create_subscription(VehicleAttitude, '/fmu/out/vehicle_attitude', self.attitude_callback, qos_profile)
+        self.vector_receiver = self.create_subscription(VelocityVectors, NAMESPACE+'velocity_vectors', self.velocity_control_callback ,10)
 
         # # Create publishers
         self.offboard_control_mode_publisher = self.create_publisher(OffboardControlMode, '/fmu/in/offboard_control_mode', qos_profile)
@@ -125,7 +129,7 @@ class DroneHandlerPX4(Node):
                 self.get_logger().warn("Vehicle is missing ERROR PX4 not found")
                 self.offboard_setpoint_counter = 0
 
-
+    #declare subscribtions
     #Print status of the drone
     def vehicle_status_callback(self, msg):
         if (msg.nav_state != self.nav_state):
@@ -166,6 +170,26 @@ class DroneHandlerPX4(Node):
 
         self.px4_alive_flag = True
         self.px4_watchdog = self.get_clock().now().nanoseconds
+    
+    def velocity_control_callback(self, msg):
+        if self.flight_mode_flag:
+            self.get_logger().info(f"i receive x:{msg.vx} y:{msg.vy} z:{msg.vz}")
+            real_vy = -msg.vy
+            cos_yaw = np.cos(self.trueYaw)
+            sin_yaw = np.sin(self.trueYaw)
+            velocity_world_x = (-msg.vx * cos_yaw - real_vy * sin_yaw)
+            velocity_world_y = (-msg.vx * sin_yaw + real_vy * cos_yaw)
+            
+            velocity_world_z = msg.vz
+
+            self.publish_velocity_setpoint(velocity_world_x , velocity_world_y, velocity_world_z)
+
+    def attitude_callback(self, msg):
+        orientation_q = msg.q
+
+        #trueYaw is the drones current yaw value
+        self.trueYaw = -(np.arctan2(2.0*(orientation_q[3]*orientation_q[0] + orientation_q[1]*orientation_q[2]), 
+                                  1.0 - 2.0*(orientation_q[0]*orientation_q[0] + orientation_q[1]*orientation_q[1])))
 
 
     # function to send to drone command in MAVLINK style
@@ -227,6 +251,12 @@ class DroneHandlerPX4(Node):
             self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_RETURN_TO_LAUNCH)
 
         response = SetMode.Response()
+        return response
+    
+    def toggle_velocity_control(self, request, response):
+        self.change_flight_mode_flag()
+        response.result = self.flight_mode_flag
+
         return response
     
     #declare actions callback
