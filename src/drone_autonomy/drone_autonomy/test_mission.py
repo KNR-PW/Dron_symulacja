@@ -97,7 +97,7 @@ def main(args=None):
 
     mission.toggle_control()
     for x in range(100):
-        mission.send_vectors(0.0,0.5,0.0)
+        mission.send_vectors(1.0,-1.0,0.0)
         time.sleep(0.1)
 
     mission.toggle_control()

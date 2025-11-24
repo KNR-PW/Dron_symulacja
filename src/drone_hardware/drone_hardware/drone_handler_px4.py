@@ -9,11 +9,20 @@ from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDur
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.action import ActionServer,  CancelResponse
 
-from drone_interfaces.msg import VelocityVectors
+from drone_interfaces.msg import VelocityVectors, Telemetry
 from drone_interfaces.srv import SetMode, ToggleVelocityControl
 from drone_interfaces.action import  Arm, Takeoff, GotoGlobal, GotoRelative, SetYawAction
 
-from px4_msgs.msg import VehicleStatus, VehicleCommand, OffboardControlMode, VehicleGlobalPosition, TrajectorySetpoint, VehicleLocalPosition, VehicleAttitude
+from px4_msgs.msg import (
+    VehicleStatus, 
+    VehicleCommand, 
+    OffboardControlMode, 
+    VehicleGlobalPosition, 
+    TrajectorySetpoint, 
+    VehicleLocalPosition, 
+    VehicleAttitude,
+    BatteryStatus
+)
 #TODO 
 #1. (DONE)makes check if we get a new topic before we send mode to offboard
 #2. still rebuilding the drone handler to px4
@@ -40,6 +49,12 @@ class LocalPosition():
 
         self.heading = float(0.0)
 
+class BatteryInfo():
+    def __init__(self):
+        self.voltage = float(0.0)
+        self.current = float(0.0)
+        self.number_of_cells = 0
+    
 class DroneHandlerPX4(Node):
     def __init__(self):
         super().__init__('drone_handler_px4')
@@ -67,15 +82,22 @@ class DroneHandlerPX4(Node):
         self.global_position_sub = self.create_subscription(VehicleGlobalPosition, '/fmu/out/vehicle_global_position', self.vehicle_global_position_callback, qos_profile)
         self.local_position_sub = self.create_subscription(VehicleLocalPosition, '/fmu/out/vehicle_local_position_v1', self.vehicle_local_position_callback, qos_profile)
         self.attitude_sub = self.create_subscription(VehicleAttitude, '/fmu/out/vehicle_attitude', self.attitude_callback, qos_profile)
+        self.battery_receiver = self.create_subscription(BatteryStatus, '/fmu/out/battery_status_v1', self.battery_callback, qos_profile)
+
         self.vector_receiver = self.create_subscription(VelocityVectors, NAMESPACE+'velocity_vectors', self.velocity_control_callback ,10)
 
         # # Create publishers
         self.offboard_control_mode_publisher = self.create_publisher(OffboardControlMode, '/fmu/in/offboard_control_mode', qos_profile)
         self.vehicle_command_publisher = self.create_publisher(VehicleCommand, '/fmu/in/vehicle_command', qos_profile)
         self.trajectory_setpoint_publisher = self.create_publisher(TrajectorySetpoint, '/fmu/in/trajectory_setpoint', qos_profile)
+        
+        self.telemetry_publisher = self.create_publisher(Telemetry, NAMESPACE+'telemetry',10)
 
         #declare Main loop in timer
         self.timer = self.create_timer(0.1, self.timer_callback)
+
+        #declare Telemetry timer
+        self.timer = self.create_timer(0.1, self.telemetry_callback)
 
         self.get_logger().info("starting knr drone handler px4")
 
@@ -93,6 +115,7 @@ class DroneHandlerPX4(Node):
         #data structure
         self.global_position = GlobalPosition()
         self.local_position = LocalPosition()
+        self.battery_info = BatteryInfo()
         self.dev_mode = False
 
     #for some reason to work with px4 offboard (guided) mode FC must recevied with minimum 2Hz control topic
@@ -191,6 +214,10 @@ class DroneHandlerPX4(Node):
         self.trueYaw = -(np.arctan2(2.0*(orientation_q[3]*orientation_q[0] + orientation_q[1]*orientation_q[2]), 
                                   1.0 - 2.0*(orientation_q[0]*orientation_q[0] + orientation_q[1]*orientation_q[1])))
 
+    def battery_callback(self, msg):
+        self.battery_info.voltage = msg.voltage_v
+        self.battery_info.current = msg.current_a
+        self.battery_info.number_of_cells = msg.cell_count
 
     # function to send to drone command in MAVLINK style
     def publish_vehicle_command(self, command, **params) -> None:
@@ -238,6 +265,56 @@ class DroneHandlerPX4(Node):
             self.flight_mode_flag = False
         else:
             self.flight_mode_flag = True
+
+    def telemetry_callback(self):
+        msg = Telemetry()
+
+        # Battery
+        # msg.battery_percentage = self.vehicle.battery.level
+        # msg.battery_voltage = self.vehicle.battery.voltage
+        # msg.battery_current = self.vehicle.battery.current
+        if self.battery_info.number_of_cells == 0:
+            self.get_logger().info(f"waiting for battery status")
+        else:
+            msg.battery_percentage = int((self.battery_info.voltage / float(self.battery_info.number_of_cells * 4.2)) * 100) 
+            msg.battery_voltage = self.battery_info.voltage
+            msg.battery_current = self.battery_info.current
+            # GPS
+            msg.global_lat = self.global_position.lat
+            msg.global_lon = self.global_position.lon
+            msg.global_alt = self.global_position.alt
+            msg.flight_mode = "test"
+            msg.speed = float(1.0)  
+            msg.lat = 0.0
+            msg.lon = 0.0
+            msg.alt = 0.0
+        # msg.lat = self.vehicle.location.global_relative_frame.lat
+        # msg.lon = self.vehicle.location.global_relative_frame.lon
+        # msg.alt = self.vehicle.location.global_relative_frame.alt
+
+        # # Flight mode
+        # msg.flight_mode = str(self.vehicle.mode)
+        
+        # msg.speed = float(self.vehicle.groundspeed)  
+
+        # gf = self.vehicle.location.global_frame
+        # if gf:  # check that GPS is valid
+        #     msg.global_lat = float(gf.lat)
+        #     msg.global_lon = float(gf.lon)
+        #     msg.global_alt = float(gf.alt)
+        # else:
+        #     # If no GPS fix, default to zeros
+        #     msg.global_lat = 0.0
+        #     msg.global_lon = 0.0
+        #     msg.global_alt = 0.0
+
+        # 
+        #if self._counter > 0:
+        #    msg.battery_voltage = 11.5
+            self.telemetry_publisher.publish(msg)
+        #self._counter += 1
+        #self.get_logger().info(f"battery :{self.vehicle.battery}")
+
 
     #declare services callbback
     def set_mode_callback(self, request, response):
