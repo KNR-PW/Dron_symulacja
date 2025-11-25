@@ -10,10 +10,33 @@ Następnie musicie wejść do folderu **docker/docker_px4** i tam jest specjalni
 cd docker/docker_px4
 ./setup_container_gpu.sh dierust/knr_px4_sim:latest 
 ```
+### Uwaga teraz każdą kolejną komende odpalamy w koleinych terminalach
 ## krok 3
-Włącz colcon builda w folderze rosowym konteneru następnie wpisz 
+Teraz będziemy musieli potrzebować włączyć symulacje w gazeboo i sitl px4
+do właczenia modelu drona w trybie multiwirnikowca
 ```bash
-source install/setup.bash
-MicroXRCEAgent udp4 -p 8888
+./run_px4_quad_sitl.sh
 ```
-Oraz odpal skrypt o nazwie **./run_px4_sitl** i zobacz czy widzisz topici nadawne przez drona jezeli widzisz je i symulacje to znaczy że wszystko wykonało się poprawnie
+do właczenia modelu drona w trybie vtola
+```bash
+./run_px4_vtol_sitl.sh
+```
+## krok 4
+W tym kroku będziemy uruchamiać aplikacje microxrcdds która tłumaczy wewnętrzne wiadomości (uORB) PX4 na rosowe wiadomości
+```bash
+./run_microxrce.sh
+```
+
+## krok 5
+teraz musisz odpalić qgoundcontrol by dron mógł być zarmowany co było wytłumaczone w **gcs_config.md**
+
+## krok 6
+Możemy teraz odpalic nasze nody rosowe
+```bash
+./build_and_run.sh
+```
+## krok 7
+Możemy teraz odpalic naszą misje testową
+```bash
+./run_test_mission.sh
+```
