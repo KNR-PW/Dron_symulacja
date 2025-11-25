@@ -117,6 +117,40 @@ class DroneHandlerPX4(Node):
         self.local_position = LocalPosition()
         self.battery_info = BatteryInfo()
         self.dev_mode = False
+        self.state_decoder = (
+            "Manual",
+            "Altitude control",
+            "Position control",
+            "Auto mission mode",
+            "Auto loiter",
+            "Return to launch",
+            "Position slow",
+            "Free5",
+            "Altitude cruise",
+            "Free3",
+            "Acro",
+            "Free2",
+            "Descend",
+            "Termination",
+            "Offboard",
+            "Stabilize",
+            "Free1",
+            "Takeoff",
+            "Land",
+            "Follow target",
+            "Precision land",
+            "Orbit",
+            "Vtol takeoff",
+            "External1",
+            "External2",
+            "External3",
+            "External4",
+            "External5",
+            "External6",
+            "External7",
+            "External8",
+            "Max"
+        )
 
     #for some reason to work with px4 offboard (guided) mode FC must recevied with minimum 2Hz control topic
     #to know the companion computer is alive
@@ -156,7 +190,7 @@ class DroneHandlerPX4(Node):
     #Print status of the drone
     def vehicle_status_callback(self, msg):
         if (msg.nav_state != self.nav_state):
-            self.get_logger().info(f"NAV_STATUS: {msg.nav_state}")
+            self.get_logger().info(f"NAV_STATUS: {self.state_decoder[msg.nav_state]} {msg.nav_state}")
         
         if (msg.arming_state != self.arm_state):
             self.get_logger().info(f"ARM STATUS: {msg.arming_state}")
@@ -268,11 +302,6 @@ class DroneHandlerPX4(Node):
 
     def telemetry_callback(self):
         msg = Telemetry()
-
-        # Battery
-        # msg.battery_percentage = self.vehicle.battery.level
-        # msg.battery_voltage = self.vehicle.battery.voltage
-        # msg.battery_current = self.vehicle.battery.current
         if self.battery_info.number_of_cells == 0:
             self.get_logger().info(f"waiting for battery status")
         else:
@@ -283,37 +312,14 @@ class DroneHandlerPX4(Node):
             msg.global_lat = self.global_position.lat
             msg.global_lon = self.global_position.lon
             msg.global_alt = self.global_position.alt
-            msg.flight_mode = "test"
-            msg.speed = float(1.0)  
-            msg.lat = 0.0
-            msg.lon = 0.0
-            msg.alt = 0.0
-        # msg.lat = self.vehicle.location.global_relative_frame.lat
-        # msg.lon = self.vehicle.location.global_relative_frame.lon
-        # msg.alt = self.vehicle.location.global_relative_frame.alt
+            msg.flight_mode = self.state_decoder[self.nav_state]
+            msg.speed = math.sqrt(self.local_position.vx**2 + self.local_position.vy**2)
+            msg.lat = self.global_position.lat
+            msg.lon = self.global_position.lon
+            msg.alt = self.global_position.alt
 
-        # # Flight mode
-        # msg.flight_mode = str(self.vehicle.mode)
-        
-        # msg.speed = float(self.vehicle.groundspeed)  
-
-        # gf = self.vehicle.location.global_frame
-        # if gf:  # check that GPS is valid
-        #     msg.global_lat = float(gf.lat)
-        #     msg.global_lon = float(gf.lon)
-        #     msg.global_alt = float(gf.alt)
-        # else:
-        #     # If no GPS fix, default to zeros
-        #     msg.global_lat = 0.0
-        #     msg.global_lon = 0.0
-        #     msg.global_alt = 0.0
-
-        # 
-        #if self._counter > 0:
-        #    msg.battery_voltage = 11.5
             self.telemetry_publisher.publish(msg)
-        #self._counter += 1
-        #self.get_logger().info(f"battery :{self.vehicle.battery}")
+
 
 
     #declare services callbback
