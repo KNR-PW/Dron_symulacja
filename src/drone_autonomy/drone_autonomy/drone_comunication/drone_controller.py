@@ -27,6 +27,8 @@ class DroneController(Node):
         NAMESPACE_HARDWARE = 'knr_hardware/'
         NAMESPACE_VIDEO = 'knr_video/'
 
+        DEV = True
+
         # --- Service clients ---
         self._mode_client = self.create_client(SetMode, NAMESPACE_HARDWARE+'set_mode')
         self._gps_client  = self.create_client(GetLocationRelative, NAMESPACE_HARDWARE+'get_location_relative')
@@ -38,9 +40,10 @@ class DroneController(Node):
         self.velocity_publisher = self.create_publisher(VelocityVectors,NAMESPACE_HARDWARE+'velocity_vectors', 10)
 
         self._wait_for_service(self._mode_client, NAMESPACE_HARDWARE+'set_mode')
-        self._wait_for_service(self._gps_client, NAMESPACE_HARDWARE+'get_location_relative')
-        self._wait_for_service(self._atti_client, NAMESPACE_HARDWARE+'get_attitude')
-        self._wait_for_service(self._speed_client, NAMESPACE_HARDWARE+'set_speed')
+        if not DEV:
+            self._wait_for_service(self._gps_client, NAMESPACE_HARDWARE+'get_location_relative')
+            self._wait_for_service(self._atti_client, NAMESPACE_HARDWARE+'get_attitude')
+            self._wait_for_service(self._speed_client, NAMESPACE_HARDWARE+'set_speed')
         self._photo_client = self.create_client(MakePhoto, '/mission_make_photo')
         # self._wait_for_service(self._start_video_client, 'turn_on_video')
         # self._wait_for_service(self._stop_video_client, 'turn_off_video')
