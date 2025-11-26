@@ -5,6 +5,10 @@ By odpalić symulacje px4 musicie pobrac docker huba image obrazu:
 docker image pull dierust/knr_px4_sim:latest 
 ```
 ## krok 2
+W katalogu Dron_symulacja musicie wykonać komende
+```bash
+git submodule update --init --recursive
+```
 Następnie musicie wejść do folderu **docker/docker_px4** i tam jest specjalnie przygotowany skrypt do stworzenia konteneru
 ```bash
 cd docker/docker_px4
