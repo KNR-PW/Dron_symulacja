@@ -10,7 +10,7 @@ from rclpy.executors import MultiThreadedExecutor
 from rclpy.action import ActionServer,  CancelResponse
 
 from drone_interfaces.msg import VelocityVectors, Telemetry
-from drone_interfaces.srv import SetMode, ToggleVelocityControl
+from drone_interfaces.srv import SetMode, ToggleVelocityControl, SetServo, VtolServoCalib
 from drone_interfaces.action import  Arm, Takeoff, GotoGlobal, GotoRelative, SetYawAction
 
 from px4_msgs.msg import (
@@ -21,7 +21,8 @@ from px4_msgs.msg import (
     TrajectorySetpoint, 
     VehicleLocalPosition, 
     VehicleAttitude,
-    BatteryStatus
+    BatteryStatus,
+    ActuatorServos,
 )
 #TODO 
 #1. (DONE)makes check if we get a new topic before we send mode to offboard
@@ -64,12 +65,12 @@ class DroneHandlerPX4(Node):
             history=QoSHistoryPolicy.KEEP_LAST,
             depth=1
         )
-
         NAMESPACE = 'knr_hardware/'
         #declare services
         self.mode = self.create_service(SetMode, NAMESPACE+'set_mode',self.set_mode_callback)
         self.toggle_velocity_control_srv = self.create_service(ToggleVelocityControl, NAMESPACE+'toggle_v_control', self.toggle_velocity_control)
-
+        self.servo = self.create_service(SetServo, NAMESPACE+'set_servo', self.set_servo_callback)
+        self.calib_servo_srv = self.create_service(VtolServoCalib,NAMESPACE + 'calib_servo',self.calib_servo_callback)
         #declare actions
         self.arm = ActionServer(self,Arm, NAMESPACE+'Arm',self.arm_callback)
         self.takeoff = ActionServer(self, Takeoff, NAMESPACE+'takeoff',self.takeoff_callback, cancel_callback=self.cancel_callback)
@@ -90,6 +91,7 @@ class DroneHandlerPX4(Node):
         self.offboard_control_mode_publisher = self.create_publisher(OffboardControlMode, '/fmu/in/offboard_control_mode', qos_profile)
         self.vehicle_command_publisher = self.create_publisher(VehicleCommand, '/fmu/in/vehicle_command', qos_profile)
         self.trajectory_setpoint_publisher = self.create_publisher(TrajectorySetpoint, '/fmu/in/trajectory_setpoint', qos_profile)
+        self.actuator_pub = self.create_publisher(ActuatorServos,'/fmu/in/actuator_servos', 10)
         
         self.telemetry_publisher = self.create_publisher(Telemetry, NAMESPACE+'telemetry',10)
 
@@ -562,7 +564,77 @@ class DroneHandlerPX4(Node):
         if actual_yaw < 0:
             actual_yaw = 2*math.pi - actual_yaw
         return abs(-yaw+actual_yaw)
+    
+    def set_servo(self, servo_id: int, pwm: float):
+        # mapowanie PWM 0..1000 -> -1..1  
+        pwm = max(0.0, min(pwm, 1000.0))
+        value = (pwm - 500.0) / 500.0     # -1 .. 1
 
+        msg = ActuatorServos()
+        msg.control = [0.0] * 8
+
+        index = servo_id - 1
+        if 0 <= index < 8:
+            msg.control[index] = value
+
+        self.get_logger().info(
+            f"PX4 Actuator set: servo {servo_id}, pwm={pwm} -> value={value}"
+        )
+
+        self.actuator_pub.publish(msg)
+    def set_servo_callback(self, request, response):
+        self.set_servo(request.servo_id, request.pwm)
+        response = SetServo.Response()
+        return response
+    def _angle_to_pwm(self, angle_deg: float) -> int:
+        """
+        0°  -> PWM = 0   (do góry)
+        90° -> PWM = 1000 (do przodu)
+        """
+        angle_clamped = max(0.0, min(angle_deg, 90.0))
+        pwm = int((angle_clamped / 90.0) * 1000.0)
+        return pwm
+    def calib_servo(self, angle_deg_3: float, angle_deg_4: float):
+        """
+        Kalibruje serwa 3 i 4 (tiltrotor).
+        angle_deg_3 – kąt dla serwa 3
+        angle_deg_4 – kąt dla serwa 4
+        """
+
+        # serwo 3
+        pwm3 = self._angle_to_pwm(angle_deg_3)
+
+        # serwo 4
+        pwm4 = self._angle_to_pwm(angle_deg_4)
+
+        self.get_logger().info(
+            f"calib_servo: S3 angle={angle_deg_3}° pwm={pwm3}, "
+            f"S4 angle={angle_deg_4}° pwm={pwm4}"
+        )
+
+        # Polecenia przez 3 sekundy
+        import time
+        start = time.time()
+        Hz = 50 # 50 Hz publikacji
+        while time.time() - start < 3:   # Ile ma sie
+            self.set_servo(3, pwm3)
+            self.set_servo(4, pwm4)
+            time.sleep(1/Hz)  
+    def calib_servo_callback(self, request, response):
+        self.get_logger().info(
+            f"-- Calib tilts service called: angle_3={request.angle_3}, angle_4={request.angle_4} --"
+        )
+
+        try:
+            self.calib_servo(request.angle_3, request.angle_4)
+            response.success = True
+            response.message = "Tilts calibrated successfully"
+        except Exception as e:
+            self.get_logger().error(f"Calib tilts error: {e}")
+            response.success = False
+            response.message = f"Error: {e}"
+
+        return response
     #special method to cancel the action
     def cancel_callback(self, goal_handle):
         """Accept or reject a client request to cancel an action."""

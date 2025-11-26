@@ -34,6 +34,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/TurnOffVideo.srv"
   "srv/CreateReport.srv"
   "srv/UpdateReport.srv"
+  "srv/VtolServoCalib.srv"
   "action/GotoRelative.action"
   "action/GotoGlobal.action"
   "action/Arm.action"
