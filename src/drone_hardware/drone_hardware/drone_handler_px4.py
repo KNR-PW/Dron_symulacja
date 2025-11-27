@@ -10,7 +10,7 @@ from rclpy.executors import MultiThreadedExecutor
 from rclpy.action import ActionServer,  CancelResponse
 
 from drone_interfaces.msg import VelocityVectors, Telemetry
-from drone_interfaces.srv import SetMode, ToggleVelocityControl
+from drone_interfaces.srv import SetMode, ToggleVelocityControl, SetServo, VtolServoCalib
 from drone_interfaces.action import  Arm, Takeoff, GotoGlobal, GotoRelative, SetYawAction
 
 from px4_msgs.msg import (
@@ -21,7 +21,9 @@ from px4_msgs.msg import (
     TrajectorySetpoint, 
     VehicleLocalPosition, 
     VehicleAttitude,
-    BatteryStatus
+    BatteryStatus,
+    ActuatorServos,
+    OffboardControlMode,
 )
 #TODO 
 #1. (DONE)makes check if we get a new topic before we send mode to offboard
@@ -64,12 +66,14 @@ class DroneHandlerPX4(Node):
             history=QoSHistoryPolicy.KEEP_LAST,
             depth=1
         )
-
+        #declaring necessary stuff
         NAMESPACE = 'knr_hardware/'
+        self._servo_controls = [0.0] * 8
         #declare services
         self.mode = self.create_service(SetMode, NAMESPACE+'set_mode',self.set_mode_callback)
         self.toggle_velocity_control_srv = self.create_service(ToggleVelocityControl, NAMESPACE+'toggle_v_control', self.toggle_velocity_control)
-
+        self.servo = self.create_service(SetServo, NAMESPACE+'set_servo', self.set_servo_callback)
+        self.calib_servo_srv = self.create_service(VtolServoCalib,NAMESPACE + 'calib_servo',self.calib_servo_callback)
         #declare actions
         self.arm = ActionServer(self,Arm, NAMESPACE+'Arm',self.arm_callback)
         self.takeoff = ActionServer(self, Takeoff, NAMESPACE+'takeoff',self.takeoff_callback, cancel_callback=self.cancel_callback)
@@ -78,6 +82,7 @@ class DroneHandlerPX4(Node):
         self.yaw = ActionServer(self, SetYawAction, NAMESPACE+'Set_yaw', self.yaw_callback, cancel_callback=self.cancel_callback)
 
         #declare subcriptions
+        self.offboard_mode_pub = self.create_publisher(OffboardControlMode,'/fmu/in/offboard_control_mode',10)
         self.status_sub = self.create_subscription(VehicleStatus, '/fmu/out/vehicle_status_v1', self.vehicle_status_callback, qos_profile)
         self.global_position_sub = self.create_subscription(VehicleGlobalPosition, '/fmu/out/vehicle_global_position', self.vehicle_global_position_callback, qos_profile)
         self.local_position_sub = self.create_subscription(VehicleLocalPosition, '/fmu/out/vehicle_local_position_v1', self.vehicle_local_position_callback, qos_profile)
@@ -90,6 +95,7 @@ class DroneHandlerPX4(Node):
         self.offboard_control_mode_publisher = self.create_publisher(OffboardControlMode, '/fmu/in/offboard_control_mode', qos_profile)
         self.vehicle_command_publisher = self.create_publisher(VehicleCommand, '/fmu/in/vehicle_command', qos_profile)
         self.trajectory_setpoint_publisher = self.create_publisher(TrajectorySetpoint, '/fmu/in/trajectory_setpoint', qos_profile)
+        self.actuator_pub = self.create_publisher(ActuatorServos,'/fmu/in/actuator_servos', 10)
         
         self.telemetry_publisher = self.create_publisher(Telemetry, NAMESPACE+'telemetry',10)
 
@@ -562,7 +568,76 @@ class DroneHandlerPX4(Node):
         if actual_yaw < 0:
             actual_yaw = 2*math.pi - actual_yaw
         return abs(-yaw+actual_yaw)
-
+    
+    def set_servo(self, servo_id: int, pwm: float):
+        # mapping PWM 0–1000 -> -1 : 1
+        pwm = max(0.0, min(pwm, 1000.0))
+        value = (pwm - 500) / 500.0
+        index = servo_id - 1
+        if 0 <= index < len(self._servo_controls):
+            self._servo_controls[index] = value  # only updating one servo at a time
+        msg = ActuatorServos()
+        msg.control = list(self._servo_controls)  # sending whole tab
+        self.get_logger().info(
+            f"PX4 Actuator set: servo {servo_id}, pwm={pwm} -> value={value}, "
+            f"controls={self._servo_controls}"
+        )
+        self.actuator_pub.publish(msg)
+    def set_servo_callback(self, request, response):
+        self.set_servo(request.servo_id, request.pwm)
+        response = SetServo.Response()
+        return response
+    def _angle_to_pwm(self, angle_deg: float) -> int:  # Function changing angle to pwm for actuors in px4 should work on the latest PX4(27.11.2025)
+        """
+        0°  -> PWM = 0   (do góry)
+        90° -> PWM = 1000 (do przodu)
+        """
+        angle_clamped = max(0.0, min(angle_deg, 90.0))
+        pwm = int((angle_clamped / 90.0) * 1000.0)
+        return pwm
+    def calib_servo(self, angle_deg_4: float, angle_deg_5: float):
+        # actuator 4
+        pwm3 = self._angle_to_pwm(angle_deg_4)
+        # actuator 5
+        pwm4 = self._angle_to_pwm(angle_deg_5)
+        self.get_logger().info(
+            f"calib_servo: S3 angle={angle_deg_3}° pwm={pwm3}, "
+            f"S4 angle={angle_deg_4}° pwm={pwm4}"
+        )
+        start = time.time()
+        Hz = 50 # Publication freq
+        Duration = 10 #Pulication time
+        while time.time() - start < Duration:   #Publication loop
+            self._enable_direct_actuator()
+            self.set_servo(4, pwm3)
+            self.set_servo(5, pwm4)
+            time.sleep(1/Hz)  
+    def calib_servo_callback(self, request, response):
+        self.get_logger().info(
+            f"-- Calib tilts service called: angle_4={request.angle_4}, angle_5={request.angle_5} --"
+        )
+        try:
+            self.calib_servo(request.angle_4, request.angle_5)
+            response.success = True
+            response.message = "Tilts calibrated successfully"
+        except Exception as e:
+            self.get_logger().error(f"Calib tilts error: {e}")
+            response.success = False
+            response.message = f"Error: {e}"
+        return response
+    def _enable_direct_actuator(self):   #Helper function for enabling direct actuator output
+        msg = OffboardControlMode()
+        msg.direct_actuator = True
+        msg.position = False
+        msg.velocity = False
+        msg.acceleration = False
+        msg.attitude = False
+        msg.body_rate = False
+        msg.thrust_and_torque = False
+        now = self.get_clock().now().nanoseconds // 1000
+        msg.timestamp = now
+        msg.timestamp = self.get_clock().now().nanoseconds // 1000
+        self.offboard_mode_pub.publish(msg)
     #special method to cancel the action
     def cancel_callback(self, goal_handle):
         """Accept or reject a client request to cancel an action."""
