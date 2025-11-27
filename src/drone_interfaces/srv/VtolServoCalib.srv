@@ -1,6 +1,6 @@
 # request
-float32 angle_3   # kąt dla serwa 3 (tilt 1)
-float32 angle_4   # kąt dla serwa 4 (tilt 2)
+float32 angle_4   # kąt dla serwa 3 (tilt 1)
+float32 angle_5   # kąt dla serwa 4 (tilt 2)
 ---
 # response
 bool success
