@@ -15,10 +15,10 @@ class TestClient(DroneController):
         self.cli = self.create_client(VtolServoCalib, 'knr_hardware/calib_servo')
         while not self.cli.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('Waiting for calib_servo service...')
-    def set_servo(self):
+    def set_servo(self, angle_4: float, angle_5: float):
         req = VtolServoCalib.Request()
-        req.angle_3 = 0.0   # pion
-        req.angle_4 = 90.0  # do przodu
+        req.angle_4 = angle_4  
+        req.angle_5 = angle_5  
         self.future = self.cli.call_async(req)
 
 
@@ -30,7 +30,7 @@ def main(args=None):
     # mission.send_mode('LAND')
     mission = TestClient()
     mission.arm()
-    mission.set_servo()
+    mission.set_servo(45.0,45.0)  # Value in degrees, calculated from the OZ to the axis of rotation of the motor 
     # time.sleep(30)
 
     # mission.send_goto_global(47.398183, 8.54611, 5.0)
