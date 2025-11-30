@@ -329,7 +329,7 @@ class FollowDetections(DroneController):
         vx = self.kp * d_ground_m 
         vx = clamp(vx, -self.max_vel, self.max_vel)
 
-        YAW_KP = 1.0  # Tuning parameter: Rad/s per normalized error
+        YAW_KP = 1.25  # Tuning parameter: Rad/s per normalized error
         yaw_rate = YAW_KP * self.ex_f
         
         # Clamp yaw rate to reasonable speed (e.g., 45 deg/s = ~0.8 rad/s)
@@ -341,8 +341,8 @@ class FollowDetections(DroneController):
         vz = 0.0
 
         # if (abs(d_ground_m) < 3.0):
-        vz = self.kp * (h_m - self.target_alt)
-        vz = clamp(vz, -self.max_vel, self.max_vel)
+        # vz = self.kp * (h_m - self.target_alt)
+        # vz = clamp(vz, -self.max_vel, self.max_vel)
         
         if abs(d_ground_m) < 0.2 and abs(self.ex_px) < 20:
             # Osiągnięto cel -> zatrzymaj ruch

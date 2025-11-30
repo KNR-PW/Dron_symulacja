@@ -39,6 +39,7 @@ setup(
             "detection_client=drone_detector.detection_client:main",
             "aruco_detector=drone_detector.aruco_detector:main",
             "pool_detector=drone_detector.pool_detector:main",
+            'hybrid_tracker_node=drone_detector.hybrid_tracker_node:main',
         ],
     },
 )
