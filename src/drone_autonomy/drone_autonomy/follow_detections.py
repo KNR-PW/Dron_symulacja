@@ -11,6 +11,8 @@ from drone_interfaces.msg import VelocityVectors, Telemetry
 from drone_interfaces.srv import ToggleVelocityControl, SetGimbalAngle
 from drone_autonomy.drone_comunication.drone_controller import DroneController
 
+# TODO: fix aruco node (numpy)
+# TODO: fix wrong world opening
 
 def clamp(v, lo, hi):
     return max(lo, min(hi, v))
