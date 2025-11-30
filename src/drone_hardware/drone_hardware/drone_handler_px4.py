@@ -30,6 +30,7 @@ from px4_msgs.msg import (
 #2. still rebuilding the drone handler to px4
 #3. convert the flight mode in NAV state to string to be readable for a man
 #4. add more flight modes minimum is RTL
+#5. change calibration message to send array instead of two separate angles
 
 class GlobalPosition():
     def __init__(self):
