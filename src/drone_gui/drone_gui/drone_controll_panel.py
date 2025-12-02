@@ -24,8 +24,6 @@ from PyQt5.QtGui import QFont, QColor, QPalette
 
 # Import komunikatów i serwisu
 from drone_interfaces.msg import MiddleOfAruco
-from drone_interfaces.action import SetYawAction
-from drone_interfaces.srv import GetAttitude
 from drone_autonomy.drone_comunication.drone_controller import DroneController
 
 
@@ -225,9 +223,6 @@ class FollowArucoSimulator(DroneController):
             self.pid_err_vy_prev = 0.0
             self.pid_last_time = time.time()
             self.log_to_gui("Śledzenie włączone (PID Reset)", 'info')
-            
-            # Zablokuj yaw, aby zapobiec obrotom przy dużej prędkości
-            self.lock_yaw_async()
 
     def stop_tracking(self):
         if self.tracking_active:
@@ -237,8 +232,6 @@ class FollowArucoSimulator(DroneController):
             self.log_to_gui("Śledzenie wyłączone", 'info')
 
     def set_manual_control(self, vx, vy, vz):
-        if not self.manual_control_active:
-            self.lock_yaw_async()
         self.manual_control_active = True
         self.manual_vx = vx
         self.manual_vy = vy
@@ -249,27 +242,6 @@ class FollowArucoSimulator(DroneController):
         self.manual_vx = 0.0
         self.manual_vy = 0.0
         self.manual_vz = 0.0
-
-    def lock_yaw_async(self):
-        """Pobiera aktualny yaw i wysyła komendę set_yaw, aby zablokować obrót."""
-        req = GetAttitude.Request()
-        future = self._atti_client.call_async(req)
-        future.add_done_callback(self._on_get_yaw_for_lock)
-
-    def _on_get_yaw_for_lock(self, future):
-        try:
-            res = future.result()
-            yaw = res.yaw
-            self.log_to_gui(f"Blokowanie Yaw na: {yaw:.2f} rad", 'info')
-            self.send_set_yaw_nonblocking(yaw, relative=False)
-        except Exception as e:
-            self.log_to_gui(f"Błąd pobierania yaw: {e}", 'error')
-
-    def send_set_yaw_nonblocking(self, yaw, relative=True):
-        goal = SetYawAction.Goal()
-        goal.yaw = float(yaw)
-        goal.relative = relative
-        self._yaw_client.send_goal_async(goal)
 
     def log_to_gui(self, msg, level='info'):
         """Przekazuje logi do GUI"""
@@ -421,6 +393,15 @@ class FollowArucoGUI(QMainWindow):
         self.setStatusBar(self.status_bar)
         self.log_label = QLabel("Gotowy")
         self.status_bar.addWidget(self.log_label)
+        
+        # Ustawienie fokusu na główne okno, aby przechwytywać klawisze
+        self.setFocusPolicy(Qt.StrongFocus)
+        self.setFocus()
+
+    def mousePressEvent(self, event):
+        """Kliknięcie w tło przywraca fokus do okna (dla sterowania klawiaturą)"""
+        self.setFocus()
+        super().mousePressEvent(event)
 
     def create_status_section(self):
         group = QGroupBox("Status Drona")
@@ -463,18 +444,22 @@ class FollowArucoGUI(QMainWindow):
         # Przyciski
         self.btn_arm = QPushButton("ARM")
         self.btn_arm.setStyleSheet("background-color: #4CAF50; color: white;")
+        self.btn_arm.setFocusPolicy(Qt.NoFocus)
         self.btn_arm.clicked.connect(lambda: self.ros_node.arm_async())
         
         self.btn_disarm = QPushButton("STOP / DISARM") # Tylko stop, disarm nie zaimplementowany w API
         self.btn_disarm.setStyleSheet("background-color: #f44336; color: white;")
+        self.btn_disarm.setFocusPolicy(Qt.NoFocus)
         self.btn_disarm.clicked.connect(lambda: self.ros_node.stop_tracking())
 
         self.btn_takeoff = QPushButton("TAKEOFF")
         self.btn_takeoff.setStyleSheet("background-color: #2196F3; color: white;")
+        self.btn_takeoff.setFocusPolicy(Qt.NoFocus)
         self.btn_takeoff.clicked.connect(lambda: self.ros_node.takeoff_async(self.alt_spin.value()))
         
         self.btn_land = QPushButton("LAND")
         self.btn_land.setStyleSheet("background-color: #FF9800; color: white;")
+        self.btn_land.setFocusPolicy(Qt.NoFocus)
         self.btn_land.clicked.connect(lambda: self.ros_node.land_async())
         
         layout.addWidget(self.btn_arm, 1, 0)
@@ -485,6 +470,7 @@ class FollowArucoGUI(QMainWindow):
         # Przycisk sterowania wektorowego
         self.btn_vel_ctrl = QPushButton("WŁĄCZ Sterowanie Wektorowe")
         self.btn_vel_ctrl.setStyleSheet("background-color: #9C27B0; color: white; font-weight: bold; padding: 5px;")
+        self.btn_vel_ctrl.setFocusPolicy(Qt.NoFocus)
         self.btn_vel_ctrl.clicked.connect(lambda: self.ros_node.toggle_velocity_control_async())
         layout.addWidget(self.btn_vel_ctrl, 3, 0, 1, 2)
         
@@ -548,6 +534,7 @@ class FollowArucoGUI(QMainWindow):
         self.manual_speed_spin.setRange(0.1, 5.0)
         self.manual_speed_spin.setValue(1.0)
         self.manual_speed_spin.setSuffix(" m/s")
+        self.manual_speed_spin.editingFinished.connect(self.setFocus)
         layout.addWidget(self.manual_speed_spin, 1, 2, 1, 2)
 
         # Krok obrotu
@@ -556,6 +543,7 @@ class FollowArucoGUI(QMainWindow):
         self.manual_yaw_spin.setRange(1.0, 180.0)
         self.manual_yaw_spin.setValue(15.0)
         self.manual_yaw_spin.setSuffix(" deg")
+        self.manual_yaw_spin.editingFinished.connect(self.setFocus)
         layout.addWidget(self.manual_yaw_spin, 2, 2, 1, 2)
 
         group.setLayout(layout)
@@ -567,10 +555,12 @@ class FollowArucoGUI(QMainWindow):
         
         self.btn_track_start = QPushButton("START ŚLEDZENIA")
         self.btn_track_start.setStyleSheet("background-color: #4CAF50; color: white; padding: 10px; font-weight: bold;")
+        self.btn_track_start.setFocusPolicy(Qt.NoFocus)
         self.btn_track_start.clicked.connect(lambda: self.ros_node.start_tracking())
         
         self.btn_track_stop = QPushButton("STOP ŚLEDZENIA")
         self.btn_track_stop.setStyleSheet("background-color: #f44336; color: white; padding: 10px; font-weight: bold;")
+        self.btn_track_stop.setFocusPolicy(Qt.NoFocus)
         self.btn_track_stop.clicked.connect(lambda: self.ros_node.stop_tracking())
         
         layout.addWidget(self.btn_track_start)
