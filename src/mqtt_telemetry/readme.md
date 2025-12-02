@@ -1,14 +1,24 @@
 
 
 
-# ODPALANIE:    ros2 run mqtt_telemetry mqtt_bridge
+# ODPALANIE:    
+
+ros2 run mqtt_telemetry mqtt_bridge
+
+# Przykładowy test   
+
+ros2 topic pub /drone/status std_msgs/msg/String "{data: \"{\\\"altitude\\\": 25, \\\"speed\\\": 4.2, \\\"lat\\\": 52.23, \\\"lon\\\": 21.01, \\\"flight_mode\\\": \\\"AUTO\\\"}\"}" -r 1
 
 
 
 
 
+--
 
 
+--
+
+--
 
 The mqtt_telemetry package forwards selected ROS 2 topics to an MQTT broker. It reads a YAML configuration file that lists the topics to subscribe to and the MQTT topics to publish to. The package listens to the specified ROS topics, converts incoming messages to JSON, and sends them to an MQTT broker using the Paho MQTT library. This allows external systems, dashboards, and IoT services to monitor ROS data easily.
 
