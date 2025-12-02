@@ -16,11 +16,10 @@ import time
 import rclpy
 from rclpy.node import Node
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QPushButton, QLabel, 
-                             QVBoxLayout, QHBoxLayout, QWidget, QSlider,
-                             QDoubleSpinBox, QGroupBox, QGridLayout, QFormLayout,
-                             QStatusBar)
+                             QVBoxLayout, QHBoxLayout, QWidget,
+                             QDoubleSpinBox, QGroupBox, QGridLayout,
+                             QFormLayout)
 from PyQt5.QtCore import QTimer, Qt
-from PyQt5.QtGui import QFont, QColor, QPalette
 
 # Import komunikatów i serwisu
 from drone_interfaces.msg import MiddleOfAruco
@@ -100,10 +99,16 @@ class FollowArucoSimulator(DroneController):
         self.manual_vx = 0.0
         self.manual_vy = 0.0
         self.manual_vz = 0.0
-        self.yaw_in_progress = False
+        self.manual_yaw_rate = 0.0
         
         # Stan sterowania wektorowego (czy ArduPilot przyjmuje wektory)
         self.velocity_control_enabled = False
+
+        # Zmienne do wyświetlania
+        self.vx_current = 0.0
+        self.vy_current = 0.0
+        self.vz_current = 0.0
+        self.yaw_rate_current = 0.0
 
         # Timer głównej pętli sterowania (10 Hz)
         self.timer = self.create_timer(0.1, self.control_loop)
@@ -138,76 +143,82 @@ class FollowArucoSimulator(DroneController):
 
     def control_loop(self):
         """Główna pętla obliczająca prędkości sterujące"""
-        # 1. Priorytet: Obrót (YAW) - wstrzymaj inne komendy
-        if self.yaw_in_progress:
+        if self._handle_manual_control():
             return
 
-        # 2. Priorytet: Sterowanie ręczne
-        if self.manual_control_active:
-            self._update_current_vel(self.manual_vx, self.manual_vy, self.manual_vz)
-            self.send_vectors(self.manual_vx, self.manual_vy, self.manual_vz)
-            return
-        
-        # 3. Jeśli śledzenie wyłączone -> STOP
         if not self.tracking_active:
-            self._update_current_vel(0.0, 0.0, 0.0)
-            self.send_vectors(0.0, 0.0, 0.0)
+            self._hold_position()
             return
 
-        # 4. Sprawdź timeout markera (czy zgubiliśmy cel?)
-        if self.last_seen == 0.0 or (time.time() - self.last_seen) > self.lost_timeout:
+        if self._marker_timed_out():
             self.marker_visible = False
-            self._update_current_vel(0.0, 0.0, 0.0)
-            self.send_vectors(0.0, 0.0, 0.0)
+            self._hold_position()
             return
 
-        # 5. Regulator PID dla śledzenia
-        now = time.time()
-        dt = now - self.pid_last_time
-        if dt <= 0: dt = 0.1
-        self.pid_last_time = now
+        self._apply_pid_tracking()
 
-        # Mapowanie błędów obrazu na błędy prędkości
-        # Błąd Y obrazu (góra/dół) -> Prędkość X (przód/tył). Odwracamy znak, bo Y rośnie w dół.
-        err_vx = -self.ey_f
-        # Błąd X obrazu (lewo/prawo) -> Prędkość Y (lewo/prawo).
-        err_vy = self.ex_f
-
-        # PID dla VX
-        self.pid_integ_vx += err_vx * dt
-        # Anti-windup
-        self.pid_integ_vx = clamp(self.pid_integ_vx, -1.0, 1.0)
-        deriv_vx = (err_vx - self.pid_err_vx_prev) / dt
-        self.pid_err_vx_prev = err_vx
-        
-        vx_target = (self.kp * err_vx) + (self.ki * self.pid_integ_vx) + (self.kd * deriv_vx)
-
-        # PID dla VY
-        self.pid_integ_vy += err_vy * dt
-        self.pid_integ_vy = clamp(self.pid_integ_vy, -1.0, 1.0)
-        deriv_vy = (err_vy - self.pid_err_vy_prev) / dt
-        self.pid_err_vy_prev = err_vy
-
-        vy_target = (self.kp * err_vy) + (self.ki * self.pid_integ_vy) + (self.kd * deriv_vy)
-
-        # Ograniczenie prędkości
-        vx_target = clamp(vx_target, -self.max_vel, self.max_vel)
-        vy_target = clamp(vy_target, -self.max_vel, self.max_vel)
-
-        # Wygładzanie prędkości (Exponential Moving Average)
-        alpha = clamp(self.vel_smooth, 0.0, 0.9)
-        self.vx_smooth = (1 - alpha) * vx_target + alpha * self.vx_smooth
-        self.vy_smooth = (1 - alpha) * vy_target + alpha * self.vy_smooth
-
-        # Wysyłanie komend
-        self._update_current_vel(self.vx_smooth, self.vy_smooth, 0.0)
-        self.send_vectors(self.vx_smooth, self.vy_smooth, 0.0)
-
-    def _update_current_vel(self, vx, vy, vz):
+    def _update_current_vel(self, vx, vy, vz, yaw):
         """Aktualizuje podgląd prędkości dla GUI"""
         self.vx_current = vx
         self.vy_current = vy
         self.vz_current = vz
+        self.yaw_rate_current = yaw
+
+    def _push_velocity(self, vx, vy, vz, yaw):
+        """Wysyła wektor prędkości i aktualizuje GUI"""
+        self._update_current_vel(vx, vy, vz, yaw)
+        self.send_vectors(vx, vy, vz, yaw)
+
+    def _reset_pid_state(self):
+        self.pid_integ_vx = 0.0
+        self.pid_integ_vy = 0.0
+        self.pid_err_vx_prev = 0.0
+        self.pid_err_vy_prev = 0.0
+        self.pid_last_time = time.time()
+        self.vx_smooth = 0.0
+        self.vy_smooth = 0.0
+
+    def _handle_manual_control(self):
+        if not self.manual_control_active:
+            return False
+        self._push_velocity(self.manual_vx, self.manual_vy, self.manual_vz, self.manual_yaw_rate)
+        return True
+
+    def _hold_position(self):
+        self._push_velocity(0.0, 0.0, 0.0, 0.0)
+
+    def _marker_timed_out(self):
+        return self.last_seen == 0.0 or (time.time() - self.last_seen) > self.lost_timeout
+
+    def _apply_pid_tracking(self):
+        now = time.time()
+        dt = now - self.pid_last_time
+        if dt <= 0:
+            dt = 0.1
+        self.pid_last_time = now
+
+        err_vx = -self.ey_f
+        err_vy = self.ex_f
+
+        self.pid_integ_vx = clamp(self.pid_integ_vx + err_vx * dt, -1.0, 1.0)
+        self.pid_integ_vy = clamp(self.pid_integ_vy + err_vy * dt, -1.0, 1.0)
+
+        deriv_vx = (err_vx - self.pid_err_vx_prev) / dt
+        deriv_vy = (err_vy - self.pid_err_vy_prev) / dt
+        self.pid_err_vx_prev = err_vx
+        self.pid_err_vy_prev = err_vy
+
+        vx_target = (self.kp * err_vx) + (self.ki * self.pid_integ_vx) + (self.kd * deriv_vx)
+        vy_target = (self.kp * err_vy) + (self.ki * self.pid_integ_vy) + (self.kd * deriv_vy)
+
+        vx_target = clamp(vx_target, -self.max_vel, self.max_vel)
+        vy_target = clamp(vy_target, -self.max_vel, self.max_vel)
+
+        alpha = clamp(self.vel_smooth, 0.0, 0.9)
+        self.vx_smooth = (1 - alpha) * vx_target + alpha * self.vx_smooth
+        self.vy_smooth = (1 - alpha) * vy_target + alpha * self.vy_smooth
+
+        self._push_velocity(self.vx_smooth, self.vy_smooth, 0.0, 0.0)
 
     # -------------------------------------------------------------------------
     # Metody Publiczne (API dla GUI)
@@ -216,32 +227,31 @@ class FollowArucoSimulator(DroneController):
     def start_tracking(self):
         if not self.tracking_active:
             self.tracking_active = True
-            # Reset PID
-            self.pid_integ_vx = 0.0
-            self.pid_integ_vy = 0.0
-            self.pid_err_vx_prev = 0.0
-            self.pid_err_vy_prev = 0.0
-            self.pid_last_time = time.time()
+            self._reset_pid_state()
             self.log_to_gui("Śledzenie włączone (PID Reset)", 'info')
 
     def stop_tracking(self):
         if self.tracking_active:
             self.tracking_active = False
-            self.send_vectors(0.0, 0.0, 0.0)
-            self._update_current_vel(0.0, 0.0, 0.0)
+            self._hold_position()
+            self._reset_pid_state()
             self.log_to_gui("Śledzenie wyłączone", 'info')
 
-    def set_manual_control(self, vx, vy, vz):
+    def set_manual_control(self, vx, vy, vz, yaw):
         self.manual_control_active = True
         self.manual_vx = vx
         self.manual_vy = vy
         self.manual_vz = vz
+        self.manual_yaw_rate = yaw
 
     def stop_manual_control(self):
         self.manual_control_active = False
         self.manual_vx = 0.0
         self.manual_vy = 0.0
         self.manual_vz = 0.0
+        self.manual_yaw_rate = 0.0
+        self._hold_position()
+        self._reset_pid_state()
 
     def log_to_gui(self, msg, level='info'):
         """Przekazuje logi do GUI"""
@@ -260,7 +270,7 @@ class FollowArucoSimulator(DroneController):
         req = SetMode.Request()
         req.mode = 'GUIDED'
         future = self._mode_client.call_async(req)
-        future.add_done_callback(lambda f: self._send_arm_goal())
+        future.add_done_callback(lambda _: self._send_arm_goal())
         return True
 
     def _send_arm_goal(self):
@@ -327,23 +337,9 @@ class FollowArucoSimulator(DroneController):
         req.mode = 'LAND'
         self._mode_client.call_async(req)
 
-    def set_yaw_async(self, yaw, relative=True):
-        self.yaw_in_progress = True
-        self.log_to_gui(f'Obrót o {yaw} rad...', 'info')
-        from drone_interfaces.action import SetYawAction
-        goal = SetYawAction.Goal(yaw=yaw, relative=relative)
-        
-        def _done(f):
-            self.yaw_in_progress = False
-            self.log_to_gui('Obrót zakończony', 'info')
-
-        self._yaw_client.send_goal_async(goal).add_done_callback(
-            lambda f: f.result().get_result_async().add_done_callback(_done)
-        )
-
     def destroy_node(self):
         if self.timer: self.timer.cancel()
-        self.send_vectors(0.0, 0.0, 0.0)
+        self.send_vectors(0.0, 0.0, 0.0, 0.0)
         super().destroy_node()
 
 
@@ -355,7 +351,6 @@ class FollowArucoGUI(QMainWindow):
     def __init__(self, ros_node):
         super().__init__()
         self.ros_node = ros_node
-        self.ros_node.gui_log_callback = self.on_ros_log
         self.pressed_manual_keys = set()
         
         # Setup UI
@@ -387,12 +382,6 @@ class FollowArucoGUI(QMainWindow):
         self.create_params_section()
         self.create_manual_control_section()
         self.create_tracking_section()
-        
-        # Pasek statusu (Logi)
-        self.status_bar = QStatusBar()
-        self.setStatusBar(self.status_bar)
-        self.log_label = QLabel("Gotowy")
-        self.status_bar.addWidget(self.log_label)
         
         # Ustawienie fokusu na główne okno, aby przechwytywać klawisze
         self.setFocusPolicy(Qt.StrongFocus)
@@ -429,6 +418,9 @@ class FollowArucoGUI(QMainWindow):
         group.setLayout(layout)
         self.main_layout.addWidget(group)
 
+    def _bind_spinbox(self, spinbox, attr_name):
+        spinbox.valueChanged.connect(lambda value, name=attr_name: setattr(self.ros_node, name, value))
+
     def create_control_section(self):
         group = QGroupBox("Podstawowe Sterowanie")
         layout = QGridLayout()
@@ -446,11 +438,6 @@ class FollowArucoGUI(QMainWindow):
         self.btn_arm.setStyleSheet("background-color: #4CAF50; color: white;")
         self.btn_arm.setFocusPolicy(Qt.NoFocus)
         self.btn_arm.clicked.connect(lambda: self.ros_node.arm_async())
-        
-        self.btn_disarm = QPushButton("STOP / DISARM") # Tylko stop, disarm nie zaimplementowany w API
-        self.btn_disarm.setStyleSheet("background-color: #f44336; color: white;")
-        self.btn_disarm.setFocusPolicy(Qt.NoFocus)
-        self.btn_disarm.clicked.connect(lambda: self.ros_node.stop_tracking())
 
         self.btn_takeoff = QPushButton("TAKEOFF")
         self.btn_takeoff.setStyleSheet("background-color: #2196F3; color: white;")
@@ -463,9 +450,8 @@ class FollowArucoGUI(QMainWindow):
         self.btn_land.clicked.connect(lambda: self.ros_node.land_async())
         
         layout.addWidget(self.btn_arm, 1, 0)
-        layout.addWidget(self.btn_disarm, 1, 1)
-        layout.addWidget(self.btn_takeoff, 2, 0)
-        layout.addWidget(self.btn_land, 2, 1)
+        layout.addWidget(self.btn_takeoff, 1, 1)
+        layout.addWidget(self.btn_land, 2, 0, 1, 2)
 
         # Przycisk sterowania wektorowego
         self.btn_vel_ctrl = QPushButton("WŁĄCZ Sterowanie Wektorowe")
@@ -480,41 +466,23 @@ class FollowArucoGUI(QMainWindow):
     def create_params_section(self):
         group = QGroupBox("Parametry Lotu")
         layout = QFormLayout()
-        
-        self.kp_spin = QDoubleSpinBox()
-        self.kp_spin.setRange(0.0, 5.0)
-        self.kp_spin.setValue(self.ros_node.kp)
-        self.kp_spin.setSingleStep(0.05)
-        self.kp_spin.valueChanged.connect(lambda v: setattr(self.ros_node, 'kp', v))
-        layout.addRow("Kp (Proporcjonalny):", self.kp_spin)
+        param_specs = [
+            {"label": "Kp (Proporcjonalny):", "attr": "kp", "min": 0.0, "max": 5.0, "step": 0.05, "value": self.ros_node.kp},
+            {"label": "Ki (Całkujący):", "attr": "ki", "min": 0.0, "max": 2.0, "step": 0.01, "value": self.ros_node.ki},
+            {"label": "Kd (Różniczkujący):", "attr": "kd", "min": 0.0, "max": 2.0, "step": 0.01, "value": self.ros_node.kd},
+            {"label": "Max Prędkość:", "attr": "max_vel", "min": 0.1, "max": 5.0, "step": 0.1, "value": self.ros_node.max_vel, "suffix": " m/s"},
+            {"label": "Wygładzanie (0-0.9):", "attr": "vel_smooth", "min": 0.0, "max": 0.9, "step": 0.1, "value": self.ros_node.vel_smooth},
+        ]
 
-        self.ki_spin = QDoubleSpinBox()
-        self.ki_spin.setRange(0.0, 2.0)
-        self.ki_spin.setValue(self.ros_node.ki)
-        self.ki_spin.setSingleStep(0.01)
-        self.ki_spin.valueChanged.connect(lambda v: setattr(self.ros_node, 'ki', v))
-        layout.addRow("Ki (Całkujący):", self.ki_spin)
-
-        self.kd_spin = QDoubleSpinBox()
-        self.kd_spin.setRange(0.0, 2.0)
-        self.kd_spin.setValue(self.ros_node.kd)
-        self.kd_spin.setSingleStep(0.01)
-        self.kd_spin.valueChanged.connect(lambda v: setattr(self.ros_node, 'kd', v))
-        layout.addRow("Kd (Różniczkujący):", self.kd_spin)
-
-        self.max_vel_spin = QDoubleSpinBox()
-        self.max_vel_spin.setRange(0.1, 5.0)
-        self.max_vel_spin.setValue(self.ros_node.max_vel)
-        self.max_vel_spin.setSuffix(" m/s")
-        self.max_vel_spin.valueChanged.connect(lambda v: setattr(self.ros_node, 'max_vel', v))
-        layout.addRow("Max Prędkość:", self.max_vel_spin)
-
-        self.smooth_spin = QDoubleSpinBox()
-        self.smooth_spin.setRange(0.0, 0.9)
-        self.smooth_spin.setValue(self.ros_node.vel_smooth)
-        self.smooth_spin.setSingleStep(0.1)
-        self.smooth_spin.valueChanged.connect(lambda v: setattr(self.ros_node, 'vel_smooth', v))
-        layout.addRow("Wygładzanie (0-0.9):", self.smooth_spin)
+        for spec in param_specs:
+            spin = QDoubleSpinBox()
+            spin.setRange(spec["min"], spec["max"])
+            spin.setValue(spec["value"])
+            spin.setSingleStep(spec["step"])
+            if spec.get("suffix"):
+                spin.setSuffix(spec["suffix"])
+            self._bind_spinbox(spin, spec["attr"])
+            layout.addRow(spec["label"], spin)
 
         group.setLayout(layout)
         self.main_layout.addWidget(group)
@@ -538,11 +506,11 @@ class FollowArucoGUI(QMainWindow):
         layout.addWidget(self.manual_speed_spin, 1, 2, 1, 2)
 
         # Krok obrotu
-        layout.addWidget(QLabel("Krok obrotu (deg):"), 2, 0, 1, 2)
+        layout.addWidget(QLabel("Prędkość obrotu (deg/s):"), 2, 0, 1, 2)
         self.manual_yaw_spin = QDoubleSpinBox()
         self.manual_yaw_spin.setRange(1.0, 180.0)
         self.manual_yaw_spin.setValue(15.0)
-        self.manual_yaw_spin.setSuffix(" deg")
+        self.manual_yaw_spin.setSuffix(" deg/s")
         self.manual_yaw_spin.editingFinished.connect(self.setFocus)
         layout.addWidget(self.manual_yaw_spin, 2, 2, 1, 2)
 
@@ -574,7 +542,7 @@ class FollowArucoGUI(QMainWindow):
     # -------------------------------------------------------------------------
 
     def spin_ros(self):
-        rclpy.spin_once(self.ros_node, timeout_sec=0)
+        rclpy.spin_once(self.ros_node, timeout_sec=0.001)
 
     def update_display(self):
         # 1. Telemetria
@@ -594,7 +562,7 @@ class FollowArucoGUI(QMainWindow):
              self.marker_label.setText(self.marker_label.text() + " [ŚLEDZENIE ON]")
 
         # 4. Komendy
-        self.cmd_vel_label.setText(f"Vel: [{self.ros_node.vx_current:.2f}, {self.ros_node.vy_current:.2f}, {self.ros_node.vz_current:.2f}]")
+        self.cmd_vel_label.setText(f"Vel: [{self.ros_node.vx_current:.2f}, {self.ros_node.vy_current:.2f}, {self.ros_node.vz_current:.2f}, {self.ros_node.yaw_rate_current:.2f}]")
 
         # 5. Aktualizacja przycisku sterowania wektorowego
         if self.ros_node.velocity_control_enabled:
@@ -603,13 +571,6 @@ class FollowArucoGUI(QMainWindow):
         else:
             self.btn_vel_ctrl.setText("Sterowanie Wektorowe: WYŁĄCZONE (Kliknij aby włączyć)")
             self.btn_vel_ctrl.setStyleSheet("background-color: #f44336; color: white; font-weight: bold; padding: 5px;")
-
-    def on_ros_log(self, msg, level='info'):
-        self.log_label.setText(msg)
-        if level == 'error': self.log_label.setStyleSheet("color: red")
-        elif level == 'success': self.log_label.setStyleSheet("color: green")
-        elif level == 'warn': self.log_label.setStyleSheet("color: orange")
-        else: self.log_label.setStyleSheet("color: black")
 
     # -------------------------------------------------------------------------
     # Obsługa Klawiatury
@@ -636,7 +597,7 @@ class FollowArucoGUI(QMainWindow):
             self.ros_node.stop_manual_control()
             return
 
-        vx, vy, vz = 0.0, 0.0, 0.0
+        vx, vy, vz, yaw_rate = 0.0, 0.0, 0.0, 0.0
         speed = self.manual_speed_spin.value()
         
         # Klawisze kierunkowe
@@ -647,23 +608,20 @@ class FollowArucoGUI(QMainWindow):
         if Qt.Key_R in self.pressed_manual_keys: vz -= speed # Up (NED negative)
         if Qt.Key_F in self.pressed_manual_keys: vz += speed # Down (NED positive)
         
-        # Obsługa obrotu (impulsowa)
-        # Pobierz kąt w stopniach i zamień na radiany
-        yaw_step_deg = self.manual_yaw_spin.value()
-        yaw_step_rad = yaw_step_deg * 3.14159265 / 180.0
+        # Obsługa obrotu (ciągła)
+        # Pobierz prędkość obrotu w stopniach/s i zamień na radiany/s
+        yaw_speed_deg = self.manual_yaw_spin.value()
+        yaw_speed_rad = yaw_speed_deg * 3.14159265 / 180.0
 
-        # Wykonaj obrót tylko jeśli poprzedni się zakończył
-        if not self.ros_node.yaw_in_progress:
-            if Qt.Key_Q in self.pressed_manual_keys:
-                self.ros_node.set_yaw_async(-yaw_step_rad, relative=True)
-            elif Qt.Key_E in self.pressed_manual_keys:
-                self.ros_node.set_yaw_async(yaw_step_rad, relative=True)
+        if Qt.Key_Q in self.pressed_manual_keys:
+            yaw_rate -= yaw_speed_rad
+        if Qt.Key_E in self.pressed_manual_keys:
+            yaw_rate += yaw_speed_rad
 
-        # Jeśli wciśnięto jakikolwiek klawisz ruchu, wyślij komendę
-        if vx != 0 or vy != 0 or vz != 0:
-            self.ros_node.set_manual_control(vx, vy, vz)
-        elif not (Qt.Key_Q in self.pressed_manual_keys or Qt.Key_E in self.pressed_manual_keys):
-            # Jeśli puszczono ruchowe, a obrót nie jest trzymany -> stop
+        # Jeśli wciśnięto jakikolwiek klawisz ruchu lub obrotu, wyślij komendę
+        if vx != 0 or vy != 0 or vz != 0 or yaw_rate != 0:
+            self.ros_node.set_manual_control(vx, vy, vz, yaw_rate)
+        else:
             self.ros_node.stop_manual_control()
 
 
