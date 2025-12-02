@@ -9,42 +9,24 @@
 #     -p config_file:=/path/to/mqtt_bridge_config.yaml
 # ============================================================
 
+# ============================================================
+# MQTT BRIDGE CONFIGURATION
+# ============================================================
 mqtt:
-  # Address of your MQTT broker
   host: "f4209e15de424182b7f1f41170484e60.s1.eu.hivemq.cloud"
   port: 8883
-
-  # Optional: unique client ID for this bridge
   client_id: "ros_mqtt_bridge"
-
-  # Optional: authentication
   username: "Knr_web"
   password: "Drony123"
-
-  # Optional: MQTT keepalive interval (seconds)
   keepalive: 60
 
-# ============================================================
-# List of topics to subscribe to.
-# Each entry must contain a ROS topic (ros_topic) and the 
-# MQTT topic to publish to (mqtt_topic).
-# ============================================================
-
 topics:
-
-  # --- Example topic #1 ---
-  - ros_topic: "/example/ros_topic"
-    mqtt_topic: "example/ros_topic"
-
-  # --- Example topic #2 ---
-  - ros_topic: "/robot/pose"
+  - ros_topic: "/drone/status"
+    ros_type: "std_msgs/msg/String"
     mqtt_topic: "robot/pose"
 
-  # --- Example topic #3 ---
   - ros_topic: "/battery/state"
-    mqtt_topic: "sensors/battery"
+    ros_type: "std_msgs/msg/String"
+    mqtt_topic: "sensor/battery"
 
-  # --- Add more topics below ---
-  # - ros_topic: "/your/new/topic"
-  #   mqtt_topic: "mqtt/topic/path"
-
+# ODPALANIE ros2 run mqtt_telemetry mqtt_bridge
