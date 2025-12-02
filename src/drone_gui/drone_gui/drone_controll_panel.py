@@ -24,6 +24,8 @@ from PyQt5.QtGui import QFont, QColor, QPalette
 
 # Import komunikatów i serwisu
 from drone_interfaces.msg import MiddleOfAruco
+from drone_interfaces.action import SetYawAction
+from drone_interfaces.srv import GetAttitude
 from drone_autonomy.drone_comunication.drone_controller import DroneController
 
 
@@ -223,6 +225,9 @@ class FollowArucoSimulator(DroneController):
             self.pid_err_vy_prev = 0.0
             self.pid_last_time = time.time()
             self.log_to_gui("Śledzenie włączone (PID Reset)", 'info')
+            
+            # Zablokuj yaw, aby zapobiec obrotom przy dużej prędkości
+            self.lock_yaw_async()
 
     def stop_tracking(self):
         if self.tracking_active:
@@ -232,6 +237,8 @@ class FollowArucoSimulator(DroneController):
             self.log_to_gui("Śledzenie wyłączone", 'info')
 
     def set_manual_control(self, vx, vy, vz):
+        if not self.manual_control_active:
+            self.lock_yaw_async()
         self.manual_control_active = True
         self.manual_vx = vx
         self.manual_vy = vy
@@ -242,6 +249,27 @@ class FollowArucoSimulator(DroneController):
         self.manual_vx = 0.0
         self.manual_vy = 0.0
         self.manual_vz = 0.0
+
+    def lock_yaw_async(self):
+        """Pobiera aktualny yaw i wysyła komendę set_yaw, aby zablokować obrót."""
+        req = GetAttitude.Request()
+        future = self._atti_client.call_async(req)
+        future.add_done_callback(self._on_get_yaw_for_lock)
+
+    def _on_get_yaw_for_lock(self, future):
+        try:
+            res = future.result()
+            yaw = res.yaw
+            self.log_to_gui(f"Blokowanie Yaw na: {yaw:.2f} rad", 'info')
+            self.send_set_yaw_nonblocking(yaw, relative=False)
+        except Exception as e:
+            self.log_to_gui(f"Błąd pobierania yaw: {e}", 'error')
+
+    def send_set_yaw_nonblocking(self, yaw, relative=True):
+        goal = SetYawAction.Goal()
+        goal.yaw = float(yaw)
+        goal.relative = relative
+        self._yaw_client.send_goal_async(goal)
 
     def log_to_gui(self, msg, level='info'):
         """Przekazuje logi do GUI"""
