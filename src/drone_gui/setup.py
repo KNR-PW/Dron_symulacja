@@ -22,6 +22,7 @@ setup(
         'console_scripts': [
             "detector_gui=drone_gui.detector_gui:main",
             "drone_control_gui=drone_gui.drone_control_gui:main",
+            "drone_controll_panel=drone_gui.drone_controll_panel:main",
         ],
     },
 )
