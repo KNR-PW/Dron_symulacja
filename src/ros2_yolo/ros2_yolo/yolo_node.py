@@ -10,8 +10,8 @@ class YoloNode(Node):
     def __init__(self):
         super().__init__('yolo_node')
         self.bridge = CvBridge()
-        # self.detector = YoloDetector(weights_path='yolov8n.pt', target_class_ids=[2])  # np. tylko 'car'
-        self.detector = YoloDetector(weights_path='yolov8n.pt')  # np. tylko 'car'
+        self.detector = YoloDetector(weights_path='yolov8n.pt', target_class_ids=[0])  # np. tylko 'car'
+        # self.detector = YoloDetector(weights_path='yolov8n.pt')  # np. tylko 'car'
         self.image_sub = self.create_subscription(
             Image, '/gimbal_camera', self.image_callback, 10)
         self.detection_pub = self.create_publisher(

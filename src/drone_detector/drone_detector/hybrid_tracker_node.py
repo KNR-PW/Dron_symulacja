@@ -11,6 +11,8 @@ import time
 from drone_detector.yolo_detector import YoloDetector
 from drone_detector.opencv_tracker_wrapper import OpenCVTrackerWrapper
 
+# run this by: `ros2 launch drone_bringup drone_simulation.launch.py detector:=hybrid tracker_type:=KCF`
+
 class HybridTrackerNode(Node):
     def __init__(self):
         super().__init__('hybrid_tracker_node')
@@ -32,7 +34,7 @@ class HybridTrackerNode(Node):
         self.init_error = None
 
         try:
-            self.yolo = YoloDetector(weights_path=weights, conf_threshold=0.5)
+            self.yolo = YoloDetector(weights_path=weights, target_class_ids=[2], conf_threshold=0.5)
             self.tracker = OpenCVTrackerWrapper(tracker_type=tracker_type)
             self.get_logger().info("Initialization SUCCESS")
         except Exception as e:

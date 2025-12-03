@@ -65,6 +65,7 @@ setup(
     entry_points={
         'console_scripts': [
             "ardupilot_camera_handler=webots_simulation.ardupilot_camera_handler:main",
+            'tesla_circle_driver = webots_simulation.tesla_circle_driver:main',
         ],
     },
 )

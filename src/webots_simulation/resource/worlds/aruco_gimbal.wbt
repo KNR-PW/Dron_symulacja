@@ -19,7 +19,7 @@ WorldInfo {
 }
 Viewpoint {
   orientation -0.24218068523369912 0.055632188501659456 0.9686349029960937 2.7037090374964805
-  position 3.593463092747241 -11.888474878168223 4.686433798662883
+  position 5.141298940487866 -7.739794736875542 5.469746915074161
   follow "Iris"
   followSmoothness 0.01
 }
@@ -28,6 +28,7 @@ TexturedBackground {
 TeslaModel3 {
   translation -6 0 0.4
   color 0.666667 0 0
+  controller "tesla_circle_driver"
 }
 TexturedBackgroundLight {
 }
