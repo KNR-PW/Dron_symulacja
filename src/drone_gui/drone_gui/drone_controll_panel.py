@@ -603,8 +603,8 @@ class FollowArucoGUI(QMainWindow):
         # Klawisze kierunkowe
         if Qt.Key_W in self.pressed_manual_keys: vx += speed
         if Qt.Key_S in self.pressed_manual_keys: vx -= speed
-        if Qt.Key_A in self.pressed_manual_keys: vy += speed
-        if Qt.Key_D in self.pressed_manual_keys: vy -= speed
+        if Qt.Key_A in self.pressed_manual_keys: vy -= speed
+        if Qt.Key_D in self.pressed_manual_keys: vy += speed
         if Qt.Key_R in self.pressed_manual_keys: vz -= speed # Up (NED negative)
         if Qt.Key_F in self.pressed_manual_keys: vz += speed # Down (NED positive)
         
