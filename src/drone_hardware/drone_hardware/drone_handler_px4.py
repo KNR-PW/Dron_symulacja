@@ -602,8 +602,8 @@ class DroneHandlerPX4(Node):
         # actuator 5
         pwm4 = self._angle_to_pwm(angle_deg_5)
         self.get_logger().info(
-            f"calib_servo: S3 angle={angle_deg_3}° pwm={pwm3}, "
-            f"S4 angle={angle_deg_4}° pwm={pwm4}"
+            f"calib_servo: S4 angle={angle_deg_4}° pwm={pwm3}, "
+            f"S5 angle={angle_deg_5}° pwm={pwm4}"
         )
         start = time.time()
         Hz = 50 # Publication freq
