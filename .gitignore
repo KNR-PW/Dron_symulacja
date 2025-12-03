@@ -44,3 +44,6 @@ saved_images/
 saved_video/
 *.jpg
 *.png
+
+# QGroundControl
+*.AppImage
