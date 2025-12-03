@@ -236,7 +236,7 @@ class DroneHandlerPX4(Node):
     
     def velocity_control_callback(self, msg):
         if self.flight_mode_flag:
-            self.get_logger().info(f"i receive x:{msg.vx} y:{msg.vy} z:{msg.vz}")
+            self.get_logger().info(f"i receive x:{msg.vx} y:{msg.vy} z:{msg.vz} yaw:{msg.yaw}")
             real_vy = -msg.vy
             cos_yaw = np.cos(self.trueYaw)
             sin_yaw = np.sin(self.trueYaw)
@@ -244,8 +244,9 @@ class DroneHandlerPX4(Node):
             velocity_world_y = (-msg.vx * sin_yaw + real_vy * cos_yaw)
             
             velocity_world_z = msg.vz
+            yaw_rate = msg.yaw
 
-            self.publish_velocity_setpoint(velocity_world_x , velocity_world_y, velocity_world_z)
+            self.publish_velocity_setpoint(velocity_world_x, velocity_world_y, velocity_world_z, yaw_rate)
 
     def attitude_callback(self, msg):
         orientation_q = msg.q
