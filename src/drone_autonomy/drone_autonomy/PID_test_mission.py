@@ -3,7 +3,7 @@ from drone_interfaces.srv import ToggleVelocityControl
 import rclpy
 import time
 
-TIME_STEP = 2
+TIME_STEP = 0.1
 MAX_OUT = 500
 MIN_OUT = -500
 
@@ -41,7 +41,7 @@ class PID:
     def get_kie(self):
         return self.ki*self.integral_error
 
-from drone_comunication import DroneController
+from drone_autonomy.drone_comunication.drone_controller import DroneController
 
 
 
@@ -54,34 +54,12 @@ class Mission(DroneController):
         super().__init__()
         self.midl = self.create_subscription(MiddleOfAruco, 'aruco_markers', self.point_of_aruco ,10)
 
-        self.toggle_velocity_control_cli = self.create_client(ToggleVelocityControl,'toggle_v_control')
-
-        self.velocity_publisher = self.create_publisher(VelocityVectors,'velocity_vectors', 10)
-        
-
         self.beacon = self.create_client(Dropper,"dropper")
 
     
     def point_of_aruco(self, msg):
         #self.get_logger().info(f"Point of middle [{msg.x}, {msg.y}]")
         self.middle_of_aruco = [msg.x, msg.y]
-
-    def send_vectors(self, vx, vy, vz):
-        vectors = VelocityVectors()
-        vectors.vx = float(vx)
-        vectors.vy = float(vy)
-        vectors.vz = float(vz)
-        self.velocity_publisher.publish(vectors)
-        
-    def toggle_control(self):
-        req = ToggleVelocityControl.Request()
-        future = self.toggle_velocity_control_cli.call_async(req)
-        rclpy.spin_until_future_complete(self, future, timeout_sec=10)
-        if future.result().result:
-            self.get_logger().info("true")
-        else:
-            self.get_logger().info("false")
-        return future.result()
     
     def fly_in_square(self):
         self.state = "BUSY"
@@ -138,16 +116,23 @@ class Mission(DroneController):
         self.wait_busy()
     
     def pid_callback_x(self):
+        if not hasattr(self, 'middle_of_aruco'):
+            self.get_logger().info("Brak danych o markerze")
+            return
+
         error = -(320-self.middle_of_aruco[0])
-        if error < 5:
+        self.get_logger().info(f"Error: {error}")
+        
+        if abs(error) < 5:
             self.get_logger().info("osiagnieto sukces")
             self._timer.cancel()
             self.state = "OK"
             del self.pid
         else:
-            vx = self.pid.compute(error)
-            vx = vx/1000
-            self.send_vectors(0,vx,0)
+            yaw_rate = self.pid.compute(error)
+            yaw_rate = yaw_rate/1000
+            self.get_logger().info(f"Yaw rate: {yaw_rate}")
+            self.send_vectors(0,0,0, yaw_rate)
 
     
     def wait_busy(self):
@@ -178,16 +163,16 @@ def main(args=None):
     mission.arm()
     mission.takeoff(5.0)
 
-    mission.send_goto_relative( 8.0, 0.0, 0.0)
+    # mission.send_goto_relative( 8.0, 0.0, 0.0)
     mission.toggle_control()
-    mission.send_vectors(1.0,0.0,0.0)
-    time.sleep(1)
-    mission.send_vectors(1.0,0.0,0.0)
-    time.sleep(1)
-    mission.send_vectors(1.0,0.0,0.0)
-    time.sleep(1)
+    # mission.send_vectors(1.0,0.0,0.0)
+    # time.sleep(1)
+    # mission.send_vectors(1.0,0.0,0.0)
+    # time.sleep(1)
+    # mission.send_vectors(1.0,0.0,0.0)
+    # time.sleep(1)
     # mission.first_test_of_pid_y()
-    # mission.first_test_of_pid_x()
+    mission.first_test_of_pid_x()
     #mission.fly_in_square()
     #mission.send_vectors(0.5,0.5,0)
     #time.sleep(1)
