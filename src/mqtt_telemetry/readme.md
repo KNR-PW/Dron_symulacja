@@ -9,7 +9,7 @@ ros2 run mqtt_telemetry mqtt_bridge
 
 ros2 topic pub /drone/status std_msgs/msg/String "{data: \"{\\\"altitude\\\": 25, \\\"speed\\\": 4.2, \\\"lat\\\": 52.23, \\\"lon\\\": 21.01, \\\"flight_mode\\\": \\\"AUTO\\\"}\"}" -r 1
 
-
+ros2 run mqtt_telemetry publish_image_dzialka
 
 --
 
