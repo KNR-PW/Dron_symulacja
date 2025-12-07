@@ -22,7 +22,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'mqtt_bridge = mqtt_telemetry.__init__:main'
+            'mqtt_bridge = mqtt_telemetry.__init__:main',
+            'publish_image_dzialka = mqtt_telemetry.publish_image_dzialka:main',
         ],
     },
 )

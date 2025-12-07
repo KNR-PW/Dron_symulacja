@@ -29,4 +29,9 @@ topics:
     ros_type: "std_msgs/msg/String"
     mqtt_topic: "sensor/battery"
 
+
+  - ros_topic: "/drone/image"
+    ros_type: "std_msgs/msg/String"
+    mqtt_topic: "drone/image"
+
 # ODPALANIE ros2 run mqtt_telemetry mqtt_bridge
