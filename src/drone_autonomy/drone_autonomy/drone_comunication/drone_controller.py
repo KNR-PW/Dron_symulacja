@@ -272,11 +272,12 @@ class DroneController(Node):
         return True
     
 # functions to fly by vectors
-    def send_vectors(self, vx, vy, vz):
+    def send_vectors(self, vx, vy, vz, yaw_rate=0.0):
         vectors = VelocityVectors()
         vectors.vx = float(vx)
         vectors.vy = float(vy)
         vectors.vz = float(vz)
+        vectors.yaw = float(yaw_rate) # New field
         self.velocity_publisher.publish(vectors)
         
     def toggle_control(self):

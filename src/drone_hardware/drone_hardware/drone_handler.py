@@ -553,7 +553,7 @@ class DroneHandler(Node):
         msg = self.vehicle.message_factory.set_position_target_local_ned_encode(
             0,       # time_boot_ms (not used)
             0, 0,    # target system, target component
-            mavutil.mavlink.MAV_FRAME_BODY_OFFSET_NED, # Frame 9: Body Frame (X=Forward, Y=Right)
+            mavutil.mavlink.MAV_FRAME_BODY_OFFSET_NED, # Frame 9: Body Frame
             type_mask, # type_mask
             0, 0, 0, # x, y, z positions (not used)
             velocity_x, # x velocity (Forward)
@@ -569,16 +569,22 @@ class DroneHandler(Node):
         if self._velocity_control_flag:
             # ROS Message Mapping:
             # msg.vx -> Forward Speed
-            # msg.vy -> YAW RATE (repurposed)
+            # msg.vy -> Right Speed
             # msg.vz -> Vertical Speed
+            # msg.yaw -> Yaw Rate (rad/s)
             
             forward_vel = msg.vx
-            yaw_rate = msg.vy 
+            right_vel = msg.vy
             vertical_vel = msg.vz
+            
+            # Check if the new 'yaw' field exists (backward compatibility check)
+            if hasattr(msg, 'yaw'):
+                yaw_rate = msg.yaw
+            else:
+                # Fallback if message wasn't updated yet
+                yaw_rate = 0.0
 
-            # Send directly in Body Frame. 
-            # We pass 0.0 for lateral velocity (Body Y) because we are turning to face the target.
-            self.send_body_velocity(forward_vel, 0.0, vertical_vel, yaw_rate)
+            self.send_body_velocity(forward_vel, right_vel, vertical_vel, yaw_rate)
     def toggle_velocity_control(self, request, response):
 
         self._velocity_control_flag = False if self._velocity_control_flag else True

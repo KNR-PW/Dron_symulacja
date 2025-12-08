@@ -35,7 +35,7 @@ class FollowDetections(DroneController):
         self.declare_parameter('lost_timeout', 0.8)  # s
 
         # Gimbal tracking params
-        self.declare_parameter('gimbal_kp_deg', 0.7)     # degrees per normalized image unit
+        self.declare_parameter('gimbal_kp_deg', 1.5)     # degrees per normalized image unit
         self.declare_parameter('gimbal_min_deg', -15.0)
         self.declare_parameter('gimbal_max_deg', 90.0)
         self.declare_parameter('gimbal_rate_hz', 50.0)    # command rate
@@ -287,7 +287,7 @@ class FollowDetections(DroneController):
         if (time.time() - self.last_seen) > self.lost_timeout:
             # brak markera niedawno -> wyhamuj
             self.get_logger().warn(f"Detection lost for more than {self.lost_timeout}s, stopping!")
-            self.send_vectors(0.0, 0.0, 0.0)
+            self.send_vectors(0.0, 0.0, 0.0, 0.0)
             self.state = "OK"
             self.centering = False
             try:
@@ -330,13 +330,13 @@ class FollowDetections(DroneController):
             d_ground_m = h_m / denom
             
         # drone's gimbal is 0.035m off center in the x direction
-        d_ground_m -= 0.05 # TODO correct landing so it lands on target not 'behind' the target
+        d_ground_m += 0.05 # TODO correct landing so it lands on target not 'behind' the target
 
         # Front speed (vx) to reduce ground distance to marker
         vx = self.kp * d_ground_m 
         vx = clamp(vx, -self.max_vel, self.max_vel)
 
-        YAW_KP = 1.5  # Tuning parameter: Rad/s per normalized error
+        YAW_KP = 2.0  # Tuning parameter: Rad/s per normalized error
         yaw_rate = YAW_KP * self.ex_f
         
         # Clamp yaw rate to reasonable speed (e.g., 45 deg/s = ~0.8 rad/s)
@@ -354,7 +354,7 @@ class FollowDetections(DroneController):
         if abs(d_ground_m) < 0.2 and abs(self.ex_px) < 20:
             # Osiągnięto cel -> zatrzymaj ruch
             self.get_logger().info("Target reached, stopping approach.")
-            self.send_vectors(0.0, 0.0, 0.0)
+            self.send_vectors(0.0, 0.0, 0.0, 0.0)
             self.state = "OK"
             self.centering = False
             try:
@@ -365,7 +365,7 @@ class FollowDetections(DroneController):
             # Send vectors. 
             # ARGUMENTS: (Forward_Speed, Yaw_Rate, Vertical_Speed)
             # We are passing yaw_rate in the second argument because we modified drone_handler.py
-            self.send_vectors(vx, yaw_rate, vz)
+            self.send_vectors(vx, 0.0, vz, yaw_rate)
             
 
     # ──────────────────────────────────────────────────────────
@@ -405,7 +405,7 @@ class FollowDetections(DroneController):
     def destroy_node(self):
         # Zatrzymaj na wyjściu
         try:
-            self.send_vectors(0.0, 0.0, 0.0)
+            self.send_vectors(0.0, 0.0, 0.0, 0.0)
         except Exception:
             pass
         super().destroy_node()
@@ -439,14 +439,14 @@ def main():
         
         mission.toggle_control()
 
-        if (mission.altitude - target_height < 0.2):
+        if (mission.altitude - target_height < 1.0):
             mission.get_logger().info("Enabling Hybrid Tracker Node...")
             mission.enable_tracker_node(True)
                     
-        # mission.fly_to_detection()
+        mission.fly_to_detection()
         # mission.center_detection()
         
-        time.sleep(60.0)  
+        # time.sleep(60.0)  
 
         run_seconds = 60.0
         mission.get_logger().info(f"Running fly_to_detection mission for {run_seconds}s...")
@@ -461,6 +461,7 @@ def main():
         
     except KeyboardInterrupt:
         mission.get_logger().info("Keyboard interrupt, stopping mission.")
+        mission.enable_tracker_node(False) #TODO: Fix
     finally:
         mission.get_logger().info("Stopping any active loops and landing.")
         mission.land()
