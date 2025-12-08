@@ -2,6 +2,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
 from vision_msgs.msg import Detection2DArray, Detection2D, BoundingBox2D, ObjectHypothesisWithPose
+from std_srvs.srv import SetBool
 from cv_bridge import CvBridge
 import cv2
 import numpy as np
@@ -47,6 +48,9 @@ class HybridTrackerNode(Node):
         self.miss_counter = 0
         self.max_misses = 10 
         
+        self.node_enabled = False  # Start disabled!
+        self.srv = self.create_service(SetBool, 'enable_tracker', self.enable_callback)
+        
         self.image_sub = self.create_subscription(
             Image, '/gimbal_camera', self.image_callback, 10)
         
@@ -57,9 +61,36 @@ class HybridTrackerNode(Node):
             Image, '/detections/annotated', 10)
             
         self.last_time = time.time()
-        self.avg_fps = 0.0  # Initialize average FPS
+        self.avg_fps = 0.0
+
+    def enable_callback(self, request, response):
+        self.node_enabled = request.data
+        if self.node_enabled:
+            self.get_logger().info("Tracker ENABLED via service.")
+            # Reset state when enabling to ensure fresh start
+            self.tracking_active = False
+            self.miss_counter = 0
+        else:
+            self.get_logger().info("Tracker DISABLED via service.")
+            self.tracking_active = False
+        
+        response.success = True
+        response.message = f"Tracker enabled: {self.node_enabled}"
+        return response
 
     def image_callback(self, msg):
+        # --- 1. Check if enabled ---
+        if not self.node_enabled:
+            # Optional: Publish "DISABLED" text on debug image so you know it's alive
+            try:
+                frame = self.bridge.imgmsg_to_cv2(msg, "bgr8").copy()
+                if self.correct_colors: frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                cv2.putText(frame, "TRACKER DISABLED (WAITING FOR TAKEOFF)", (10, 30), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                self._publish_debug(frame, msg.header)
+            except: pass
+            return
+
         # --- STABILIZED FPS CALCULATION ---
         current_time = time.time()
         dt = current_time - self.last_time

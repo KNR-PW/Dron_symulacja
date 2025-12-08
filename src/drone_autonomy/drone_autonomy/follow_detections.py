@@ -10,6 +10,7 @@ from vision_msgs.msg import Detection2DArray
 from drone_interfaces.msg import VelocityVectors, Telemetry
 from drone_interfaces.srv import ToggleVelocityControl, SetGimbalAngle
 from drone_autonomy.drone_comunication.drone_controller import DroneController
+from std_srvs.srv import SetBool
 
 # TODO: fix aruco node (numpy)
 # TODO: fix wrong world opening
@@ -123,6 +124,10 @@ class FollowDetections(DroneController):
             self.set_gimbal_cli.call_async(req0)
         except Exception:
             pass
+
+        # Client to enable the tracker
+        self.tracker_client = self.create_client(SetBool, 'enable_tracker')
+        
 
     def telemetry_callback(self, msg):
         """Callback to update altitude from telemetry topic."""
@@ -364,7 +369,7 @@ class FollowDetections(DroneController):
             
 
     # ──────────────────────────────────────────────────────────
-    def fly_to_detection(self):
+    def fly_to_detection(self):        
         # Start gimbal centering + drone approach (control loop)
         self.state = "BUSY"
         self.centering = True
@@ -405,6 +410,21 @@ class FollowDetections(DroneController):
             pass
         super().destroy_node()
 
+    def enable_tracker_node(self, enable=True):
+        if not self.tracker_client.wait_for_service(timeout_sec=1.0):
+            self.get_logger().warn("Tracker service not available. Is hybrid_tracker_node running?")
+            return
+
+        req = SetBool.Request()
+        req.data = enable
+        future = self.tracker_client.call_async(req)
+        # We can wait for it or just fire and forget. Waiting is safer.
+        rclpy.spin_until_future_complete(self, future)
+        if future.result() is not None:
+            self.get_logger().info(f"Tracker enabled: {enable}")
+        else:
+            self.get_logger().error("Failed to call enable_tracker service")
+
 
 def main():
     rclpy.init()
@@ -412,26 +432,22 @@ def main():
     
     try:
         mission.arm()
+        target_height = 3.0
+        
         mission.set_gimbal_angle(35.0)
-        mission.takeoff(3.0)
-
-        # mission.send_set_yaw(290.0, True)
-        # time.sleep(3)
-
-        # mission.get_logger().info("Pointing gimbal downwards")
-
-        # Włącz sterowanie wektorami prędkości
+        mission.takeoff(target_height)
+        
         mission.toggle_control()
 
+        if (mission.altitude - target_height < 0.2):
+            mission.get_logger().info("Enabling Hybrid Tracker Node...")
+            mission.enable_tracker_node(True)
+                    
         # mission.fly_to_detection()
         # mission.center_detection()
-
+        
         time.sleep(60.0)  
 
-        # mission.stop_centering() # Zatrzymuje zarówno gimbal, jak i pętlę sterowania
-        # mission.set_gimbal_angle(0.0)
-        
-        # Pętla główna do obsługi logiki misji
         run_seconds = 60.0
         mission.get_logger().info(f"Running fly_to_detection mission for {run_seconds}s...")
         t0 = time.time()
@@ -446,7 +462,6 @@ def main():
     except KeyboardInterrupt:
         mission.get_logger().info("Keyboard interrupt, stopping mission.")
     finally:
-        # Zawsze spróbuj bezpiecznie wylądować
         mission.get_logger().info("Stopping any active loops and landing.")
         mission.land()
         mission.stop_centering() # Zatrzymuje zarówno gimbal, jak i pętlę sterowania
