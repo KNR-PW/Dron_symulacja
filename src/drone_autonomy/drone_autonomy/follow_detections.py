@@ -170,7 +170,7 @@ class FollowDetections(DroneController):
             self.get_logger().error(f'Service calling unsuccessful: {e}')
 
     # ──────────────────────────────────────────────────────────
-    def gimbal_control_loop(self):
+    def gimbal_control_loop(self): # TODO: implement kalman filter
         """Periodically adjust gimbal pitch to keep the marker centered vertically.
         Uses the filtered vertical error ey_f (normalized)."""
         # only act when centering requested
@@ -282,7 +282,7 @@ class FollowDetections(DroneController):
     def radians_to_degrees(self, radians: float) -> float:
         return radians * (180.0 / math.pi)
 
-    def drone_control_loop(self):
+    def drone_control_loop(self): # TODO: only follow the object, not the gimbal's poi
 
         if (time.time() - self.last_seen) > self.lost_timeout:
             # brak markera niedawno -> wyhamuj
@@ -336,8 +336,43 @@ class FollowDetections(DroneController):
         vx = self.kp * d_ground_m 
         vx = clamp(vx, -self.max_vel, self.max_vel)
 
-        YAW_KP = 2.0  # Tuning parameter: Rad/s per normalized error
-        yaw_rate = YAW_KP * self.ex_f
+        # TODO: PID not just P
+        # PID controller for yaw rate
+        # Gains should be tuned. These are example values.
+        YAW_KP = 2.0  # Proportional gain
+        YAW_KI = 0.2  # Integral gain
+        YAW_KD = 0.4  # Derivative gain
+
+        # Calculate time delta
+        current_time = time.time()
+        dt = current_time - getattr(self, 'last_control_time', current_time)
+        self.last_control_time = current_time
+
+        # Proportional term
+        error = self.ex_f
+        p_term = YAW_KP * error
+
+        # Integral term with anti-windup
+        if not hasattr(self, 'integral_error'):
+            self.integral_error = 0.0
+        self.integral_error += error * dt
+        # Clamp integral to prevent windup
+        self.integral_error = clamp(self.integral_error, -1.0, 1.0)
+        i_term = YAW_KI * self.integral_error
+
+        # Derivative term
+        if not hasattr(self, 'prev_error'):
+            self.prev_error = error
+        derivative = (error - self.prev_error) / dt if dt > 0 else 0.0
+        self.prev_error = error
+        d_term = YAW_KD * derivative
+
+        # Reset integral when error is zero to prevent overshoot
+        if abs(error) < 0.01:
+            self.integral_error = 0.0
+
+        # Total PID output
+        yaw_rate = p_term + i_term + d_term
         
         # Clamp yaw rate to reasonable speed (e.g., 45 deg/s = ~0.8 rad/s)
         yaw_rate = clamp(yaw_rate, -0.8, 0.8)
@@ -442,6 +477,7 @@ def main():
         if (mission.altitude - target_height < 1.0):
             mission.get_logger().info("Enabling Hybrid Tracker Node...")
             mission.enable_tracker_node(True)
+            mission.last_seen = time.time()
                     
         mission.fly_to_detection()
         # mission.center_detection()
