@@ -369,7 +369,7 @@ class DroneHandler(Node):
         while self.vehicle.armed==False:
             feedback_msg.feedback = "Waiting for drone to become armed..."
             self.get_logger().info(feedback_msg.feedback)
-            time.sleep(1)
+            time.sleep(2)
 
         feedback_msg.feedback = "Vehicle is now armed."
         self.get_logger().info(feedback_msg.feedback)

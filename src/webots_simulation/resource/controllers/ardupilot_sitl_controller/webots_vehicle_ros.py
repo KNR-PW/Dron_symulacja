@@ -355,10 +355,10 @@ class WebotsArduVehicleRos():
 
     def handle_set_gimbal_angle_request(self, request, response):
         """Handles the SetGimbalAngle service request."""
-        self.node.get_logger().info(f"Received service request to set angle to {request.angle_degrees} degrees.") # <-- ADD THIS
+        # self.node.get_logger().info(f"Received service request to set angle to {request.angle_degrees} degrees.") # <-- ADD THIS
         if hasattr(self, 'gimbal_servo') and self.gimbal_servo is not None:
             angle_radians = math.radians(request.angle_degrees)
-            self.node.get_logger().info(f"Setting servo position to {angle_radians} radians.") # <-- ADD THIS
+            # self.node.get_logger().info(f"Setting servo position to {angle_radians} radians.") # <-- ADD THIS
             
             self.gimbal_servo.setPosition(angle_radians)
             

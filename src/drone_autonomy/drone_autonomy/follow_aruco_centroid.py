@@ -184,10 +184,10 @@ class FollowArucoCentroid(DroneController):
             pass
 
         # debug log occasionally
-        self._gimbal_dbg_cnt += 1
-        if self._gimbal_dbg_cnt >= max(1, int(self.gimbal_rate_hz)):
-            self._gimbal_dbg_cnt = 0
-            self.get_logger().info(f"gimbal: ey_f={self.ey_f:.3f} angle={self.gimbal_angle_deg:.2f} last_seen={time.time()-self.last_seen:.2f}s")
+        # self._gimbal_dbg_cnt += 1
+        # if self._gimbal_dbg_cnt >= max(1, int(self.gimbal_rate_hz)):
+        #     self._gimbal_dbg_cnt = 0
+        #     self.get_logger().info(f"gimbal: ey_f={self.ey_f:.3f} angle={self.gimbal_angle_deg:.2f} last_seen={time.time()-self.last_seen:.2f}s")
 
     # ──────────────────────────────────────────────────────────
     def on_marker(self, msg: MiddleOfAruco):

@@ -191,10 +191,10 @@ class FollowDetections(DroneController):
             pass
 
         # debug log occasionally
-        self._gimbal_dbg_cnt += 1
-        if self._gimbal_dbg_cnt >= max(1, int(self.gimbal_rate_hz)):
-            self._gimbal_dbg_cnt = 0
-            self.get_logger().info(f"gimbal: ey_f={self.ey_f:.3f} angle={self.gimbal_angle_deg:.2f} last_seen={time.time()-self.last_seen:.2f}s")
+        # self._gimbal_dbg_cnt += 1
+        # if self._gimbal_dbg_cnt >= max(1, int(self.gimbal_rate_hz)):
+        #     self._gimbal_dbg_cnt = 0
+        #     self.get_logger().info(f"gimbal: ey_f={self.ey_f:.3f} angle={self.gimbal_angle_deg:.2f} last_seen={time.time()-self.last_seen:.2f}s")
 
     # ──────────────────────────────────────────────────────────
     # def on_marker(self, msg: MiddleOfAruco):
@@ -243,7 +243,7 @@ class FollowDetections(DroneController):
         self.ex_px = float(cx) - self.cx
         self.ey_px = float(cy) - self.cy
 
-        self.get_logger().info(f"Tracking: {obj_name} with score: {score:.2f}, detection error: ex_px={self.ex_px}, ey_px={self.ey_px}")
+        # self.get_logger().info(f"Tracking: {obj_name} with score: {score:.2f}, detection error: ex_px={self.ex_px}, ey_px={self.ey_px}")
 
         # martwa strefa
         if abs(self.ex_px) < self.deadband_px:
@@ -331,14 +331,14 @@ class FollowDetections(DroneController):
         vx = self.kp * d_ground_m 
         vx = clamp(vx, -self.max_vel, self.max_vel)
 
-        YAW_KP = 1.25  # Tuning parameter: Rad/s per normalized error
+        YAW_KP = 1.5  # Tuning parameter: Rad/s per normalized error
         yaw_rate = YAW_KP * self.ex_f
         
         # Clamp yaw rate to reasonable speed (e.g., 45 deg/s = ~0.8 rad/s)
         yaw_rate = clamp(yaw_rate, -0.8, 0.8)
 
         # Dodatkowe logowanie do debugowania
-        self.get_logger().info(f"Control: h={h_m:.2f}, d={d_ground_m:.2f} -> vx={vx:.2f}, yaw_rate={yaw_rate:.2f}")
+        # self.get_logger().info(f"Control: h={h_m:.2f}, d={d_ground_m:.2f} -> vx={vx:.2f}, yaw_rate={yaw_rate:.2f}")
 
         vz = 0.0
 
@@ -413,7 +413,7 @@ def main():
     try:
         mission.arm()
         mission.set_gimbal_angle(35.0)
-        mission.takeoff(5.0)
+        mission.takeoff(3.0)
 
         # mission.send_set_yaw(290.0, True)
         # time.sleep(3)
@@ -423,10 +423,10 @@ def main():
         # Włącz sterowanie wektorami prędkości
         mission.toggle_control()
 
-        mission.fly_to_detection()
+        # mission.fly_to_detection()
         # mission.center_detection()
 
-        time.sleep(2.0)  
+        time.sleep(60.0)  
 
         # mission.stop_centering() # Zatrzymuje zarówno gimbal, jak i pętlę sterowania
         # mission.set_gimbal_angle(0.0)

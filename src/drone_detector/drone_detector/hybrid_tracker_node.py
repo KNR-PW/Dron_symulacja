@@ -57,12 +57,23 @@ class HybridTrackerNode(Node):
             Image, '/detections/annotated', 10)
             
         self.last_time = time.time()
+        self.avg_fps = 0.0  # Initialize average FPS
 
     def image_callback(self, msg):
-        # FPS Calculation
+        # --- STABILIZED FPS CALCULATION ---
         current_time = time.time()
-        fps = 1.0 / (current_time - self.last_time) if (current_time - self.last_time) > 0 else 0
+        dt = current_time - self.last_time
         self.last_time = current_time
+        
+        instant_fps = 1.0 / dt if dt > 0 else 0.0
+        
+        # Exponential Moving Average (EMA)
+        # alpha = 0.1 means new value has 10% weight, history has 90%
+        alpha = 0.1
+        if self.avg_fps == 0.0:
+            self.avg_fps = instant_fps
+        else:
+            self.avg_fps = alpha * instant_fps + (1.0 - alpha) * self.avg_fps
 
         # 1. Convert Image
         try:
@@ -77,7 +88,7 @@ class HybridTrackerNode(Node):
 
         # 2. Check Init
         if self.yolo is None or self.tracker is None:
-            self._draw_debug_info(frame, "INIT ERROR", (0,0,255), fps)
+            self._draw_debug_info(frame, "INIT ERROR", (0,0,255), self.avg_fps)
             self._publish_debug(frame, msg.header)
             return
 
@@ -137,7 +148,7 @@ class HybridTrackerNode(Node):
                 x1, y1, x2, y2 = final_bbox
                 cv2.rectangle(frame, (max(0,x1), max(0,y1)), (min(w_img,x2), min(h_img,y2)), color, 2)
             
-            self._draw_debug_info(frame, f"{mode}: {self.tracked_class_name}", color, fps)
+            self._draw_debug_info(frame, f"{mode}: {self.tracked_class_name}", color, self.avg_fps)
             self._publish_debug(frame, msg.header)
 
         except Exception as e:
