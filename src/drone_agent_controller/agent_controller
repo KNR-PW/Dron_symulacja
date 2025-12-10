@@ -1,0 +1,490 @@
+#!/usr/bin/env python3
+"""
+Natural Language Mission Planning Agent for KNR DroneController
+Generates missions using DroneController API.
+Uses Anthropic Claude API.
+"""
+
+import uuid
+import os
+from typing import Literal, TypedDict
+
+from langchain_anthropic import ChatAnthropic
+from langgraph.types import Command, interrupt
+from langgraph.graph import END, START, StateGraph
+from langgraph.checkpoint.memory import InMemorySaver
+from datetime import datetime
+
+
+# ============================================================================
+# Data Types
+# ============================================================================
+
+class ParsedMission(TypedDict):
+    waypoints: list[dict]
+    estimated_duration_seconds: int
+    max_altitude_meters: float
+    max_distance_meters: float
+    summary: str
+    warnings: list[str]
+
+
+class MissionValidation(TypedDict):
+    is_safe: bool
+    requires_confirmation: bool
+    issues: list[str]
+    risk_level: Literal["low", "medium", "high", "critical"]
+
+
+class MissionAgentState(TypedDict):
+    user_input: str
+    language: Literal["pl", "en"] | None
+    parsed_mission: ParsedMission | None
+    validation: MissionValidation | None
+    ros2_code: str | None
+    mission_id: str | None
+    error: str | None
+    confirmed: bool
+
+
+# ============================================================================
+# LLM Setup
+# ============================================================================
+
+llm = ChatAnthropic(
+    model="claude-sonnet-4-20250514",
+    temperature=0,
+    max_tokens=4096
+)
+
+
+# ============================================================================
+# Agent Nodes
+# ============================================================================
+
+def detect_language(state: MissionAgentState) -> MissionAgentState:
+    prompt = f"""Detect language. Reply only "pl" or "en".
+Text: {state['user_input']}"""
+    
+    response = llm.invoke(prompt)
+    lang = response.content.strip().lower()
+    if lang not in ["pl", "en"]:
+        lang = "en"
+    return {"language": lang}
+
+
+def parse_mission(state: MissionAgentState) -> MissionAgentState:
+    structured_llm = llm.with_structured_output(ParsedMission)
+    
+    parse_prompt = f"""Parse this drone mission into waypoints.
+
+User: {state['user_input']}
+
+COORDINATE SYSTEM (NED - for relative movement):
+- North+ = forward, South- = backward
+- East+ = right, West- = left  
+- Down+ = descend, Down- = ascend (altitude is positive!)
+
+AVAILABLE COMMANDS:
+- takeoff: Start and rise to altitude. Params: altitude (meters)
+- goto_relative: Move relative to current position. Params: north, east, down (meters)
+- goto_global: Move to GPS coordinates. Params: lat, lon, alt
+- hover: Hold position for time. Params: hold_time (seconds)
+- set_yaw: Rotate to heading. Params: yaw (degrees), relative (true/false)
+- set_speed: Change flight speed. Params: speed (m/s)
+- rtl: Return to launch point. No params.
+- land: Land at current position. No params.
+
+RULES:
+1. First command should be "takeoff" with altitude
+2. Use goto_relative for directions like "fly 10m north"
+3. Use goto_global for GPS coordinates
+4. Positions in goto_relative are RELATIVE to current position (not accumulated!)
+5. "hover 5s" = hover command with hold_time=5
+6. "return home" or "wróć" = rtl command
+7. Last command should be "land" or "rtl"
+8. Down is POSITIVE for descent, NEGATIVE for ascent in goto_relative
+
+Example: "takeoff 10m, fly 20m north, fly 10m east, hover 5s, return home, land"
+Waypoints:
+- takeoff: altitude=10
+- goto_relative: north=20, east=0, down=0
+- goto_relative: north=0, east=10, down=0
+- hover: hold_time=5
+- rtl: (no params)
+- land: (no params)
+
+Example: "wystartuj 15m, leć do GPS 52.23, 21.01, poczekaj 3s, ląduj"
+Waypoints:
+- takeoff: altitude=15
+- goto_global: lat=52.23, lon=21.01, alt=15
+- hover: hold_time=3
+- land: (no params)
+
+Return waypoints with appropriate params for each command type."""
+
+    try:
+        parsed = structured_llm.invoke(parse_prompt)
+        return {"parsed_mission": parsed, "error": None}
+    except Exception as e:
+        return {"error": f"Parse failed: {str(e)}"}
+
+
+def validate_mission(state: MissionAgentState) -> MissionAgentState:
+    if state.get("error"):
+        return {}
+    
+    parsed = state.get("parsed_mission")
+    if not parsed:
+        return {"error": "No mission"}
+    
+    issues = []
+    risk_level = "low"
+    requires_confirmation = False
+    
+    max_alt = parsed.get("max_altitude_meters", 0)
+    if max_alt > 120:
+        issues.append(f"Altitude {max_alt}m exceeds 120m legal limit")
+        risk_level = "critical"
+        requires_confirmation = True
+    elif max_alt > 50:
+        issues.append(f"High altitude ({max_alt}m)")
+        risk_level = "medium"
+        requires_confirmation = True
+    
+    max_dist = parsed.get("max_distance_meters", 0)
+    if max_dist > 500:
+        issues.append(f"Long distance ({max_dist}m) - check battery")
+        risk_level = "medium" if risk_level == "low" else risk_level
+        requires_confirmation = True
+    
+    waypoints = parsed.get("waypoints", [])
+    if waypoints:
+        last_cmd = waypoints[-1].get("command", "")
+        if last_cmd not in ["land", "rtl"]:
+            issues.append("Mission does not end with landing")
+            requires_confirmation = True
+        
+        first_cmd = waypoints[0].get("command", "")
+        if first_cmd != "takeoff":
+            issues.append("Mission does not start with takeoff")
+            requires_confirmation = True
+    
+    return {"validation": {
+        "is_safe": risk_level != "critical",
+        "requires_confirmation": requires_confirmation,
+        "issues": issues,
+        "risk_level": risk_level
+    }}
+
+
+def generate_ros2_code(state: MissionAgentState) -> MissionAgentState:
+    """Generate simple ROS2 mission code using DroneController API"""
+    
+    if state.get("error"):
+        return {}
+    
+    parsed = state.get("parsed_mission")
+    if not parsed:
+        return {"error": "No mission"}
+    
+    waypoints = parsed.get("waypoints", [])
+    mission_id = f"mission_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    
+    # Generate mission steps - simple method calls
+    mission_lines = []
+    
+    for i, wp in enumerate(waypoints):
+        cmd = wp.get("command", "goto_relative")
+        
+        if cmd == "takeoff":
+            altitude = float(wp.get("altitude", 10.0))
+            mission_lines.append(f"    mission.takeoff({altitude})")
+            mission_lines.append(f"    time.sleep(2)")
+            
+        elif cmd == "goto_relative":
+            north = float(wp.get("north", 0.0))
+            east = float(wp.get("east", 0.0))
+            down = float(wp.get("down", 0.0))
+            mission_lines.append(f"    mission.send_goto_relative({north}, {east}, {down})")
+            mission_lines.append(f"    time.sleep(2)")
+            
+        elif cmd == "goto_global":
+            lat = float(wp.get("lat", 0.0))
+            lon = float(wp.get("lon", 0.0))
+            alt = float(wp.get("alt", 10.0))
+            mission_lines.append(f"    mission.send_goto_global({lat}, {lon}, {alt})")
+            mission_lines.append(f"    time.sleep(2)")
+            
+        elif cmd == "hover":
+            hold_time = float(wp.get("hold_time", 5.0))
+            mission_lines.append(f"    time.sleep({hold_time})")
+            
+        elif cmd == "set_yaw":
+            yaw = float(wp.get("yaw", 0.0))
+            relative = wp.get("relative", True)
+            yaw_rad = yaw * 3.14159 / 180.0
+            mission_lines.append(f"    mission.send_set_yaw({yaw_rad:.4f}, {relative})")
+            mission_lines.append(f"    time.sleep(2)")
+            
+        elif cmd == "set_speed":
+            speed = float(wp.get("speed", 5.0))
+            mission_lines.append(f"    mission.set_speed({speed})")
+            mission_lines.append(f"    time.sleep(2)")
+            
+        elif cmd == "rtl":
+            mission_lines.append(f"    mission.rtl()")
+            mission_lines.append(f"    time.sleep(2)")
+            
+        elif cmd == "land":
+            mission_lines.append(f"    mission.land()")
+    
+    mission_code = "\n".join(mission_lines)
+    
+    # Generate simple code like the example
+    ros2_code = f'''#!/usr/bin/env python3
+"""
+Auto-generated mission: {mission_id}
+Summary: {parsed.get("summary", "N/A")}
+"""
+
+import rclpy
+import time
+from drone_comunication import DroneController
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    mission = DroneController()
+    
+    mission.arm()
+{mission_code}
+    
+    mission.destroy_node()
+    rclpy.shutdown()
+
+
+if __name__ == "__main__":
+    main()
+'''
+    
+    return {"ros2_code": ros2_code, "mission_id": mission_id}
+
+
+def route_after_validation(state: MissionAgentState) -> Literal["human_review", "generate_ros2_code", "__end__"]:
+    if state.get("error"):
+        return "__end__"
+    
+    validation = state.get("validation", {})
+    if validation.get("requires_confirmation"):
+        return "human_review"
+    return "generate_ros2_code"
+
+
+def human_review(state: MissionAgentState) -> Command[Literal["generate_ros2_code", END]]:
+    parsed = state.get("parsed_mission", {})
+    validation = state.get("validation", {})
+    
+    review_info = {
+        "summary": parsed.get("summary", "N/A"),
+        "risk": validation.get("risk_level", "?"),
+        "issues": validation.get("issues", []),
+        "waypoints": len(parsed.get("waypoints", [])),
+    }
+    
+    human_decision = interrupt(review_info)
+    
+    if human_decision.get("approved", False):
+        return Command(update={"confirmed": True}, goto="generate_ros2_code")
+    return Command(update={"error": "Rejected by user"}, goto=END)
+
+
+def output_result(state: MissionAgentState) -> MissionAgentState:
+    return {}
+
+
+# ============================================================================
+# Build Graph
+# ============================================================================
+
+def build_mission_graph():
+    builder = StateGraph(MissionAgentState)
+    
+    builder.add_node("detect_language", detect_language)
+    builder.add_node("parse_mission", parse_mission)
+    builder.add_node("validate_mission", validate_mission)
+    builder.add_node("human_review", human_review)
+    builder.add_node("generate_ros2_code", generate_ros2_code)
+    builder.add_node("output_result", output_result)
+    
+    builder.add_edge(START, "detect_language")
+    builder.add_edge("detect_language", "parse_mission")
+    builder.add_edge("parse_mission", "validate_mission")
+    builder.add_conditional_edges(
+        "validate_mission",
+        route_after_validation,
+        ["human_review", "generate_ros2_code", "__end__"]
+    )
+    builder.add_edge("generate_ros2_code", "output_result")
+    builder.add_edge("output_result", END)
+    
+    return builder.compile(checkpointer=InMemorySaver())
+
+
+# ============================================================================
+# CLI
+# ============================================================================
+
+def print_banner():
+    print("""
+╔═══════════════════════════════════════════════════════════════════╗
+║       🚁 KNR Drone Mission Planner (Natural Language)            ║
+╠═══════════════════════════════════════════════════════════════════╣
+║  Examples:                                                        ║
+║  • "takeoff 10m, fly 20m north, hover 5s, land"                  ║
+║  • "wystartuj 15m, leć 30m północ, obróć 90°, ląduj"             ║
+║  • "takeoff 20m, go to GPS 52.23, 21.01, return home"            ║
+║                                                                   ║
+║  Available commands:                                              ║
+║  • takeoff, land, rtl (return to launch)                         ║
+║  • fly/goto relative (north, east, up/down)                      ║
+║  • goto GPS coordinates                                           ║
+║  • hover, set yaw, set speed                                      ║
+║                                                                   ║
+║  Commands: 'quit' | 'help' | 'telemetry'                         ║
+╚═══════════════════════════════════════════════════════════════════╝
+    """)
+
+
+def get_output_dir():
+    # Try common ROS2 workspace locations
+    possible_dirs = [
+        os.path.expanduser("~/ros2_ws/src/knr_missions/knr_missions"),
+        os.path.expanduser("~/catkin_ws/src/knr_missions/scripts"),
+        os.path.expanduser("~/missions"),
+    ]
+    for d in possible_dirs:
+        if os.path.exists(d):
+            return d
+    return os.getcwd()
+
+
+def run_interactive():
+    print_banner()
+    app = build_mission_graph()
+    output_dir = get_output_dir()
+    
+    print(f"📁 Output directory: {output_dir}\n")
+    
+    while True:
+        try:
+            user_input = input("🎯 Mission: ").strip()
+            
+            if not user_input:
+                continue
+            if user_input.lower() in ['quit', 'exit', 'q']:
+                break
+            if user_input.lower() == 'help':
+                print("""
+╔═══════════════════════════════════════════════════════════════════╗
+║                        HELP - Commands                            ║
+╠═══════════════════════════════════════════════════════════════════╣
+║  DIRECTIONS:                                                      ║
+║    north/south = forward/backward (N+/N-)                         ║
+║    east/west = right/left (E+/E-)                                 ║
+║    up/down = altitude change                                      ║
+║                                                                   ║
+║  ACTIONS:                                                         ║
+║    takeoff Xm      - Start and rise to X meters                  ║
+║    fly Xm north    - Move X meters in direction                  ║
+║    goto GPS lat,lon - Fly to GPS coordinates                     ║
+║    hover Xs        - Hold position for X seconds                 ║
+║    rotate X°       - Turn X degrees                              ║
+║    speed X         - Set speed to X m/s                          ║
+║    return home/rtl - Return to launch point                      ║
+║    land            - Land at current position                    ║
+║                                                                   ║
+║  EXAMPLE:                                                         ║
+║    "takeoff 15m, fly 20m north, fly 10m east, rotate 180°,       ║
+║     hover 5s, return home, land"                                  ║
+╚═══════════════════════════════════════════════════════════════════╝
+                """)
+                continue
+            
+            config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+            
+            initial_state = {
+                "user_input": user_input,
+                "language": None,
+                "parsed_mission": None,
+                "validation": None,
+                "ros2_code": None,
+                "mission_id": None,
+                "error": None,
+                "confirmed": False
+            }
+            
+            print("⏳ Processing mission...")
+            result = app.invoke(initial_state, config)
+            
+            # Handle human review interrupt
+            if "__interrupt__" in result:
+                data = result["__interrupt__"][0].value
+                print(f"\n⚠️  Review required!")
+                print(f"   Risk level: {data.get('risk', 'unknown')}")
+                print(f"   Issues: {', '.join(data.get('issues', ['None']))}")
+                print(f"   Waypoints: {data.get('waypoints', 0)}")
+                confirm = input("\n   Approve mission? (y/n): ").strip().lower()
+                result = app.invoke(
+                    Command(resume={"approved": confirm in ['y', 'yes']}), 
+                    config
+                )
+            
+            if result.get("error"):
+                print(f"❌ Error: {result['error']}")
+            elif result.get("ros2_code"):
+                mission_id = result['mission_id']
+                pm = result.get("parsed_mission", {})
+                
+                print(f"\n✅ Mission generated: {mission_id}")
+                print(f"📝 Summary: {pm.get('summary', 'N/A')}")
+                print(f"⏱️  Est. duration: {pm.get('estimated_duration_seconds', 0)}s")
+                print(f"📍 Waypoints ({len(pm.get('waypoints', []))}):")
+                
+                for i, wp in enumerate(pm.get('waypoints', [])):
+                    cmd = wp.get('command', '?')
+                    params = {k: v for k, v in wp.items() if k != 'command'}
+                    params_str = ', '.join(f"{k}={v}" for k, v in params.items()) if params else ""
+                    print(f"   {i+1}. {cmd}: {params_str}")
+                
+                if pm.get('warnings'):
+                    print(f"\n⚠️  Warnings:")
+                    for w in pm['warnings']:
+                        print(f"   - {w}")
+                
+                save = input("\n💾 Save mission? (y/n): ").strip().lower()
+                if save in ['y', 'yes']:
+                    filepath = os.path.join(output_dir, f"{mission_id}.py")
+                    with open(filepath, 'w') as f:
+                        f.write(result['ros2_code'])
+                    os.chmod(filepath, 0o755)  # Make executable
+                    
+                    print(f"\n✅ Saved: {filepath}")
+                    print(f"\n📦 To run the mission:")
+                    print(f"   python3 {filepath}")
+                    print(f"   # or if in ROS2 package:")
+                    print(f"   ros2 run knr_missions {mission_id}")
+                    
+        except KeyboardInterrupt:
+            print("\n")
+            break
+        except Exception as e:
+            print(f"❌ Error: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    print("👋 Goodbye!")
+
+
+if __name__ == "__main__":
+    run_interactive()
