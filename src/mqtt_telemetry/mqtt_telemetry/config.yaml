@@ -1,0 +1,37 @@
+# ============================================================
+# MQTT BRIDGE CONFIGURATION TEMPLATE
+# ============================================================
+# This file controls which ROS topics are forwarded to MQTT.
+# You can freely duplicate entries under "topics" to add more.
+#
+# Example usage:
+# ros2 run mqtt_bridge mqtt_bridge --ros-args \
+#     -p config_file:=/path/to/mqtt_bridge_config.yaml
+# ============================================================
+
+# ============================================================
+# MQTT BRIDGE CONFIGURATION
+# ============================================================
+mqtt:
+  host: "f4209e15de424182b7f1f41170484e60.s1.eu.hivemq.cloud"
+  port: 8883
+  client_id: "ros_mqtt_bridge"
+  username: "Knr_web"
+  password: "Drony123"
+  keepalive: 60
+
+topics:
+  - ros_topic: "/drone/status"
+    ros_type: "std_msgs/msg/String"
+    mqtt_topic: "robot/pose"
+
+  - ros_topic: "/battery/state"
+    ros_type: "std_msgs/msg/String"
+    mqtt_topic: "sensor/battery"
+
+
+  - ros_topic: "/drone/image"
+    ros_type: "std_msgs/msg/String"
+    mqtt_topic: "drone/image"
+
+# ODPALANIE ros2 run mqtt_telemetry mqtt_bridge

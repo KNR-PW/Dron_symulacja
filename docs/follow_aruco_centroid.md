@@ -52,6 +52,60 @@ ros2 run drone_autonomy follow_aruco_centroid \
 node subskrybuje /aruco_markers a publikuje /knr.hardware.velocity_vectors
 
 
+---
+
+## 🖥️ GUI i narzędzia testowe ArUco
+
+Projekt zawiera dodatkowe **dwa nody GUI**, które ułatwiają testowanie algorytmu bez kamery oraz ręczne strojenie parametrów.
+
+---
+
+### 1️⃣ ArUco Simulator (GUI + WASD)
+
+Node symulacyjny do testów **bez fizycznej kamery**.  
+Generuje wirtualny marker ArUco na krawędziach obrazu, którym można sterować **klawiszami WASD**.
+
+**Zastosowanie:**
+- szybkie testy logiki sterowania,
+- debugowanie `follow_aruco_centroid`,
+- symulacja ruchu markera w polu widzenia kamery.
+
+**Sterowanie:**
+- `W` – marker w górę  
+- `S` – marker w dół  
+- `A` – marker w lewo  
+- `D` – marker w prawo  
+
+**Publikuje:**  
+`/aruco_markers`
+
+**Uruchomienie:**
+```bash
+ros2 run ros2_aruco aruco_simulator
+```
+
+---
+
+### 2️⃣ Drone GUI Panel (GUI konfiguracyjne)
+
+Graficzny panel do **dynamicznej zmiany parametrów sterowania** za pomocą przycisków i suwaków.
+
+**Zastosowanie:**
+- strojenie regulatora w czasie rzeczywistym,
+- testowanie zachowania drona bez restartu node’a,
+- szybkie eksperymenty z parametrami (kp, deadband, limity prędkości itp.).
+
+**Funkcje GUI:**
+- zmiana parametrów sterowania,
+- przyciski do sterowania trybem pracy,
+- podgląd aktualnych wartości.
+
+**Uruchomienie:**
+```bash
+ros2 run drone_gui gui_panel
+```
+
+
 
 
 

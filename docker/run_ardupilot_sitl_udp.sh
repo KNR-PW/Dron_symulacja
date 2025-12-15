@@ -1,0 +1,4 @@
+#!/bin/bash
+xhost +local:docker
+
+docker exec -it knr_drone bash -c "git config --global --add safe.directory /tools/ardupilot && /tools/ardupilot/Tools/autotest/sim_vehicle.py -v ArduCopter -w --model webots-python --add-param-file=/root/ros_ws/src/webots_simulation/SITL_param/iris.parm --out=udp:172.17.0.1:14550"
