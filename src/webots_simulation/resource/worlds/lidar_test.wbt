@@ -1,0 +1,179 @@
+#VRML_SIM R2025a utf8
+
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackground.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/floors/protos/Floor.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/appearances/protos/Grass.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/factory/manhole/protos/SquareManhole.proto"
+IMPORTABLE EXTERNPROTO "../protos/IrisSimple.proto"
+
+WorldInfo {
+  title "Lidar Test"
+  basicTimeStep 2
+  FPS 20
+}
+Viewpoint {
+  orientation -0.2 0 0.98 3.14
+  position 0 10 5
+  follow "Iris"
+  followSmoothness 0.01
+}
+TexturedBackground {
+}
+TexturedBackgroundLight {
+}
+Floor {
+  size 100 100
+  appearance Grass {
+  }
+}
+SquareManhole {
+  translation 0 0 0
+  name "drone takeoff"
+  size 0.5 0.5 0.1
+}
+DEF Iris IrisSimple {
+  translation 0 0 0.13
+  rotation 0 0 1 0
+  controller "ardupilot_sitl_controller"
+  controllerArgs [
+    "--motors"
+    "m1_motor, m2_motor, m3_motor, m4_motor"
+    "--camera"
+    "camera"
+    "--camera-port"
+    "5599"
+    "--lidar"
+    "Lidar"
+    "--lidar-fps"
+    "5"
+  ]
+  extensionSlot [
+    # Unitree L2 LiDAR
+    # Konfiguracja "Ciasny Dach":
+    # 1. minRange 0.05 (5cm) -> Przywrócone, aby widzieć nóżki drona (które są blisko).
+    # 2. Blocker (Duży Box) umieszczony ekstremalnie blisko (0.5mm nad lidarem).
+    #    - Szczelina 0.5mm oznacza, że każdy promień lecący w górę pod kątem > 0.6 stopnia
+    #      trafi w sufit na dystansie < 5cm i zostanie usunięty.
+    #    - Promienie w dół (nóżki, ziemia) są nienaruszone.
+    #    - Promienie poziome (horyzont) przechodzą przez szczelinę.
+    Lidar {
+      translation 0 0 -0.25
+      rotation 0 0 1 0
+      name "Lidar"
+      horizontalResolution 180
+      fieldOfView 6.28318
+      verticalFieldOfView 3.14159
+      numberOfLayers 30
+      minRange 0.05
+      maxRange 30
+      noise 0.02
+    }
+
+    DEF camera Camera {
+      translation 0.08 0 0
+      rotation 0 1 0 1.57
+      width 640
+      height 480
+    }
+  ]
+}
+# Test objects for lidar
+# Wooden crate
+Solid {
+  translation 3 0 0.4
+  children [
+    Shape {
+      appearance PBRAppearance {
+        baseColor 0.6 0.4 0.2
+        roughness 0.9
+      }
+      geometry Box {
+        size 0.8 0.8 0.8
+      }
+    }
+  ]
+  name "crate"
+  boundingObject Box {
+    size 0.8 0.8 0.8
+  }
+}
+# Cylinder - barrel
+Solid {
+  translation -2 2 0.5
+  children [
+    Shape {
+      appearance PBRAppearance {
+        baseColor 0.2 0.3 0.8
+        roughness 0.6
+        metalness 0.3
+      }
+      geometry Cylinder {
+        height 1.0
+        radius 0.3
+      }
+    }
+  ]
+  name "barrel"
+  boundingObject Cylinder {
+    height 1.0
+    radius 0.3
+  }
+}
+# Tall box - pillar
+Solid {
+  translation 0 -3 1.0
+  children [
+    Shape {
+      appearance PBRAppearance {
+        baseColor 0.5 0.5 0.5
+        roughness 0.7
+      }
+      geometry Box {
+        size 0.5 0.5 2.0
+      }
+    }
+  ]
+  name "pillar"
+  boundingObject Box {
+    size 0.5 0.5 2.0
+  }
+}
+# Sphere
+Solid {
+  translation 2 3 0.4
+  children [
+    Shape {
+      appearance PBRAppearance {
+        baseColor 0.9 0.2 0.2
+        roughness 0.4
+      }
+      geometry Sphere {
+        radius 0.4
+      }
+    }
+  ]
+  name "sphere"
+  boundingObject Sphere {
+    radius 0.4
+  }
+}
+# Small wall
+Solid {
+  translation -3 -2 0.75
+  children [
+    Shape {
+      appearance PBRAppearance {
+        baseColor 0.8 0.8 0.7
+        roughness 0.95
+      }
+      geometry Box {
+        size 2.0 0.2 1.5
+      }
+    }
+  ]
+  name "wall"
+  boundingObject Box {
+    size 2.0 0.2 1.5
+  }
+}
