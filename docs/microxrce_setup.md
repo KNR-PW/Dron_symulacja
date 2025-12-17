@@ -4,7 +4,7 @@
 
 1. Łączymy interfejs UART z portu TELEM2 z RX1 TX1 GND na raspberry. 
 
-2. Łączymy się z Orange Cube poprzez QGC i tam `ustawiamy parametr (jedyny) z nazwą XRCE` i ustawiamy na `TELEM2`.
+2. Łączymy się z Orange Cube poprzez QGC i tam `ustawiamy parametr UXRCE_DDS_CFG` na `TELEM2`.
 
 3. Wykonujemy komendę do połączenia:
 ```
