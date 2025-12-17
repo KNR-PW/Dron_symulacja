@@ -26,6 +26,7 @@ setup(
             'mission=drone_autonomy.mission:main',
             'fly_to_aruco_example=drone_autonomy.fly_to_aruco_example:main',
             'follow_aruco_centroid=drone_autonomy.follow_aruco_centroid:main',
+            'vtol_servo_test=drone_autonomy.vtol_servo_test:main',
         ],
     },
 )

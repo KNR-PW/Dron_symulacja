@@ -17,6 +17,7 @@ from drone_interfaces.action import (
     Takeoff,
     GotoRelative,
     GotoGlobal,
+    SetActuatorTest,
     SetYawAction
 )
 

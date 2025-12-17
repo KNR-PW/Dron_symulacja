@@ -1,0 +1,13 @@
+### ActuatorTest Action message
+##############################
+### Goal
+uint8 actuator_id
+float32 value
+float32 timeout
+---
+### Result
+bool success
+string message
+---
+### Feedback
+string state

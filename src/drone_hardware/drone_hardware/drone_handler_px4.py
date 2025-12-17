@@ -11,7 +11,7 @@ from rclpy.action import ActionServer,  CancelResponse
 
 from drone_interfaces.msg import VelocityVectors, Telemetry
 from drone_interfaces.srv import SetMode, ToggleVelocityControl, SetServo, VtolServoCalib
-from drone_interfaces.action import  Arm, Takeoff, GotoGlobal, GotoRelative, SetYawAction
+from drone_interfaces.action import  Arm, Takeoff, GotoGlobal, GotoRelative, SetYawAction, SetActuatorTest
 
 from px4_msgs.msg import (
     VehicleStatus, 
@@ -81,6 +81,7 @@ class DroneHandlerPX4(Node):
         self.goto_global = ActionServer(self, GotoGlobal, NAMESPACE+'goto_global', self.goto_global_action, cancel_callback=self.cancel_callback)
         self.goto_rel = ActionServer(self, GotoRelative, NAMESPACE+'goto_relative', self.goto_relative_action, cancel_callback=self.cancel_callback)
         self.yaw = ActionServer(self, SetYawAction, NAMESPACE+'Set_yaw', self.yaw_callback, cancel_callback=self.cancel_callback)
+        self.actuator_test = ActionServer(self, SetActuatorTest, NAMESPACE+'Set_Actuator_Test', self.execute_callback, cancel_callback=self.cancel_callback)
 
         #declare subcriptions
         self.offboard_mode_pub = self.create_publisher(OffboardControlMode,'/fmu/in/offboard_control_mode',10)
@@ -109,7 +110,7 @@ class DroneHandlerPX4(Node):
         self.get_logger().info("starting knr drone handler px4")
 
         #define the variables
-        self.px4_alive_flag = False #this flag will check if we received any data from  drone
+        self.px4_alive_flag = True #this flag will check if we received any data from  drone
         self.px4_watchdog = 0 #this variable will check if we still getting new topics
         self.nav_state = VehicleStatus.NAVIGATION_STATE_MAX
         self.arm_state = VehicleStatus.ARMING_STATE_ARMED
@@ -179,19 +180,19 @@ class DroneHandlerPX4(Node):
     #timer loop to publish above function to drone
     def timer_callback(self) -> None:
         """Callback function for the timer."""
-        if self.px4_alive_flag:
-            self.publish_offboard_control_heartbeat_signal()
+        # if self.px4_alive_flag:
+        self.publish_offboard_control_heartbeat_signal()
 
-            if self.offboard_setpoint_counter < 11:
-                self.offboard_setpoint_counter += 1
-            
-            if self.offboard_setpoint_counter == 10:
-                self.get_logger().info("Vehicle is ready to be set into offboard mode")
+        if self.offboard_setpoint_counter < 11:
+            self.offboard_setpoint_counter += 1
         
-            if self.get_clock().now().nanoseconds - self.px4_watchdog > 1e9:
-                self.px4_alive_flag = False
-                self.get_logger().warn("Vehicle is missing ERROR PX4 not found")
-                self.offboard_setpoint_counter = 0
+        if self.offboard_setpoint_counter == 10:
+            self.get_logger().info("Vehicle is ready to be set into offboard mode")
+    
+        if self.get_clock().now().nanoseconds - self.px4_watchdog > 1e9:
+            self.px4_alive_flag = False
+            self.get_logger().warn("Vehicle is missing ERROR PX4 not found")
+            self.offboard_setpoint_counter = 0
 
     #declare subscribtions
     #Print status of the drone
@@ -584,10 +585,12 @@ class DroneHandlerPX4(Node):
             f"controls={self._servo_controls}"
         )
         self.actuator_pub.publish(msg)
+
     def set_servo_callback(self, request, response):
         self.set_servo(request.servo_id, request.pwm)
         response = SetServo.Response()
         return response
+
     def _angle_to_pwm(self, angle_deg: float) -> int:  # Function changing angle to pwm for actuors in px4 should work on the latest PX4(27.11.2025)
         """
         0°  -> PWM = 0   (do góry)
@@ -596,6 +599,7 @@ class DroneHandlerPX4(Node):
         angle_clamped = max(0.0, min(angle_deg, 90.0))
         pwm = int((angle_clamped / 90.0) * 1000.0)
         return pwm
+
     def calib_servo(self, angle_deg_4: float, angle_deg_5: float):
         # actuator 4
         pwm3 = self._angle_to_pwm(angle_deg_4)
@@ -613,6 +617,7 @@ class DroneHandlerPX4(Node):
             self.set_servo(4, pwm3)
             self.set_servo(5, pwm4)
             time.sleep(1/Hz)  
+
     def calib_servo_callback(self, request, response):
         self.get_logger().info(
             f"-- Calib tilts service called: angle_4={request.angle_4}, angle_5={request.angle_5} --"
@@ -644,6 +649,41 @@ class DroneHandlerPX4(Node):
         """Accept or reject a client request to cancel an action."""
         self.get_logger().info('Received cancel request')
         return CancelResponse.ACCEPT
+
+    async def execute_callback(self, goal_handle):
+        self.get_logger().info(f'-- Actuator test action registered --')
+
+        actuator = goal_handle.request.actuator_id
+        value = goal_handle.request.value
+        timeout = goal_handle.request.timeout
+
+        feedback_msg = SetActuatorTest.Feedback()
+        feedback.state = 'Sending VEHICLE_CMD_ACTUATOR_TEST'
+        goal_handle.publish_feedback(feedback_msg)
+
+        # uint16 VEHICLE_CMD_DO_MOTOR_TEST=209 # Motor test command. |Instance (@range 1, )|throttle type|throttle|timeout [s]|Motor count|Test order|Unused|
+
+        self.publish_vehicle_command(
+            VehicleCommand.VEHICLE_CMD_ACTUATOR_TEST,
+            param1=float(actuator),
+            param2=1,
+            param3=value,
+            param4=timeout
+        )
+
+        start = time.time()
+        while time.time() - start < timeout:
+            if goal_handle.is_cancel_requested:
+                goal_handle.canceled()
+                return SetActuatorTest.Result(success=False, message='Cancelled')
+
+            feedback_msg.state = f'Actuator test in progress -- {int(time.time() - start)} seconds elapsed'
+            goal_handle.publish_feedback(feedback_msg)
+            # async, non blocking sleep
+            await asyncio.sleep(0.1)
+
+        goal_handle.succeed()
+        return SetActuatorTest.Result(success=True, message='Actuator test successfull!')
 
 def main():
     rclpy.init()
