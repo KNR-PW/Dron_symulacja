@@ -25,22 +25,27 @@ class ActuatorTestServer(Node):
         self.get_logger().info(f'Received goal: actuator_id={goal_handle.request.actuator_id}, value={goal_handle.request.value}, timeout={goal_handle.request.timeout}')
 
         command_msg = VehicleCommand()
-        command_msg.command = VehicleCommand.VEHICLE_CMD_ACTUATOR_TEST
-        command_msg.param1 = float(req.actuator_id)
-        command_msg.param2 = 1.0 # MOTOR_TEST_THROTTLE_PWM
-        command_msg.param3 = float(req.value)
-        command_msg.param4 = float(req.timeout)
-        command_msg.param5 = 0.0
+        command_msg.timestamp = int(time.time() * 1e6)
+        command_msg.command = 310  # VEHICLE_CMD_ACTUATOR_TEST now
+        command_msg.param1 = float(req.value)          # value -1..1
+        command_msg.param2 = float(req.timeout)        # timeout [s]
+        command_msg.param3 = 33 + req.actuator_id  
+
+        command_msg.target_system = 1
+        command_msg.target_component = 1
+        command_msg.source_system = 255
+        command_msg.source_component = 0
+        command_msg.confirmation = 0
+        command_msg.from_external = True
 
         self.command_publisher.publish(command_msg)
 
         time.sleep(goal_handle.request.timeout)
 
         goal_handle.succeed()
-
         result = SetActuatorTest.Result()
         result.success = True
-        result.message = f'Actuator {goal_handle.request.actuator_id} set to {goal_handle.request.value} for {goal_handle.request.timeout} seconds.'
+        result.message = f'Actuator {req.actuator_id} set to {req.value} for {req.timeout} seconds.'
         return result
     
 def main(args=None):

@@ -11,16 +11,19 @@ class ActuatorTestClient(DroneController):
         super().__init__()
         self._client = ActionClient(self, SetActuatorTest, "set_actuator_test")
 
-        self.PWM_MIN = 1000
-        self.PWM_MAX = 2000
+    def send_servo(self, actuator_id: int, value: float, timeout: float = 1.0):
+        if not -1.0 <= value <= 1.0:
+            self.get_logger().error("Value must be between -1 and 1")
+            return
 
-    def send_servo(self, actuator_id, value, timeout=1.0):
         goal = SetActuatorTest.Goal()
         goal.actuator_id = actuator_id
         goal.value = value
         goal.timeout = timeout
-
-        self._client.wait_for_server()
+        if not self._client.wait_for_server(timeout_sec=2.0):
+            self.get_logger().error("set_actuator_test action server not available")
+            return
+            
         self._send_goal_future = self._client.send_goal_async(
             goal,
             feedback_callback=self.feedback_cb
