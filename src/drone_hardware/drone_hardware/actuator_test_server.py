@@ -25,17 +25,16 @@ class ActuatorTestServer(Node):
         self.get_logger().info(f'Received goal: actuator_id={goal_handle.request.actuator_id}, value={goal_handle.request.value}, timeout={goal_handle.request.timeout}')
 
         command_msg = VehicleCommand()
-        command_msg.timestamp = int(time.time() * 1e6)
+        command_msg.timestamp = int(time.time() * 1e3)
         command_msg.command = 310  # VEHICLE_CMD_ACTUATOR_TEST now
         command_msg.param1 = float(req.value)          # value -1..1
         command_msg.param2 = float(req.timeout)        # timeout [s]
-        command_msg.param3 = 33 + req.actuator_id  
+        command_msg.param5 = 1300.0 + req.actuator_id * 100.0  # actuator number
 
         command_msg.target_system = 1
         command_msg.target_component = 1
         command_msg.source_system = 255
-        command_msg.source_component = 0
-        command_msg.confirmation = 0
+        command_msg.source_component = 1
         command_msg.from_external = True
 
         self.command_publisher.publish(command_msg)
