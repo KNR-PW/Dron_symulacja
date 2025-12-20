@@ -13,8 +13,8 @@ WorldInfo {
   FPS 20
 }
 Viewpoint {
-  orientation -0.2 0 0.98 3.14
-  position 0 10 5
+  orientation 0.028363339622224835 -0.9981822757472139 -0.05317579665212045 5.301673552943007
+  position -15.587707190660662 -7.548547887879861 15.221757217483317
   follow "Iris"
   followSmoothness 0.01
 }
@@ -53,10 +53,10 @@ DEF Iris IrisSimple {
       translation 0 0 -0.25
       rotation 0 0 1 0
       name "Lidar"
-      horizontalResolution 180
+      horizontalResolution 100
       fieldOfView 6.28318
       verticalFieldOfView 3.14159
-      numberOfLayers 30
+      numberOfLayers 20
       minRange 0.05
       maxRange 15
       noise 0.01
