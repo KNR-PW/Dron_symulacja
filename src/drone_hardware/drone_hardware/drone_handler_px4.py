@@ -596,11 +596,11 @@ class DroneHandlerPX4(Node):
         angle_clamped = max(0.0, min(angle_deg, 90.0))
         pwm = int((angle_clamped / 90.0) * 1000.0)
         return pwm
-    def calib_servo(self, angle_deg_4: float, angle_deg_5: float):
+    def calib_servo(self, angle_deg_3: float, angle_deg_4: float):
+        # actuator 3
+        pwm3 = self._angle_to_pwm(angle_deg_3)
         # actuator 4
-        pwm3 = self._angle_to_pwm(angle_deg_4)
-        # actuator 5
-        pwm4 = self._angle_to_pwm(angle_deg_5)
+        pwm4 = self._angle_to_pwm(angle_deg_4)
         self.get_logger().info(
             f"calib_servo: S4 angle={angle_deg_4}° pwm={pwm3}, "
             f"S5 angle={angle_deg_5}° pwm={pwm4}"
@@ -610,8 +610,8 @@ class DroneHandlerPX4(Node):
         Duration = 10 #Pulication time
         while time.time() - start < Duration:   #Publication loop
             self._enable_direct_actuator()
-            self.set_servo(4, pwm3)
-            self.set_servo(5, pwm4)
+            self.set_servo(3, pwm3)
+            self.set_servo(4, pwm4)
             time.sleep(1/Hz)  
     def calib_servo_callback(self, request, response):
         self.get_logger().info(
