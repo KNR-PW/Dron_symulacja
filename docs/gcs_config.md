@@ -6,15 +6,25 @@ Zgodnie z dokumentacją PX4 pobierz QGroundControl na swoją maszynie [link](htt
 ## krok 3
 Włącz Qgroundcontrol oraz symulacje w kontenerze, następnie kliknij w lewym górnym rogu w logo aplikacji wejdź w ***Aplication Settings*** następnie w ***Comm Links*** i tam naciśnij guzik **add**
 ## krok 4
-Wpisz dowolną nazwe połączenia np simulation, dalej zmień typ połączenia z **Serial** na **TCP**\
-Następnie w **Serwer Address** wpisz ten link: 
+
+Wpisz dowolną nazwę połączenia, np. **simulation**, następnie zmień typ połączenia z **Serial** na **TCP**.  
+W polu **Server Address** wpisz:
+
+
 ```bash
 127.0.0.1
 ```
-A w **Port** wpisz te cyfry:
+
+a w polu **Port**:
+
+
 ```bash
 5763
 ```
-Możesz włączy opcje automatycznego Startu by aplikacja zawsze próbowała podłączyć się do tego portu
+
+**Alternatywnie** możesz wybrać typ połączenia **UDP** – wtedy wystarczy zostawić domyślne ustawienia i QGroundControl zazwyczaj **połączy się automatycznie** z symulacją.
+
+Dodatkowo możesz włączyć opcję **Automatically Connect on Start**, aby aplikacja zawsze próbowała połączyć się z symulacją przy starcie.
+
 ## krok 5
 Ciesz się skonfigurowanym gcs

@@ -1,0 +1,366 @@
+# VRML_SIM R2022b utf8
+# Simplified Iris drone model with landing legs for lidar testing.
+
+PROTO IrisSimple [
+  field  SFVec3f     translation     0 0 0
+  field  SFRotation  rotation        0 0 1 0
+  field  SFString    name            "Iris"
+  field  SFString    controller      "void"
+  field  MFString    controllerArgs  []
+  field  SFString    customData      ""
+  field  SFBool      supervisor      FALSE
+  field  SFBool      synchronization TRUE
+  field  MFNode      extensionSlot   []
+]
+{
+  Robot {
+    translation IS translation
+    rotation IS rotation
+    controller IS controller
+    controllerArgs IS controllerArgs
+    customData IS customData
+    supervisor IS supervisor
+    synchronization IS synchronization
+    name IS name
+    children [
+      Group {
+        children IS extensionSlot
+      }
+      # Main body - simple box
+      DEF BODY Pose {
+        translation 0 0 0
+        children [
+          Shape {
+            appearance PBRAppearance {
+              baseColor 0.2 0.2 0.2
+              roughness 0.8
+              metalness 0.3
+            }
+            geometry Box {
+              size 0.18 0.18 0.06
+            }
+          }
+        ]
+      }
+      # Arms - diagonal from body to motors
+      DEF ARM_FRONT_RIGHT Pose {
+        translation 0.13 -0.13 0
+        rotation 0 0 1 -0.785
+        children [
+          Shape {
+            appearance PBRAppearance {
+              baseColor 0.3 0.3 0.3
+              roughness 0.8
+            }
+            geometry Box {
+              size 0.22 0.025 0.025
+            }
+          }
+        ]
+      }
+      DEF ARM_FRONT_LEFT Pose {
+        translation 0.13 0.13 0
+        rotation 0 0 1 0.785
+        children [
+          Shape {
+            appearance PBRAppearance {
+              baseColor 0.3 0.3 0.3
+              roughness 0.8
+            }
+            geometry Box {
+              size 0.22 0.025 0.025
+            }
+          }
+        ]
+      }
+      DEF ARM_BACK_RIGHT Pose {
+        translation -0.13 -0.13 0
+        rotation 0 0 1 0.785
+        children [
+          Shape {
+            appearance PBRAppearance {
+              baseColor 0.3 0.3 0.3
+              roughness 0.8
+            }
+            geometry Box {
+              size 0.22 0.025 0.025
+            }
+          }
+        ]
+      }
+      DEF ARM_BACK_LEFT Pose {
+        translation -0.13 0.13 0
+        rotation 0 0 1 -0.785
+        children [
+          Shape {
+            appearance PBRAppearance {
+              baseColor 0.3 0.3 0.3
+              roughness 0.8
+            }
+            geometry Box {
+              size 0.22 0.025 0.025
+            }
+          }
+        ]
+      }
+      # Landing legs - attached to body corners, proper height
+      DEF LEG_FRONT_RIGHT Pose {
+        translation 0.08 -0.08 -0.07
+        children [
+          Shape {
+            appearance PBRAppearance {
+              baseColor 0.1 0.1 0.1
+              roughness 0.9
+            }
+            geometry Cylinder {
+              height 0.1
+              radius 0.01
+            }
+          }
+        ]
+      }
+      DEF LEG_FRONT_LEFT Pose {
+        translation 0.08 0.08 -0.07
+        children [
+          Shape {
+            appearance PBRAppearance {
+              baseColor 0.1 0.1 0.1
+              roughness 0.9
+            }
+            geometry Cylinder {
+              height 0.1
+              radius 0.01
+            }
+          }
+        ]
+      }
+      DEF LEG_BACK_RIGHT Pose {
+        translation -0.08 -0.08 -0.07
+        children [
+          Shape {
+            appearance PBRAppearance {
+              baseColor 0.1 0.1 0.1
+              roughness 0.9
+            }
+            geometry Cylinder {
+              height 0.1
+              radius 0.01
+            }
+          }
+        ]
+      }
+      DEF LEG_BACK_LEFT Pose {
+        translation -0.08 0.08 -0.07
+        children [
+          Shape {
+            appearance PBRAppearance {
+              baseColor 0.1 0.1 0.1
+              roughness 0.9
+            }
+            geometry Cylinder {
+              height 0.1
+              radius 0.01
+            }
+          }
+        ]
+      }
+      # Lidar mount - visible cylinder under body
+      DEF LIDAR_MOUNT Pose {
+        translation 0 0 -0.04
+        children [
+          Shape {
+            appearance PBRAppearance {
+              baseColor 0.5 0.5 0.5
+              roughness 0.6
+              metalness 0.4
+            }
+            geometry Cylinder {
+              height 0.03
+              radius 0.04
+            }
+          }
+        ]
+      }
+      # Motor mounts at arm ends (correct positions matching propellers)
+      DEF MOTOR1 Pose {
+        translation 0.22 -0.22 0.015
+        children [
+          Shape {
+            appearance PBRAppearance {
+              baseColor 0 0 0.7
+              roughness 0.5
+            }
+            geometry Cylinder {
+              height 0.04
+              radius 0.025
+            }
+          }
+        ]
+      }
+      DEF MOTOR2 Pose {
+        translation -0.22 0.22 0.015
+        children [
+          Shape {
+            appearance PBRAppearance {
+              baseColor 0 0 0.7
+              roughness 0.5
+            }
+            geometry Cylinder {
+              height 0.04
+              radius 0.025
+            }
+          }
+        ]
+      }
+      DEF MOTOR3 Pose {
+        translation 0.22 0.22 0.015
+        children [
+          Shape {
+            appearance PBRAppearance {
+              baseColor 0.1 0.1 0.1
+              roughness 0.5
+            }
+            geometry Cylinder {
+              height 0.04
+              radius 0.025
+            }
+          }
+        ]
+      }
+      DEF MOTOR4 Pose {
+        translation -0.22 -0.22 0.015
+        children [
+          Shape {
+            appearance PBRAppearance {
+              baseColor 0.1 0.1 0.1
+              roughness 0.5
+            }
+            geometry Cylinder {
+              height 0.04
+              radius 0.025
+            }
+          }
+        ]
+      }
+      # Propellers at motor positions
+      Propeller {
+        shaftAxis 0 0 1
+        centerOfThrust 0.22 -0.22 0.04
+        thrustConstants 0.0012 0
+        torqueConstants 5.0e-04 0
+        device RotationalMotor {
+          name "m1_motor"
+          maxVelocity 100
+          maxTorque 30
+          multiplier 1
+        }
+        slowHelix Solid {
+          translation 0.22 -0.22 0.04
+          children [
+            Shape {
+              appearance DEF PROP_BLUE PBRAppearance {
+                baseColor 0 0 0.75
+                metalness 0.3
+              }
+              geometry Box {
+                size 0.18 0.025 0.006
+              }
+            }
+          ]
+        }
+      }
+      Propeller {
+        shaftAxis 0 0 1
+        centerOfThrust -0.22 0.22 0.04
+        thrustConstants 0.0012 0
+        torqueConstants 5.0e-04 0
+        device RotationalMotor {
+          name "m2_motor"
+          maxVelocity 100
+          maxTorque 30
+          multiplier 1
+        }
+        slowHelix Solid {
+          translation -0.22 0.22 0.04
+          children [
+            Shape {
+              appearance DEF PROP_BLACK PBRAppearance {
+                baseColor 0 0 0
+                metalness 0.3
+              }
+              geometry Box {
+                size 0.18 0.025 0.006
+              }
+            }
+          ]
+        }
+      }
+      Propeller {
+        shaftAxis 0 0 1
+        centerOfThrust 0.22 0.22 0.04
+        thrustConstants -0.0012 0
+        torqueConstants 5.0e-04 0
+        device RotationalMotor {
+          name "m3_motor"
+          maxVelocity 100
+          maxTorque 30
+          multiplier -1
+        }
+        slowHelix Solid {
+          translation 0.22 0.22 0.04
+          children [
+            Shape {
+              appearance USE PROP_BLUE
+              geometry Box {
+                size 0.18 0.025 0.006
+              }
+            }
+          ]
+        }
+      }
+      Propeller {
+        shaftAxis 0 0 1
+        centerOfThrust -0.22 -0.22 0.04
+        thrustConstants -0.0012 0
+        torqueConstants 5.0e-04 0
+        device RotationalMotor {
+          name "m4_motor"
+          maxVelocity 100
+          maxTorque 30
+          multiplier -1
+        }
+        slowHelix Solid {
+          translation -0.22 -0.22 0.04
+          children [
+            Shape {
+              appearance USE PROP_BLACK
+              geometry Box {
+                size 0.18 0.025 0.006
+              }
+            }
+          ]
+        }
+      }
+      Accelerometer {
+      }
+      GPS {
+      }
+      Gyro {
+      }
+      InertialUnit {
+      }
+    ]
+    boundingObject Box {
+      size 0.5 0.5 0.15
+    }
+    physics Physics {
+      density -1
+      mass 1.5
+      centerOfMass [ 0 0 0 ]
+      inertiaMatrix [
+        2.9125e-02 2.9125e-02 5.5225e-02
+        0 0 0
+      ]
+    }
+  }
+}
