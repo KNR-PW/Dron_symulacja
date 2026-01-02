@@ -319,13 +319,22 @@ class FollowDetections(DroneController):
         dt = now - self.last_kf_time
         self.last_kf_time = now
 
+        # --- FIX: Wait for KF initialization ---
+        if not self.kf.initialized:
+            if (now - self.last_seen) > self.lost_timeout:
+                 self.get_logger().warn("Timeout waiting for first detection.")
+                 self.send_vectors(0.0, 0.0, 0.0, 0.0)
+                 self.state = "OK"
+                 self.centering = False
+                 try: self.timer.cancel()
+                 except: pass
+            return
+        # ---------------------------------------
+
         # Predict position (GPS Denied / Relative)
-        if self.kf.initialized:
-            pred_stab = self.kf.predict(dt)
-            x_pred_stab = pred_stab[0]
-            y_pred_stab = pred_stab[1]
-        else:
-            x_pred_stab, y_pred_stab = 0.0, 0.0
+        pred_stab = self.kf.predict(dt)
+        x_pred_stab = pred_stab[0]
+        y_pred_stab = pred_stab[1]
 
         if (time.time() - self.last_seen) > self.lost_timeout:
             # brak markera niedawno -> wyhamuj
@@ -383,7 +392,7 @@ class FollowDetections(DroneController):
         # Gains should be tuned. These are example values.
         YAW_KP = 2.0  # Proportional gain
         YAW_KI = 0.2  # Integral gain
-        YAW_KD = 0.4  # Derivative gain
+        YAW_KD = 0.5  # Derivative gain
 
 
         # Proportional term
@@ -513,10 +522,24 @@ def main():
         
         mission.toggle_control()
 
-        if (mission.altitude - target_height < 1.0):
-            mission.get_logger().info("Enabling Hybrid Tracker Node...")
-            mission.enable_tracker_node(True)
-            mission.last_seen = time.time()
+        # Wait for drone to reach target altitude
+        mission.get_logger().info(f"Waiting to reach target altitude ({target_height}m)...")
+        while rclpy.ok():
+            rclpy.spin_once(mission, timeout_sec=0.1)
+            current_alt = mission.get_altitude()
+            
+            if current_alt is not None:
+                # Check if we are close enough (e.g. within 0.5m)
+                if abs(current_alt - target_height) < 0.5:
+                    mission.get_logger().info(f"Target altitude reached: {current_alt:.2f}m")
+                    break
+            
+            # Optional: Log status every now and then
+            # mission.get_logger().info(f"Climbing... {current_alt}")
+
+        mission.get_logger().info("Enabling Hybrid Tracker Node...")
+        mission.enable_tracker_node(True)
+        mission.last_seen = time.time()
                     
         mission.fly_to_detection()
         # mission.center_detection()

@@ -13,7 +13,7 @@ class CarDriverNode(Node):
         self.create_subscription(Twist, 'cmd_vel', self.cmd_vel_callback, 10)
         
         self.target_speed_kmh = 10.0
-        self.target_steering_rad = 0.4
+        self.target_steering_rad = 0.5
         
         self.get_logger().info("ROS 2 Car Driver Node started. Listening on /cmd_vel...")
 

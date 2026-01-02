@@ -47,6 +47,9 @@ class HybridTrackerNode(Node):
         self.tracked_class_name = ""
         self.miss_counter = 0
         self.max_misses = 10 
+
+        self.detection_interval = 10 # frames
+        self.frame_count = 0
         
         self.node_enabled = False  # Start disabled!
         self.srv = self.create_service(SetBool, 'enable_tracker', self.enable_callback)
@@ -68,7 +71,7 @@ class HybridTrackerNode(Node):
         if self.node_enabled:
             self.get_logger().info("Tracker ENABLED via service.")
             # Reset state when enabling to ensure fresh start
-            self.tracking_active = False
+            self.tracking_active = True
             self.miss_counter = 0
         else:
             self.get_logger().info("Tracker DISABLED via service.")
@@ -130,26 +133,31 @@ class HybridTrackerNode(Node):
         mode = "SEARCHING"
         tracker_name = self.tracker.tracker_type
 
-        try:
-            if self.tracking_active:
-                # --- TRACKER UPDATE ---
-                success, bbox = self.tracker.update(frame)
-                
-                if success:
-                    mode = f"TRACKING ({tracker_name})"
-                    x, y, w, h = [int(v) for v in bbox]
-                    final_bbox = (x, y, x+w, y+h)
-                    self.miss_counter = 0
-                    self._add_detection_to_msg(detections_msg, x, y, w, h, self.tracked_class_name, 1.0)
-                else:
-                    self.miss_counter += 1
-                    if self.miss_counter > self.max_misses:
-                        self.tracking_active = False
-                        self.get_logger().info("Tracking lost. Resetting to YOLO.")
+        self.frame_count += 1
 
-            if not self.tracking_active:
-                # --- YOLO DETECTION ---
-                mode = "DETECTING (YOLO)"
+        try:            
+            # --- TRACKER UPDATE ---
+            tracking_success = False
+            if self.tracking_active:
+                if frame is not None and frame.size > 0:
+                    success, bbox = self.tracker.update(frame)
+                    if success:
+                        tracking_success = True
+                        mode = f"TRACKING ({tracker_name})"
+                        x, y, w, h = [int(v) for v in bbox]
+                        final_bbox = (x, y, x+w, y+h)
+                        self._add_detection_to_msg(detections_msg, x, y, w, h, self.tracked_class_name, 1.0)
+                    else:
+                        self.tracking_active = False # Lost track
+
+            # --- YOLO DETECTION ---
+            # Run if: 1. Not tracking, 2. Tracking lost, 3. Periodic check
+            should_detect = (not tracking_success) or (self.frame_count % self.detection_interval == 0)
+            
+            if should_detect:
+                if not tracking_success:
+                    mode = "DETECTING (YOLO)"
+                
                 yolo_detections, _ = self.yolo.detect(frame)
                 
                 if yolo_detections:
@@ -158,16 +166,19 @@ class HybridTrackerNode(Node):
                     w = x2 - x1
                     h = y2 - y1
                     
-                    # --- FIX: Cast to int for OpenCV Tracker ---
-                    bbox_int = (int(x1), int(y1), int(w), int(h))
-                    
-                    # Init Tracker
-                    self.tracker.init(frame, bbox_int)
-                    self.tracking_active = True
-                    self.tracked_class_name = best_det['class_name']
-                    final_bbox = (int(x1), int(y1), int(x2), int(y2))
-                    
-                    self._add_detection_to_msg(detections_msg, x1, y1, w, h, best_det['class_name'], best_det['confidence'])
+                    # Sanity check
+                    if w > 0 and h > 0:
+                        bbox_int = (int(x1), int(y1), int(w), int(h))
+                        
+                        # Re-initialize tracker (correct drift or start new track)
+                        self.tracker.init(frame, bbox_int)
+                        self.tracking_active = True
+                        self.tracked_class_name = best_det['class_name']
+                        
+                        # If we weren't tracking, use this detection result
+                        if not tracking_success:
+                            final_bbox = (int(x1), int(y1), int(x2), int(y2))
+                            self._add_detection_to_msg(detections_msg, x1, y1, w, h, best_det['class_name'], best_det['confidence'])
 
             # Publish
             self.detection_pub.publish(detections_msg)
