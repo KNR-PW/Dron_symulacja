@@ -5,6 +5,8 @@ import time
 import rclpy
 from rclpy.node import Node
 import math
+import numpy as np
+from drone_autonomy.kalman_filter import KalmanFilter
 
 from vision_msgs.msg import Detection2DArray
 from drone_interfaces.msg import VelocityVectors, Telemetry
@@ -64,6 +66,10 @@ class FollowDetections(DroneController):
         self.pitch_rad = None
         self.yaw = None
 
+        # --- Kalman Filter ---
+        self.kf = KalmanFilter()
+        self.last_kf_time = time.time()
+
         self.state = "OK"
 
         # ---- Subskrypcja markera ----
@@ -97,17 +103,6 @@ class FollowDetections(DroneController):
         self.set_gimbal_cli = self.create_client(SetGimbalAngle, 'set_gimbal_angle')
         while not self.set_gimbal_cli.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('Gimbal control service unavailable, waiting...')
-
-        # # GPS (get altitude) client — block until available (matches your example)
-        # self.gps_cli = self.create_client(GetLocationRelative, 'knr_hardware/get_location_relative')
-        # while not self.gps_cli.wait_for_service(timeout_sec=1.0):
-        #     self.get_logger().info('GPS service not available, waiting again...')
-
-        # Attitude client — block until available (simple pattern from example)
-        # self.atti_cli = self.create_client(GetAttitude, 'knr_hardware/get_attitude')
-        # while not self.atti_cli.wait_for_service(timeout_sec=1.0):
-        #     self.get_logger().info('attitude service not available, waiting again...')
-        # self._attitude_fail_count = 0
 
         # centering flag and gimbal timer (timer runs but only acts when centering=True)
         self.centering = False
@@ -266,6 +261,41 @@ class FollowDetections(DroneController):
         a = clamp(self.lowpass, 0.0, 1.0)
         self.ex_f = (1 - a) * self.ex_f + a * ex
         self.ey_f = (1 - a) * self.ey_f + a * ey
+        
+        # --- KALMAN FILTER UPDATE (GPS Denied) ---
+        if self.altitude is not None and self.pitch_rad is not None and self.yaw is not None:
+            # 1. Calculate Distance on Ground (Body Frame)
+            gimbal_angle_rad = self.degrees_to_radians(self.gimbal_angle_deg)
+            overall_pitch_rad = gimbal_angle_rad - self.pitch_rad
+            
+            if (self.gimbal_angle_deg >= 89.0 and self.radians_to_degrees(overall_pitch_rad) >= 90.0):
+                half_vertical_pixel_count = 240.0
+                pitch_offset = 0.6545 * self.ey_px / half_vertical_pixel_count
+                overall_pitch_rad += pitch_offset
+
+            denom = math.tan(overall_pitch_rad)
+            if abs(denom) < 0.01: 
+                d_ground = 20.0
+            else:
+                d_ground = self.altitude / denom
+            
+            # 2. Calculate Azimuth (Angle offset in Yaw)
+            fov_x_rad = self.degrees_to_radians(100.0) 
+            azimuth_rel = (self.ex_px / (self.img_w / 2.0)) * (fov_x_rad / 2.0)
+            
+            # 3. Calculate Position in Body Frame (X=Forward, Y=Right)
+            x_body = d_ground 
+            y_body = d_ground * math.tan(azimuth_rel)
+            
+            # 4. Rotate to Yaw-Stabilized Frame
+            sin_y = math.sin(self.yaw)
+            cos_y = math.cos(self.yaw)
+            
+            x_stab = x_body * cos_y - y_body * sin_y
+            y_stab = x_body * sin_y + y_body * cos_y
+            
+            self.kf.update(np.array([x_stab, y_stab]))
+
         self.last_seen = time.time()
 
     # ──────────────────────────────────────────────────────────
@@ -284,6 +314,19 @@ class FollowDetections(DroneController):
 
     def drone_control_loop(self): # TODO: only follow the object, not the gimbal's poi
 
+        # Calculate dt for KF
+        now = time.time()
+        dt = now - self.last_kf_time
+        self.last_kf_time = now
+
+        # Predict position (GPS Denied / Relative)
+        if self.kf.initialized:
+            pred_stab = self.kf.predict(dt)
+            x_pred_stab = pred_stab[0]
+            y_pred_stab = pred_stab[1]
+        else:
+            x_pred_stab, y_pred_stab = 0.0, 0.0
+
         if (time.time() - self.last_seen) > self.lost_timeout:
             # brak markera niedawno -> wyhamuj
             self.get_logger().warn(f"Detection lost for more than {self.lost_timeout}s, stopping!")
@@ -297,45 +340,44 @@ class FollowDetections(DroneController):
             return
 
         h_m = self.get_altitude()
-        if h_m is None:
-            self.get_logger().error("Altitude not available, skipping control step")
+        if h_m is None or self.yaw is None:
+            self.get_logger().error("Altitude/Yaw not available, skipping control step")
             return
             
-        drone_pitch_rad = self.pitch_rad
+        # --- RECONSTRUCT TARGET IN BODY FRAME ---
+        # We have predicted position in Stabilized Frame (x_pred_stab, y_pred_stab)
+        # We need to rotate it back to Body Frame using current Yaw
+        # x_body = x_stab * cos(-yaw) - y_stab * sin(-yaw)
+        # y_body = x_stab * sin(-yaw) + y_stab * cos(-yaw)
+        
+        sin_ny = math.sin(-self.yaw)
+        cos_ny = math.cos(-self.yaw)
+        
+        x_target_body = x_pred_stab * cos_ny - y_pred_stab * sin_ny
+        y_target_body = x_pred_stab * sin_ny + y_pred_stab * cos_ny
+        
+        # Now use x_target_body (Forward dist) and y_target_body (Lateral dist) for control
+        
+        d_ground_m = x_target_body
+        # Offset for camera position
+        d_ground_m += 0.05 
 
-        if drone_pitch_rad is None:
-            # attitude not available this tick, skip control to avoid bad math
-            return
-
-        gimbal_angle_rad = self.degrees_to_radians(self.gimbal_angle_deg)
-
-        overall_pitch_rad = gimbal_angle_rad - drone_pitch_rad # drone's pitch is in radians and inverted (negative pitch = nose down)
-
-        if (self.gimbal_angle_deg >= 89.0 and self.radians_to_degrees(overall_pitch_rad) >= 90.0): # to enable going back
-            half_vertical_pixel_count = 240.0 # for 480p
-
-            # different approach:
-            # pitch / half VFOV = ey_px / (vertical_pixel_count / 2.0)
-            # vfov = 75 deg -> 37.5 deg to rad -> 0.6545 radians
-            pitch = 0.6545 * self.ey_px / half_vertical_pixel_count
-
-            overall_pitch_rad += pitch
- 
-        # else:
-
-        denom = math.tan(overall_pitch_rad)
-        if abs(denom) < 0.01:
-            d_ground_m = 20.0 # max distance to cover
-        else:
-            d_ground_m = h_m / denom
-            
-        # drone's gimbal is 0.035m off center in the x direction
-        d_ground_m += 0.05 # TODO correct landing so it lands on target not 'behind' the target
-
-        # Front speed (vx) to reduce ground distance to marker
+        # Front speed (vx)
         vx = self.kp * d_ground_m 
         vx = clamp(vx, -self.max_vel, self.max_vel)
 
+        # Yaw Control
+        # Calculate angle to target in body frame
+        # angle = atan2(y, x)
+        angle_to_target = math.atan2(y_target_body, x_target_body)
+        
+        # Use this angle as error for Yaw PID
+        # Note: self.ex_f was pixel error. Now we use physical angle error.
+        # We can map angle back to "normalized pixel error" for your PID or use angle directly.
+        # Let's use angle directly (radians) and adjust KP.
+        
+        yaw_error = angle_to_target
+        
         # TODO: PID not just P
         # PID controller for yaw rate
         # Gains should be tuned. These are example values.
@@ -343,13 +385,9 @@ class FollowDetections(DroneController):
         YAW_KI = 0.2  # Integral gain
         YAW_KD = 0.4  # Derivative gain
 
-        # Calculate time delta
-        current_time = time.time()
-        dt = current_time - getattr(self, 'last_control_time', current_time)
-        self.last_control_time = current_time
 
         # Proportional term
-        error = self.ex_f
+        error = yaw_error # Changed from self.ex_f
         p_term = YAW_KP * error
 
         # Integral term with anti-windup
@@ -386,7 +424,8 @@ class FollowDetections(DroneController):
         # vz = self.kp * (h_m - self.target_alt)
         # vz = clamp(vz, -self.max_vel, self.max_vel)
         
-        if abs(d_ground_m) < 0.2 and abs(self.ex_px) < 20:
+        # Check completion (using body frame distance)
+        if abs(d_ground_m) < 0.2 and abs(yaw_error) < 0.1:
             # Osiągnięto cel -> zatrzymaj ruch
             self.get_logger().info("Target reached, stopping approach.")
             self.send_vectors(0.0, 0.0, 0.0, 0.0)
