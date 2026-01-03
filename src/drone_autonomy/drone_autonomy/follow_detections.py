@@ -549,7 +549,7 @@ def main():
     
     try:
         mission.arm()
-        target_height = 4.0
+        target_height = 3.0
         
         mission.set_gimbal_angle(45.0)
         mission.takeoff(target_height)
@@ -594,7 +594,7 @@ def main():
             for speed in [2.0, 4.0, 6.0]:
                 # Move Forward
                 mission.send_car_command(speed, 0.0)
-                t_end = time.time() + 3.0
+                t_end = time.time() + 6.0 / speed
                 while rclpy.ok() and time.time() < t_end:
                     rclpy.spin_once(mission, timeout_sec=0.05)
 
@@ -606,7 +606,7 @@ def main():
 
                 # Move Backward
                 mission.send_car_command(-speed, 0.0)
-                t_end = time.time() + 3.0
+                t_end = time.time() + 6.0 / speed
                 while rclpy.ok() and time.time() < t_end:
                     rclpy.spin_once(mission, timeout_sec=0.05)
 

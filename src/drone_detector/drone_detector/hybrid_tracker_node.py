@@ -35,7 +35,8 @@ class HybridTrackerNode(Node):
         self.init_error = None
 
         try:
-            self.yolo = YoloDetector(weights_path=weights, target_class_ids=[2], conf_threshold=0.5)
+            # self.yolo = YoloDetector(weights_path=weights, target_class_ids=[2], conf_threshold=0.2)
+            self.yolo = YoloDetector(weights_path=weights, target_class_ids=[2], conf_threshold=0.2)
             self.tracker = OpenCVTrackerWrapper(tracker_type=tracker_type)
             self.get_logger().info("Initialization SUCCESS")
         except Exception as e:
@@ -50,12 +51,12 @@ class HybridTrackerNode(Node):
 
         self.detection_interval = 10 # frames
         self.frame_count = 0
-        
+
         self.node_enabled = False  # Start disabled!
         self.srv = self.create_service(SetBool, 'enable_tracker', self.enable_callback)
         
         self.image_sub = self.create_subscription(
-            Image, '/gimbal_camera', self.image_callback, 10)
+            Image, '/gimbal_camera', self.image_callback, 1) # Queue size 1 to process only latest frames
         
         self.detection_pub = self.create_publisher(
             Detection2DArray, '/detections', 10)
@@ -179,6 +180,8 @@ class HybridTrackerNode(Node):
                         if not tracking_success:
                             final_bbox = (int(x1), int(y1), int(x2), int(y2))
                             self._add_detection_to_msg(detections_msg, x1, y1, w, h, best_det['class_name'], best_det['confidence'])
+                    
+                    # self.get_logger().info("successful detection")
 
             # Publish
             self.detection_pub.publish(detections_msg)
