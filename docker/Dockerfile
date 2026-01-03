@@ -42,7 +42,8 @@ RUN apt update && apt install -y \
     python3-setuptools \ 
     python3-future \ 
     ros-humble-webots-ros2-driver \
-    ros-humble-tf-transformations
+    ros-humble-tf-transformations \
+    ros-humble-rqt-plot
 
 RUN pip install \
     empy==3.3.4 \

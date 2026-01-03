@@ -12,8 +12,9 @@ class CarDriverNode(Node):
         # Subscribe to /cmd_vel
         self.create_subscription(Twist, 'cmd_vel', self.cmd_vel_callback, 10)
         
-        self.target_speed_kmh = 10.0
-        self.target_steering_rad = 0.5
+        # commands sent by the mission
+        self.target_speed_kmh = 0.0
+        self.target_steering_rad = 0.0
         
         self.get_logger().info("ROS 2 Car Driver Node started. Listening on /cmd_vel...")
 

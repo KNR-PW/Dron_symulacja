@@ -13,6 +13,7 @@ from drone_interfaces.msg import VelocityVectors, Telemetry
 from drone_interfaces.srv import ToggleVelocityControl, SetGimbalAngle
 from drone_autonomy.drone_comunication.drone_controller import DroneController
 from std_srvs.srv import SetBool
+from geometry_msgs.msg import Point, Twist
 
 # TODO: fix aruco node (numpy)
 # TODO: fix wrong world opening
@@ -122,6 +123,14 @@ class FollowDetections(DroneController):
 
         # Client to enable the tracker
         self.tracker_client = self.create_client(SetBool, 'enable_tracker')
+
+        # Debug publishers for PID tuning (x=target, y=error, z=output)
+        self.pub_dbg_yaw = self.create_publisher(Point, '/debug/yaw', 10)
+        self.pub_dbg_gimbal = self.create_publisher(Point, '/debug/gimbal', 10)
+        self.pub_dbg_vel = self.create_publisher(Point, '/debug/vel', 10)
+
+        # Car control publisher
+        self.car_pub = self.create_publisher(Twist, '/cmd_vel', 10)
         
 
     def telemetry_callback(self, msg):
@@ -165,7 +174,7 @@ class FollowDetections(DroneController):
             self.get_logger().error(f'Service calling unsuccessful: {e}')
 
     # ──────────────────────────────────────────────────────────
-    def gimbal_control_loop(self): # TODO: implement kalman filter
+    def gimbal_control_loop(self): # TODO: pid not p, plot ey_f in real time
         """Periodically adjust gimbal pitch to keep the marker centered vertically.
         Uses the filtered vertical error ey_f (normalized)."""
         # only act when centering requested
@@ -189,6 +198,13 @@ class FollowDetections(DroneController):
             self.set_gimbal_cli.call_async(req)
         except Exception:
             pass
+
+        # Publish debug info
+        dbg_msg = Point()
+        dbg_msg.x = 0.0  # target error
+        dbg_msg.y = float(self.ey_f)  # current error
+        dbg_msg.z = float(delta_deg)  # output
+        self.pub_dbg_gimbal.publish(dbg_msg)
 
         # debug log occasionally
         # self._gimbal_dbg_cnt += 1
@@ -312,7 +328,7 @@ class FollowDetections(DroneController):
     def radians_to_degrees(self, radians: float) -> float:
         return radians * (180.0 / math.pi)
 
-    def drone_control_loop(self): # TODO: only follow the object, not the gimbal's poi
+    def drone_control_loop(self):
 
         # Calculate dt for KF
         now = time.time()
@@ -387,13 +403,11 @@ class FollowDetections(DroneController):
         
         yaw_error = angle_to_target
         
-        # TODO: PID not just P
         # PID controller for yaw rate
         # Gains should be tuned. These are example values.
         YAW_KP = 2.0  # Proportional gain
         YAW_KI = 0.2  # Integral gain
         YAW_KD = 0.5  # Derivative gain
-
 
         # Proportional term
         error = yaw_error # Changed from self.ex_f
@@ -445,6 +459,19 @@ class FollowDetections(DroneController):
             except Exception:
                 pass
         else:
+            # Publish debug info
+            dbg_yaw = Point()
+            dbg_yaw.x = 0.0
+            dbg_yaw.y = float(yaw_error)
+            dbg_yaw.z = float(yaw_rate)
+            self.pub_dbg_yaw.publish(dbg_yaw)
+
+            dbg_vel = Point()
+            dbg_vel.x = 0.0
+            dbg_vel.y = float(d_ground_m)
+            dbg_vel.z = float(vx)
+            self.pub_dbg_vel.publish(dbg_vel)
+
             # Send vectors. 
             # ARGUMENTS: (Forward_Speed, Yaw_Rate, Vertical_Speed)
             # We are passing yaw_rate in the second argument because we modified drone_handler.py
@@ -508,6 +535,13 @@ class FollowDetections(DroneController):
         else:
             self.get_logger().error("Failed to call enable_tracker service")
 
+    def send_car_command(self, linear_x, angular_z=0.0):
+        msg = Twist()
+        msg.linear.x = float(linear_x)
+        msg.angular.z = float(angular_z)
+        self.car_pub.publish(msg)
+        self.get_logger().info(f"Sent car command: v={linear_x} m/s, w={angular_z} rad/s")
+
 
 def main():
     rclpy.init()
@@ -515,9 +549,9 @@ def main():
     
     try:
         mission.arm()
-        target_height = 3.0
+        target_height = 4.0
         
-        mission.set_gimbal_angle(35.0)
+        mission.set_gimbal_angle(45.0)
         mission.takeoff(target_height)
         
         mission.toggle_control()
@@ -541,25 +575,76 @@ def main():
         mission.enable_tracker_node(True)
         mission.last_seen = time.time()
                     
-        mission.fly_to_detection()
-        # mission.center_detection()
+        # mission.fly_to_detection()
+        # mission.send_vectors(0.0, -6.5, 0.0, 0.0)
+
+        mission.send_goto_relative(0.0, -6.5, 0.0)
+        mission.center_detection()
+        # mission.fly_to_detection()
+
+        # --- TUNING SEQUENCE ---
+        mission.get_logger().info("Starting Continuous Tuning Loop...")
         
-        # time.sleep(60.0)  
+        # Initial Hover
+        t_end = time.time() + 5.0
+        while rclpy.ok() and time.time() < t_end:
+            rclpy.spin_once(mission, timeout_sec=0.05)
 
-        run_seconds = 60.0
-        mission.get_logger().info(f"Running fly_to_detection mission for {run_seconds}s...")
-        t0 = time.time()
+        while rclpy.ok():
+            for speed in [2.0, 4.0, 6.0]:
+                # Move Forward
+                mission.send_car_command(speed, 0.0)
+                t_end = time.time() + 3.0
+                while rclpy.ok() and time.time() < t_end:
+                    rclpy.spin_once(mission, timeout_sec=0.05)
 
-        while rclpy.ok(): # and (time.time() - t0) < run_seconds:
-            rclpy.spin_once(mission, timeout_sec=0.1)
-            # Sprawdź, czy misja się zakończyła (np. dron dotarł do celu)
-            if mission.state != "BUSY":
-                mission.get_logger().info("Mission finished, proceeding to land.")
-                break
+                # Stop
+                mission.send_car_command(0.0, 0.0)
+                t_end = time.time() + 2.0
+                while rclpy.ok() and time.time() < t_end:
+                    rclpy.spin_once(mission, timeout_sec=0.05)
+
+                # Move Backward
+                mission.send_car_command(-speed, 0.0)
+                t_end = time.time() + 3.0
+                while rclpy.ok() and time.time() < t_end:
+                    rclpy.spin_once(mission, timeout_sec=0.05)
+
+                # Stop
+                mission.send_car_command(0.0, 0.0)
+                t_end = time.time() + 2.0
+                while rclpy.ok() and time.time() < t_end:
+                    rclpy.spin_once(mission, timeout_sec=0.05)  
+        
+                # # Move Forward
+                # mission.send_car_command(speed, 0.0)
+                # t_end = time.time() + 3.0
+                # while rclpy.ok() and time.time() < t_end:
+                #     rclpy.spin_once(mission, timeout_sec=0.05)
+
+                # # Stop
+                # mission.send_car_command(0.0, 0.0)
+                # t_end = time.time() + 2.0
+                # while rclpy.ok() and time.time() < t_end:
+                #     rclpy.spin_once(mission, timeout_sec=0.05)  
+
+     
+
+        # run_seconds = 60.0
+        # mission.get_logger().info(f"Running fly_to_detection mission for {run_seconds}s...")
+        # t0 = time.time()
+
+        # while rclpy.ok(): # and (time.time() - t0) < run_seconds:
+        #     rclpy.spin_once(mission, timeout_sec=0.1)
+        #     # Sprawdź, czy misja się zakończyła (np. dron dotarł do celu)
+        #     if mission.state != "BUSY":
+        #         mission.get_logger().info("Mission finished, proceeding to land.")
+        #         break
         
     except KeyboardInterrupt:
         mission.get_logger().info("Keyboard interrupt, stopping mission.")
         mission.enable_tracker_node(False) #TODO: Fix
+        mission.send_car_command(0.0, 0.0)
     finally:
         mission.get_logger().info("Stopping any active loops and landing.")
         mission.land()
