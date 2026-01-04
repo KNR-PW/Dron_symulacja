@@ -12,6 +12,10 @@ from rclpy.qos import qos_profile_sensor_data
 from rcl_interfaces.msg import ParameterDescriptor, ParameterType
 
 import numpy as np
+# Fix for numpy 1.24+ deprecation of np.float
+if not hasattr(np, 'float'):
+    np.float = float
+
 import cv2
 import tf_transformations
 
