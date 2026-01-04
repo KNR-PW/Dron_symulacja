@@ -18,15 +18,16 @@ WorldInfo {
   FPS 80
 }
 Viewpoint {
-  orientation 0.19621594131930406 0.26630797177911675 -0.9437051279605684 1.3257889030313064
-  position -10.73053712445078 11.711451609397031 6.994588868749215
+  orientation 0.10461546750515424 0.8325602148592867 -0.5439660766924131 0.4540322910115094
+  position -19.121021455197578 -1.2139553814692592 9.016775290906752
   follow "Iris"
   followSmoothness 0.01
 }
 TexturedBackground {
 }
 TeslaModel3 {
-  translation -5 0 0.4
+  translation 6 -8 0.4
+  rotation 0 0 -1 -1.5707953071795862
   color 0.666667 0 0
   controller "tesla_circle_driver"
 }
@@ -151,7 +152,7 @@ ArucoMarker {
   translation -5.5 -7.5 0.005
 }
 Pedestrian {
-  translation -1 -7 1.27
+  translation -8.42 -7 1.27
 }
 ArucoMarker {
   translation -5.5 -10.5 0.005
@@ -164,7 +165,7 @@ ArucoMarker {
   markerId "2"
 }
 PlasticCrate {
-  translation -4 -5 0
+  translation -8.35 -5 0
   size 1 1 0.4
 }
 Solid {

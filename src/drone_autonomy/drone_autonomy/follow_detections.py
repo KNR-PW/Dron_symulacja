@@ -67,6 +67,12 @@ class FollowDetections(DroneController):
         self.pitch_rad = None
         self.yaw = None
 
+        # --- Performance Monitoring ---
+        self.recording = False
+        self.error_history = []
+        self.time_history = []
+        self.start_time = 0.0
+
         # --- Kalman Filter ---
         self.kf = KalmanFilter()
         self.last_kf_time = time.time()
@@ -139,6 +145,42 @@ class FollowDetections(DroneController):
         self.roll = msg.roll
         self.pitch_rad = msg.pitch
         self.yaw = msg.yaw
+
+    def start_recording(self):
+        """Resets and starts recording error data."""
+        self.error_history = []
+        self.time_history = []
+        self.start_time = time.time()
+        self.recording = True
+        self.get_logger().info(">>> Started recording control performance data.")
+
+    def stop_and_report(self, label="Maneuver"):
+        """Stops recording and prints metrics."""
+        self.recording = False
+        if not self.error_history:
+            self.get_logger().warn("No data recorded to report.")
+            return
+
+        errors = np.array(self.error_history)
+        times = np.array(self.time_history)
+        
+        # Metrics
+        mae = np.mean(np.abs(errors))          # Mean Absolute Error
+        rmse = np.sqrt(np.mean(errors**2))     # Root Mean Square Error
+        max_err = np.max(np.abs(errors))       # Max Overshoot/Error
+        
+        # Steady State Error (last 10% of samples)
+        n_tail = max(1, int(len(errors) * 0.1))
+        steady_state_err = np.mean(np.abs(errors[-n_tail:]))
+
+        self.get_logger().info(f"=== Performance Report: {label} ===")
+        self.get_logger().info(f"  Duration:       {times[-1]:.2f} s")
+        self.get_logger().info(f"  Samples:        {len(errors)}")
+        self.get_logger().info(f"  MAE (Avg Err):  {mae:.4f} rad")
+        self.get_logger().info(f"  RMSE:           {rmse:.4f} rad")
+        self.get_logger().info(f"  Max Error:      {max_err:.4f} rad")
+        self.get_logger().info(f"  Steady State:   {steady_state_err:.4f} rad")
+        self.get_logger().info(f"=====================================")
 
         #Definiowanie misji
 
@@ -403,9 +445,13 @@ class FollowDetections(DroneController):
         
         yaw_error = angle_to_target
         
+        # --- RECORDING ---
+        if self.recording:
+            self.error_history.append(yaw_error)
+            self.time_history.append(time.time() - self.start_time)
+
         # PID controller for yaw rate
-        # Gains should be tuned. These are example values.
-        YAW_KP = 2.0  # Proportional gain
+        YAW_KP = 2.5  # Proportional gain
         YAW_KI = 0.2  # Integral gain
         YAW_KD = 0.5  # Derivative gain
 
@@ -433,10 +479,11 @@ class FollowDetections(DroneController):
             self.integral_error = 0.0
 
         # Total PID output
-        yaw_rate = p_term + i_term + d_term
+        # yaw_rate = p_term + i_term + d_term
+        yaw_rate = p_term
         
         # Clamp yaw rate to reasonable speed (e.g., 45 deg/s = ~0.8 rad/s)
-        yaw_rate = clamp(yaw_rate, -0.8, 0.8)
+        # yaw_rate = clamp(yaw_rate, -0.8, 0.8)
 
         # Dodatkowe logowanie do debugowania
         # self.get_logger().info(f"Control: h={h_m:.2f}, d={d_ground_m:.2f} -> vx={vx:.2f}, yaw_rate={yaw_rate:.2f}")
@@ -462,8 +509,8 @@ class FollowDetections(DroneController):
             # Publish debug info
             dbg_yaw = Point()
             dbg_yaw.x = 0.0
-            dbg_yaw.y = float(yaw_error)
-            dbg_yaw.z = float(yaw_rate)
+            dbg_yaw.y = float(math.degrees(yaw_error))
+            dbg_yaw.z = float(math.degrees(yaw_rate))
             self.pub_dbg_yaw.publish(dbg_yaw)
 
             dbg_vel = Point()
@@ -475,7 +522,8 @@ class FollowDetections(DroneController):
             # Send vectors. 
             # ARGUMENTS: (Forward_Speed, Yaw_Rate, Vertical_Speed)
             # We are passing yaw_rate in the second argument because we modified drone_handler.py
-            self.send_vectors(vx, 0.0, vz, yaw_rate)
+            # self.send_vectors(vx, 0.0, vz, yaw_rate)
+            self.send_vectors(0.0, 0.0, vz, yaw_rate)
             
 
     # ──────────────────────────────────────────────────────────
@@ -575,12 +623,11 @@ def main():
         mission.enable_tracker_node(True)
         mission.last_seen = time.time()
                     
-        # mission.fly_to_detection()
         # mission.send_vectors(0.0, -6.5, 0.0, 0.0)
 
-        mission.send_goto_relative(0.0, -6.5, 0.0)
-        mission.center_detection()
-        # mission.fly_to_detection()
+        # mission.send_goto_relative(0.0, -6.5, 0.0)
+        # mission.center_detection()
+        mission.fly_to_detection()
 
         # --- TUNING SEQUENCE ---
         mission.get_logger().info("Starting Continuous Tuning Loop...")
@@ -590,29 +637,39 @@ def main():
         while rclpy.ok() and time.time() < t_end:
             rclpy.spin_once(mission, timeout_sec=0.05)
 
+        # Correction factor for backward movement to compensate for drift
+        # If the car moves forward more than backward, increase this > 1.0
+        back_correction = 1.17
+        move_duration = 2.0
+
         while rclpy.ok():
-            for speed in [2.0, 4.0, 6.0]:
+            for speed in [6.0]:
                 # Move Forward
+                mission.start_recording()
                 mission.send_car_command(speed, 0.0)
-                t_end = time.time() + 6.0 / speed
+                t_end = time.time() + move_duration
                 while rclpy.ok() and time.time() < t_end:
                     rclpy.spin_once(mission, timeout_sec=0.05)
+                mission.stop_and_report(f"Forward Speed {speed}")
 
                 # Stop
                 mission.send_car_command(0.0, 0.0)
-                t_end = time.time() + 2.0
+                t_end = time.time() + 5.0
                 while rclpy.ok() and time.time() < t_end:
                     rclpy.spin_once(mission, timeout_sec=0.05)
 
                 # Move Backward
+                mission.start_recording()
                 mission.send_car_command(-speed, 0.0)
-                t_end = time.time() + 6.0 / speed
+                # Apply correction to duration
+                t_end = time.time() + (move_duration * back_correction)
                 while rclpy.ok() and time.time() < t_end:
                     rclpy.spin_once(mission, timeout_sec=0.05)
+                mission.stop_and_report(f"Backward Speed {speed}")
 
                 # Stop
                 mission.send_car_command(0.0, 0.0)
-                t_end = time.time() + 2.0
+                t_end = time.time() + 5.0
                 while rclpy.ok() and time.time() < t_end:
                     rclpy.spin_once(mission, timeout_sec=0.05)  
         
