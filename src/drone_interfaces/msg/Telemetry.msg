@@ -14,6 +14,10 @@ string flight_mode
 
 float32 speed
 
+float32 roll_speed
+float32 pitch_speed
+float32 yaw_speed
+
 float64 global_lat
 float64 global_lon
 float32 global_alt

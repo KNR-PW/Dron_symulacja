@@ -58,6 +58,11 @@ class DroneHandler(Node):
         self.state = "BUSY"
         self.__relative = False
         self.dev_mode = False
+        
+        # Angular velocities
+        self.rollspeed = 0.0
+        self.pitchspeed = 0.0
+        self.yawspeed = 0.0
 
         ##CONNECT TO COPTER
         # parser = argparse.ArgumentParser(description='commands')
@@ -104,7 +109,22 @@ class DroneHandler(Node):
         self.state = "OK"
         self.get_logger().info("\033[92mCopter connected, ready to arm")
         
+        # Add listener for ATTITUDE message to get angular velocities
+        self.vehicle.add_message_listener('ATTITUDE', self.attitude_msg_callback)
+
         self.timer = self.create_timer(.1, self.telemetry_callback)
+
+    def attitude_msg_callback(self, vehicle, name, message):
+        """
+        Callback for MAVLink ATTITUDE messages.
+        Extracts rollspeed, pitchspeed, yawspeed and stores them.
+        """
+        try:
+            self.rollspeed = float(message.rollspeed)
+            self.pitchspeed = float(message.pitchspeed)
+            self.yawspeed = float(message.yawspeed)
+        except Exception as e:
+            self.get_logger().warn(f"Error in attitude_msg_callback: {e}")
 
     def wait_fc_ready(self):
         fc_ready = False
@@ -508,6 +528,12 @@ class DroneHandler(Node):
             msg.pitch = self.vehicle.attitude.pitch
             msg.yaw = self.vehicle.attitude.yaw
 
+            # Angular velocities
+            if hasattr(msg, 'roll_speed'):
+                msg.roll_speed = self.rollspeed
+                msg.pitch_speed = self.pitchspeed
+                msg.yaw_speed = self.yawspeed
+            
             # Flight mode
             msg.flight_mode = str(self.vehicle.mode)
             

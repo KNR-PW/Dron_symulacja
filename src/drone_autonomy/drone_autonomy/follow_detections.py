@@ -66,6 +66,7 @@ class FollowDetections(DroneController):
         self.roll = None
         self.pitch_rad = None
         self.yaw = None
+        self.current_yaw_rate = 0.0
 
         # --- Performance Monitoring ---
         self.recording = False
@@ -145,6 +146,10 @@ class FollowDetections(DroneController):
         self.roll = msg.roll
         self.pitch_rad = msg.pitch
         self.yaw = msg.yaw
+        try:
+            self.current_yaw_rate = msg.yaw_speed
+        except AttributeError:
+            self.current_yaw_rate = 0.0
 
     def start_recording(self):
         """Resets and starts recording error data."""
@@ -510,7 +515,7 @@ class FollowDetections(DroneController):
             dbg_yaw = Point()
             dbg_yaw.x = 0.0
             dbg_yaw.y = float(math.degrees(yaw_error))
-            dbg_yaw.z = float(math.degrees(yaw_rate))
+            dbg_yaw.z = float(math.degrees(self.current_yaw_rate)) # Real yaw rate
             self.pub_dbg_yaw.publish(dbg_yaw)
 
             dbg_vel = Point()
@@ -520,8 +525,7 @@ class FollowDetections(DroneController):
             self.pub_dbg_vel.publish(dbg_vel)
 
             # Send vectors. 
-            # ARGUMENTS: (Forward_Speed, Yaw_Rate, Vertical_Speed)
-            # We are passing yaw_rate in the second argument because we modified drone_handler.py
+            # ARGUMENTS: (Forward_Speed, Right_Speed, Vertical_Speed, Yaw_Rate)
             # self.send_vectors(vx, 0.0, vz, yaw_rate)
             self.send_vectors(0.0, 0.0, vz, yaw_rate)
             
