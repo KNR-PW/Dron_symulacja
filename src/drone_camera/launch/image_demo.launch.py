@@ -11,7 +11,7 @@ def generate_launch_description():
             ]
         ),
         Node(
-            package='drone_camera',  # lub inna paczka gdzie jest images_recorder
+            package='drone_camera',  
             executable='images_recorder',
             name='images_recorder',
             parameters=[{
