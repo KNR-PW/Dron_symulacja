@@ -28,6 +28,8 @@ setup(
             'follow_aruco_centroid=drone_autonomy.follow_aruco_centroid:main',
             'PID_test_mission=drone_autonomy.PID_test_mission:main',
             'field_test_of_velocity=drone_autonomy.field_test_of_velocity:main',
+            'sim_test_mission=drone_autonomy.sim_test_mission:main',
+            'test_mission=drone_autonomy.test_mission:main',
         ],
     },
 )

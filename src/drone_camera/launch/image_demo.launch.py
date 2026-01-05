@@ -4,10 +4,20 @@ from launch_ros.actions import Node
 def generate_launch_description():
     return LaunchDescription([
         Node(
-             package='camera_ros',
-             executable='camera_node',
-             parameters=[
-                 {'format': 'RGB888'}
-             ]
-         ),
+            package='camera_ros',
+            executable='camera_node',
+            parameters=[
+                {'format': 'RGB888'}
+            ]
+        ),
+        Node(
+            package='drone_camera',  # lub inna paczka gdzie masz images_recorder
+            executable='images_recorder',
+            name='images_recorder',
+            parameters=[{
+                'camera_topic': '/camera/image_raw',  # sprawdź rzeczywisty topic
+                'enable_timer': False,
+            }],
+            output='screen',
+        ),
     ])
