@@ -19,6 +19,7 @@ from langgraph.types import Command, interrupt
 from langgraph.graph import END, START, StateGraph
 from langgraph.checkpoint.memory import InMemorySaver
 
+# Import narzędzi z osobnego pliku
 from drone_tools import (
     DRONE_TOOLS,
     ALLOWED_COMMANDS,
@@ -28,7 +29,6 @@ from drone_tools import (
 )
 from dotenv import load_dotenv
 load_dotenv()
-
 
 # ============================================================================
 # Data Types
@@ -49,7 +49,7 @@ class MissionValidation(TypedDict):
     issues: list[str]
     risk_level: Literal["low", "medium", "high", "critical"]
 
-
+#pamięc agenta 
 class MissionAgentState(TypedDict):
     user_input: str
     language: Literal["pl", "en"] | None
@@ -73,6 +73,7 @@ llm = ChatAnthropic(
     max_tokens=4096
 )
 
+# LLM z podłączonymi narzędziami z drone_tools.py
 llm_with_tools = llm.bind_tools(DRONE_TOOLS)
 
 
@@ -81,6 +82,10 @@ llm_with_tools = llm.bind_tools(DRONE_TOOLS)
 # ============================================================================
 
 def validate_user_input(state: MissionAgentState) -> MissionAgentState:
+    """
+    Sprawdza czy input użytkownika to sensowna misja drona.
+    Jeśli nie - prosi o ponowne wpisanie.
+    """
     validation_prompt = f"""Analyze if this text describes a valid drone mission.
 A valid drone mission should contain flight commands like:
 - takeoff/start/wystartuj
@@ -90,12 +95,21 @@ A valid drone mission should contain flight commands like:
 - return home/wróć/rtl
 - rotate/obróć/yaw
 - take photo/zrób zdjęcie/capture
+- speed/prędkość
 
 User input: "{state['user_input']}"
 
 Reply ONLY with one word:
-- "VALID" if this describes a drone mission
-- "INVALID" if this is nonsense or unrelated to drone missions
+- "VALID" if this describes a drone mission (even if incomplete or has errors)
+- "INVALID" if this is nonsense, random text, or unrelated to drone missions
+
+Examples:
+- "takeoff 10m, fly north" → VALID
+- "wystartuj i leć" → VALID  
+- "dupa" → INVALID
+- "hello how are you" → INVALID
+- "10 metrów do góry" → VALID
+- "asdfghjkl" → INVALID
 """
     
     response = llm.invoke(validation_prompt)
@@ -106,13 +120,14 @@ Reply ONLY with one word:
     else:
         lang = state.get("language", "en")
         if lang == "pl":
-            msg = "❌ Nie rozpoznaję tego jako misji drona. Przykład: 'wystartuj 10m, leć 20m na północ, zrób zdjęcie, ląduj'"
+            msg = "❌ Nie rozpoznaję tego jako misji drona. Opisz misję używając komend jak: takeoff, fly, hover, land.\nPrzykład: 'wystartuj 10m, leć 20m na północ, zawisaj 5s, ląduj'"
         else:
-            msg = "❌ I don't recognize this as a drone mission. Example: 'takeoff 10m, fly 20m north, take photo, land'"
+            msg = "❌ I don't recognize this as a drone mission. Describe a mission using commands like: takeoff, fly, hover, land.\nExample: 'takeoff 10m, fly 20m north, hover 5s, land'"
         return {"is_valid_mission": False, "retry_message": msg}
 
 
 def detect_language(state: MissionAgentState) -> MissionAgentState:
+    """Wykrywa język (polski/angielski)."""
     prompt = f"""Detect language. Reply only "pl" or "en".
 Text: {state['user_input']}"""
     
@@ -124,11 +139,17 @@ Text: {state['user_input']}"""
 
 
 def parse_mission_with_tools(state: MissionAgentState) -> MissionAgentState:
+    """
+    Parsuje misję używając narzędzi z drone_tools.py.
+    Narzędzia spoza ALLOWED_COMMANDS są ignorowane.
+    """
+    
+    # Pobierz opisy narzędzi z modułu
     tool_descriptions = get_tool_descriptions()
     
     parse_prompt = f"""You are a drone mission planner. Parse the user's mission into a sequence of tool calls.
 
-AVAILABLE TOOLS:
+AVAILABLE TOOLS (USE ONLY THESE):
 {tool_descriptions}
 
 USER MISSION: {state['user_input']}
@@ -147,11 +168,13 @@ COORDINATE SYSTEM for goto_relative:
 - east+ = right, east- = left
 - down+ = descend, down- = ascend
 
-Parse the mission step by step."""
+Parse the mission step by step, calling appropriate tools for each action."""
 
     try:
+        # Wywołaj LLM z narzędziami
         response = llm_with_tools.invoke(parse_prompt)
         
+        # Zbierz wywołania narzędzi
         waypoints = []
         warnings = []
         max_altitude = 0.0
@@ -163,13 +186,16 @@ Parse the mission step by step."""
                 tool_name = tc['name']
                 tool_args = tc['args']
                 
+                # Sprawdź czy narzędzie jest dozwolone (używamy funkcji z drone_tools)
                 if not is_valid_command(tool_name):
                     warnings.append(f"Ignored unknown command: {tool_name}")
                     continue
                 
+                # Zbuduj waypoint
                 waypoint = {"command": tool_name, **tool_args}
                 waypoints.append(waypoint)
                 
+                # Oblicz statystyki
                 if tool_name == "takeoff":
                     alt = float(tool_args.get("altitude", 10))
                     max_altitude = max(max_altitude, alt)
@@ -186,6 +212,7 @@ Parse the mission step by step."""
         if not waypoints:
             return {"error": "Could not parse mission into valid commands"}
         
+        # Wygeneruj podsumowanie
         summary_prompt = f"Summarize this drone mission in one sentence (max 15 words): {state['user_input']}"
         summary_response = llm.invoke(summary_prompt)
         summary = summary_response.content.strip()
@@ -214,6 +241,7 @@ Parse the mission step by step."""
 
 
 def validate_mission(state: MissionAgentState) -> MissionAgentState:
+    """Waliduje misję pod kątem bezpieczeństwa."""
     if state.get("error"):
         return {}
     
@@ -225,6 +253,7 @@ def validate_mission(state: MissionAgentState) -> MissionAgentState:
     risk_level = "low"
     requires_confirmation = False
     
+    # Sprawdź wysokość
     max_alt = parsed.get("max_altitude_meters", 0)
     if max_alt > 120:
         issues.append(f"Altitude {max_alt}m exceeds 120m legal limit")
@@ -235,12 +264,14 @@ def validate_mission(state: MissionAgentState) -> MissionAgentState:
         risk_level = "medium"
         requires_confirmation = True
     
+    # Sprawdź dystans
     max_dist = parsed.get("max_distance_meters", 0)
     if max_dist > 500:
         issues.append(f"Long distance ({max_dist}m) - check battery")
         risk_level = "medium" if risk_level == "low" else risk_level
         requires_confirmation = True
     
+    # Sprawdź strukturę misji
     waypoints = parsed.get("waypoints", [])
     if waypoints:
         last_cmd = waypoints[-1].get("command", "")
@@ -253,6 +284,7 @@ def validate_mission(state: MissionAgentState) -> MissionAgentState:
             issues.append("Mission does not start with takeoff")
             requires_confirmation = True
     
+    # Dodaj ostrzeżenia z parsowania
     if parsed.get("warnings"):
         issues.extend(parsed["warnings"])
         requires_confirmation = True
@@ -267,8 +299,8 @@ def validate_mission(state: MissionAgentState) -> MissionAgentState:
 
 def generate_ros2_code(state: MissionAgentState) -> MissionAgentState:
     """
-    Generuje PROSTY kod ROS2 używający DroneController.
-    Format identyczny jak test_mission.py
+    Generuje kod ROS2 używający DroneController API.
+    Mapowanie: tool_name → DroneController.method()
     """
     
     if state.get("error"):
@@ -291,18 +323,21 @@ def generate_ros2_code(state: MissionAgentState) -> MissionAgentState:
     for i, wp in enumerate(waypoints):
         cmd = wp.get("command", "")
         
+        # Sprawdź czy komenda jest dozwolona
         if not is_valid_command(cmd):
             continue
         
         if cmd == "takeoff":
             altitude = float(wp.get("altitude", 10.0))
+            mission_lines.append(f"    # Step {i+1}: Takeoff to {altitude}m")
             mission_lines.append(f"    mission.takeoff({altitude})")
-            mission_lines.append(f"    time.sleep(2)")
+            mission_lines.append(f"    time.sleep(3)")
             
         elif cmd == "goto_relative":
             north = float(wp.get("north", 0.0))
             east = float(wp.get("east", 0.0))
             down = float(wp.get("down", 0.0))
+            mission_lines.append(f"    # Step {i+1}: Move relative N:{north}, E:{east}, D:{down}")
             mission_lines.append(f"    mission.send_goto_relative({north}, {east}, {down})")
             mission_lines.append(f"    time.sleep(2)")
             
@@ -310,30 +345,36 @@ def generate_ros2_code(state: MissionAgentState) -> MissionAgentState:
             lat = float(wp.get("lat", 0.0))
             lon = float(wp.get("lon", 0.0))
             alt = float(wp.get("alt", 10.0))
+            mission_lines.append(f"    # Step {i+1}: Goto GPS ({lat}, {lon}, {alt}m)")
             mission_lines.append(f"    mission.send_goto_global({lat}, {lon}, {alt})")
-            mission_lines.append(f"    time.sleep(2)")
+            mission_lines.append(f"    time.sleep(3)")
             
         elif cmd == "hover":
             hold_time = float(wp.get("hold_time", 5.0))
+            mission_lines.append(f"    # Step {i+1}: Hover for {hold_time}s")
             mission_lines.append(f"    time.sleep({hold_time})")
             
         elif cmd == "set_yaw":
             yaw = float(wp.get("yaw", 0.0))
             relative = wp.get("relative", True)
             yaw_rad = yaw * 3.14159 / 180.0
+            mission_lines.append(f"    # Step {i+1}: Set yaw to {yaw}° (relative={relative})")
             mission_lines.append(f"    mission.send_set_yaw({yaw_rad:.4f}, {relative})")
             mission_lines.append(f"    time.sleep(2)")
             
         elif cmd == "set_speed":
             speed = float(wp.get("speed", 5.0))
+            mission_lines.append(f"    # Step {i+1}: Set speed to {speed} m/s")
             mission_lines.append(f"    mission.set_speed({speed})")
             mission_lines.append(f"    time.sleep(1)")
             
         elif cmd == "rtl":
+            mission_lines.append(f"    # Step {i+1}: Return to launch")
             mission_lines.append(f"    mission.rtl()")
             mission_lines.append(f"    time.sleep(2)")
             
         elif cmd == "land":
+            mission_lines.append(f"    # Step {i+1}: Land")
             mission_lines.append(f"    mission.land()")
             
         elif cmd == "take_photo":
@@ -377,6 +418,17 @@ def take_photo(node, prefix='photo'):
 """
 Auto-generated mission: {mission_id}
 Summary: {parsed.get("summary", "N/A")}
+Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+DroneController methods used:
+- arm() - Arm and set GUIDED mode
+- takeoff(altitude) - Take off to altitude
+- land() - Land at current position
+- rtl() - Return to launch
+- send_goto_relative(north, east, down) - Move relative
+- send_goto_global(lat, lon, alt) - Move to GPS
+- send_set_yaw(yaw_rad, relative) - Set heading
+- set_speed(speed) - Set flight speed
 """
 import rclpy
 import time
@@ -388,8 +440,16 @@ def main(args=None):
     rclpy.init(args=args)
     mission = DroneController()
     
+    print("🚁 Starting mission: {mission_id}")
+    
+    # Arm drone
     mission.arm()
+    time.sleep(2)
+    
+    # === MISSION WAYPOINTS ===
 {mission_code}
+    
+    print("✅ Mission complete!")
     
     mission.destroy_node()
     rclpy.shutdown()
@@ -406,12 +466,14 @@ if __name__ == "__main__":
 # ============================================================================
 
 def route_after_input_validation(state: MissionAgentState) -> Literal["parse_mission_with_tools", "__end__"]:
+    """Jeśli input jest niepoprawny, kończymy."""
     if state.get("is_valid_mission"):
         return "parse_mission_with_tools"
     return "__end__"
 
 
 def route_after_validation(state: MissionAgentState) -> Literal["human_review", "generate_ros2_code", "__end__"]:
+    """Routing po walidacji misji."""
     if state.get("error"):
         return "__end__"
     
@@ -422,6 +484,7 @@ def route_after_validation(state: MissionAgentState) -> Literal["human_review", 
 
 
 def human_review(state: MissionAgentState) -> Command[Literal["generate_ros2_code", END]]:
+    """Human-in-the-loop: zatrzymaj i poczekaj na decyzję."""
     parsed = state.get("parsed_mission", {})
     validation = state.get("validation", {})
     
@@ -440,6 +503,7 @@ def human_review(state: MissionAgentState) -> Command[Literal["generate_ros2_cod
 
 
 def output_result(state: MissionAgentState) -> MissionAgentState:
+    """Końcowy node - nic nie robi."""
     return {}
 
 
@@ -448,8 +512,10 @@ def output_result(state: MissionAgentState) -> MissionAgentState:
 # ============================================================================
 
 def build_mission_graph():
+    """Buduje graf LangGraph dla agenta misji."""
     builder = StateGraph(MissionAgentState)
     
+    # Nodes
     builder.add_node("detect_language", detect_language)
     builder.add_node("validate_user_input", validate_user_input)
     builder.add_node("parse_mission_with_tools", parse_mission_with_tools)
@@ -458,6 +524,7 @@ def build_mission_graph():
     builder.add_node("generate_ros2_code", generate_ros2_code)
     builder.add_node("output_result", output_result)
     
+    # Edges
     builder.add_edge(START, "detect_language")
     builder.add_edge("detect_language", "validate_user_input")
     
@@ -500,10 +567,12 @@ def print_banner():
 
 
 def get_output_dir():
+    """Zwróć katalog, w którym się znajduje ten skrypt."""
     return os.path.dirname(os.path.abspath(__file__))
 
 
 def run_interactive():
+    """Główna pętla interaktywna."""
     print_banner()
     app = build_mission_graph()
     output_dir = get_output_dir()
@@ -519,25 +588,29 @@ def run_interactive():
             if user_input.lower() in ['quit', 'exit', 'q']:
                 break
             if user_input.lower() == 'tools':
-                list_tools()
+                list_tools()  # Funkcja z drone_tools.py
                 continue
             if user_input.lower() == 'help':
                 print("""
 ╔═══════════════════════════════════════════════════════════════════╗
 ║                        HELP - Commands                            ║
 ╠═══════════════════════════════════════════════════════════════════╣
-║  ACTIONS:                                                         ║
-║    takeoff Xm      → Start and rise to X meters                  ║
-║    fly Xm north    → Move X meters in direction                  ║
-║    hover Xs        → Hold position for X seconds                 ║
-║    take photo      → Capture image from camera                   ║
-║    rotate X°       → Rotate by X degrees                         ║
-║    return home     → Return to start position (rtl)              ║
-║    land            → Land at current position                    ║
+║  DIRECTIONS:                                                      ║
+║    north/south = forward/backward                                 ║
+║    east/west = right/left                                         ║
+║    up/down = altitude change                                      ║
 ║                                                                   ║
-║  EXAMPLES:                                                        ║
-║    "takeoff 10m, fly 20m north, take photo, land"                ║
-║    "wystartuj 15m, leć na wschód, zrób zdjęcie, ląduj"           ║
+║  ACTIONS (from drone_tools.py → DroneController):                 ║
+║    takeoff Xm      → mission.takeoff(X)                          ║
+║    fly Xm north    → mission.send_goto_relative(X, 0, 0)         ║
+║    goto GPS lat,lon → mission.send_goto_global(lat, lon, alt)    ║
+║    hover Xs        → time.sleep(X)                               ║
+║    rotate X°       → mission.send_set_yaw(X, True)               ║
+║    speed X         → mission.set_speed(X)                        ║
+║    return home     → mission.rtl()                               ║
+║    land            → mission.land()                              ║
+║                                                                   ║
+║  NOTE: Unknown commands will be ignored!                          ║
 ╚═══════════════════════════════════════════════════════════════════╝
                 """)
                 continue
@@ -560,10 +633,12 @@ def run_interactive():
             print("⏳ Processing mission...")
             result = app.invoke(initial_state, config)
             
+            # Sprawdź czy input był niepoprawny
             if result.get("retry_message"):
                 print(result["retry_message"])
                 continue
             
+            # Handle human review interrupt
             if "__interrupt__" in result:
                 data = result["__interrupt__"][0].value
                 print(f"\n⚠️  Review required!")

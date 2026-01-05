@@ -215,6 +215,7 @@ def list_tools():
         print(f"  🔧 {t.name}")
         desc_lines = t.description.strip().split('\n')
         print(f"     {desc_lines[0]}")
+        # Znajdź linię z "Maps to:"
         for line in desc_lines:
             if "Maps to:" in line:
                 print(f"     {line.strip()}")
