@@ -11,11 +11,11 @@ def generate_launch_description():
             ]
         ),
         Node(
-            package='drone_camera',  # lub inna paczka gdzie masz images_recorder
+            package='drone_camera',  # lub inna paczka gdzie jest images_recorder
             executable='images_recorder',
             name='images_recorder',
             parameters=[{
-                'camera_topic': '/camera/image_raw',  # sprawdź rzeczywisty topic
+                'camera_topic': '/camera/image_raw', 
                 'enable_timer': False,
             }],
             output='screen',
