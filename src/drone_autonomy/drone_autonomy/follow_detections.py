@@ -33,7 +33,7 @@ class FollowDetections(DroneController):
         self.declare_parameter('target_alt', 2.0)
         self.declare_parameter('kp', 0.05) # declared as input parameter, currently 0.6
         self.declare_parameter('deadband_px', 0)
-        self.declare_parameter('max_vel', 1.0)
+        self.declare_parameter('max_vel', 2.0)
         self.declare_parameter('lowpass', 0.3)
         self.declare_parameter('lost_timeout', 0.8)  # s
 
@@ -66,7 +66,7 @@ class FollowDetections(DroneController):
         # --- PID Constants (Unified) ---
         self.pid_yaw_kp = 1.1
         self.pid_yaw_ki = 0.4
-        self.pid_yaw_kd = 0.5
+        self.pid_yaw_kd = 0.2
 
         self.roll = None
         self.pitch_rad = None
@@ -142,10 +142,10 @@ class FollowDetections(DroneController):
 
         # Debug publishers for PID tuning (x=target, y=error, z=output)
         self.pub_dbg_yaw = self.create_publisher(Point, '/debug/yaw', 10)
-        self.pub_dbg_gimbal = self.create_publisher(Point, '/debug/gimbal', 10)
         self.pub_dbg_vel = self.create_publisher(Point, '/debug/vel', 10)
-
+        self.pub_dbg_gimbal = self.create_publisher(Point, '/debug/gimbal', 10)
         self.pub_dbg_target_pos = self.create_publisher(Point, '/debug/target_pos', 10)
+        self.pub_dbg_vx = self.create_publisher(Point, '/debug/vx', 10)
 
         # Car control publisher
         self.car_pub = self.create_publisher(Twist, '/cmd_vel', 10)
@@ -373,8 +373,8 @@ class FollowDetections(DroneController):
             x_stab = x_body * cos_y - y_body * sin_y
             y_stab = x_body * sin_y + y_body * cos_y
             
-            self.last_raw_x_stab = x_stab
-            self.last_raw_y_stab = y_stab
+            # self.last_raw_x_stab = x_stab
+            # self.last_raw_y_stab = y_stab
 
             self.kf.update(np.array([x_stab, y_stab]))
 
@@ -480,13 +480,13 @@ class FollowDetections(DroneController):
         # y_pred_stab = pred_stab[1]
 
         # --- BYPASS KALMAN FILTER (Raw Data) ---
-        if hasattr(self, 'last_raw_x_stab'):
-             x_pred_stab = self.last_raw_x_stab
-             y_pred_stab = self.last_raw_y_stab
-        else:
-             pred_stab = self.kf.predict(dt)
-             x_pred_stab = pred_stab[0]
-             y_pred_stab = pred_stab[1]
+        # if hasattr(self, 'last_raw_x_stab'):
+        #      x_pred_stab = self.last_raw_x_stab
+        #      y_pred_stab = self.last_raw_y_stab
+        # else:
+        pred_stab = self.kf.predict(dt)
+        x_pred_stab = pred_stab[0]
+        y_pred_stab = pred_stab[1]
 
         if (time.time() - self.last_seen) > self.lost_timeout:
             # brak markera niedawno -> wyhamuj
@@ -532,6 +532,12 @@ class FollowDetections(DroneController):
         # Front speed (vx)
         vx = self.kp * d_ground_m 
         vx = clamp(vx, -self.max_vel, self.max_vel)
+
+        dbg_vx = Point()
+        dbg_vx.x = 0.0
+        dbg_vx.y = float(vx) # TODO: plot the distance and the velocity separately, like yaw
+        dbg_vx.z = float(d_ground_m)
+        self.pub_dbg_vx.publish(dbg_vx)
 
         # Yaw Control
         # Calculate angle to target in body frame
@@ -728,7 +734,7 @@ def main():
         # mission.send_goto_relative(0.0, -6.5, 0.0)
         # mission.center_detection()
 
-        mission.send_car_command(2.5, 0.5)
+        mission.send_car_command(4.0, 0.25)
 
         mission.fly_to_detection()
 
