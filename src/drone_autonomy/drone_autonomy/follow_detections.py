@@ -64,7 +64,7 @@ class FollowDetections(DroneController):
         self.gimbal_angle_deg = 80.0
 
         # --- PID Constants (Unified) ---
-        self.pid_yaw_kp = 0.8
+        self.pid_yaw_kp = 1.1
         self.pid_yaw_ki = 0.2
         self.pid_yaw_kd = 0.5
 
@@ -403,55 +403,55 @@ class FollowDetections(DroneController):
         self.last_kf_time = now
 
         # --- TUNING OVERRIDE MODE ---
-        if self.override_yaw_error is not None:
-            # Bypass all vision logic
-            if self.override_setpoint is not None and self.yaw is not None:
-                yaw_error = self.normalize_angle(self.override_setpoint - self.yaw)
-            else:
-                yaw_error = 0.0
+        # if self.override_yaw_error is not None:
+        #     # Bypass all vision logic
+        #     if self.override_setpoint is not None and self.yaw is not None:
+        #         yaw_error = self.normalize_angle(self.override_setpoint - self.yaw)
+        #     else:
+        #         yaw_error = 0.0
             
-            # --- PID LOGIC (Copy used for tuning) ---
-            # Proportional term
-            error = yaw_error
-            p_term = self.pid_yaw_kp * error
+        #     # --- PID LOGIC (Copy used for tuning) ---
+        #     # Proportional term
+        #     error = yaw_error
+        #     p_term = self.pid_yaw_kp * error
 
-            # Integral term with anti-windup
-            if not hasattr(self, 'integral_error'):
-                self.integral_error = 0.0
-            self.integral_error += error * dt
-            self.integral_error = clamp(self.integral_error, -1.0, 1.0)
-            i_term = self.pid_yaw_ki * self.integral_error
+        #     # Integral term with anti-windup
+        #     if not hasattr(self, 'integral_error'):
+        #         self.integral_error = 0.0
+        #     self.integral_error += error * dt
+        #     self.integral_error = clamp(self.integral_error, -1.0, 1.0)
+        #     i_term = self.pid_yaw_ki * self.integral_error
 
-            # Derivative term
-            if not hasattr(self, 'prev_error'):
-                self.prev_error = error
-            derivative = (error - self.prev_error) / dt if dt > 0 else 0.0
-            self.prev_error = error
-            d_term = self.pid_yaw_kd * derivative
+        #     # Derivative term
+        #     if not hasattr(self, 'prev_error'):
+        #         self.prev_error = error
+        #     derivative = (error - self.prev_error) / dt if dt > 0 else 0.0
+        #     self.prev_error = error
+        #     d_term = self.pid_yaw_kd * derivative
 
-            yaw_rate = p_term # + i_term + d_term
+        #     yaw_rate = p_term + i_term # + d_term
             
-            # Publish Debug
-            dbg_yaw = Point()
-            dbg_yaw.x = float(math.degrees(0.0)) # Target (0 for tuning usually, or the setpoint?)
-            dbg_yaw.y = float(math.degrees(self.yaw)) # Error being fed
-            dbg_yaw.z = float(math.degrees(self.override_setpoint)) # Response
-            self.pub_dbg_yaw.publish(dbg_yaw)
+        #     # Publish Debug
+        #     dbg_yaw = Point()
+        #     dbg_yaw.x = float(math.degrees(0.0)) # Target (0 for tuning usually, or the setpoint?)
+        #     dbg_yaw.y = float(math.degrees(self.yaw)) # Error being fed
+        #     dbg_yaw.z = float(math.degrees(self.override_setpoint)) # Response
+        #     self.pub_dbg_yaw.publish(dbg_yaw)
 
-            dbg_vel = Point()
-            dbg_vel.x = 0.0
-            dbg_vel.y = float(math.degrees(yaw_rate))
-            dbg_vel.z = float(math.degrees(self.current_yaw_rate))
-            self.pub_dbg_vel.publish(dbg_vel)
+        #     dbg_vel = Point()
+        #     dbg_vel.x = 0.0
+        #     dbg_vel.y = float(math.degrees(yaw_rate))
+        #     dbg_vel.z = float(math.degrees(self.current_yaw_rate))
+        #     self.pub_dbg_vel.publish(dbg_vel)
 
-            # Record
-            if self.recording:
-                self.error_history.append(yaw_error)
-                self.time_history.append(time.time() - self.start_time)
+        #     # Record
+        #     if self.recording:
+        #         self.error_history.append(yaw_error)
+        #         self.time_history.append(time.time() - self.start_time)
             
-            # Send
-            self.send_vectors(0.0, 0.0, 0.0, yaw_rate)
-            return
+        #     # Send
+        #     self.send_vectors(0.0, 0.0, 0.0, yaw_rate)
+        #     return
         # ----------------------------
 
         # --- FIX: Wait for KF initialization ---
@@ -575,34 +575,41 @@ class FollowDetections(DroneController):
         # vz = clamp(vz, -self.max_vel, self.max_vel)
         
         # Check completion (using body frame distance)
-        if abs(d_ground_m) < 0.2 and abs(yaw_error) < 0.1:
-            # Osiągnięto cel -> zatrzymaj ruch
-            self.get_logger().info("Target reached, stopping approach.")
-            self.send_vectors(0.0, 0.0, 0.0, 0.0)
-            self.state = "OK"
-            self.centering = False
-            try:
-                self.timer.cancel()
-            except Exception:
-                pass
-        else:
+        # if abs(d_ground_m) < 0.2 and abs(yaw_error) < 0.1:
+        #     # Osiągnięto cel -> zatrzymaj ruch
+        #     self.get_logger().info("Target reached, stopping approach.")
+        #     self.send_vectors(0.0, 0.0, 0.0, 0.0)
+        #     self.state = "OK"
+        #     self.centering = False
+        #     try:
+        #         self.timer.cancel()
+        #     except Exception:
+        #         pass
+        # else:
             # Publish debug info
-            dbg_yaw = Point()
-            dbg_yaw.x = 0.0
-            dbg_yaw.y = float(math.degrees(yaw_error))
-            dbg_yaw.z = float(math.degrees(self.current_yaw_rate)) # Real yaw rate
-            self.pub_dbg_yaw.publish(dbg_yaw)
+        dbg_yaw = Point()
+        dbg_yaw.x = 0.0
+        dbg_yaw.y = float(math.degrees(yaw_error))
+        dbg_yaw.z = float(math.degrees(self.yaw))
+        self.pub_dbg_yaw.publish(dbg_yaw)
 
-            dbg_vel = Point()
-            dbg_vel.x = 0.0
-            dbg_vel.y = float(d_ground_m)
-            dbg_vel.z = float(vx)
-            self.pub_dbg_vel.publish(dbg_vel)
+        dbg_vel = Point()
+        dbg_vel.x = 0.0
+        dbg_vel.y = float(math.degrees(yaw_rate))
+        dbg_vel.z = float(math.degrees(self.current_yaw_rate))
+        self.pub_dbg_vel.publish(dbg_vel)
 
-            # Send vectors. 
-            # ARGUMENTS: (Forward_Speed, Right_Speed, Vertical_Speed, Yaw_Rate)
-            # self.send_vectors(vx, 0.0, vz, yaw_rate)
-            self.send_vectors(0.0, 0.0, vz, yaw_rate) # only yaw for tuning
+        # dbg_vel = Point()
+        # dbg_vel.x = 0.0
+        # dbg_vel.y = float(d_ground_m)
+        # dbg_vel.z = float(vx)
+        # self.pub_dbg_vel.publish(dbg_vel)
+
+
+        # Send vectors. 
+        # ARGUMENTS: (Forward_Speed, Right_Speed, Vertical_Speed, Yaw_Rate)
+        self.send_vectors(vx, 0.0, vz, yaw_rate)
+            # self.send_vectors(0.0, 0.0, vz, yaw_rate) # only yaw for tuning
             
 
     # ──────────────────────────────────────────────────────────
@@ -706,53 +713,65 @@ def main():
 
         # mission.send_goto_relative(0.0, -6.5, 0.0)
         # mission.center_detection()
+
+        mission.send_car_command(2.5, 0.5)
+
         mission.fly_to_detection()
 
         # --- TUNING SEQUENCE (Step Response) ---
-        mission.get_logger().info("Starting Step Response Tuning Loop...")
+        # mission.get_logger().info("Starting Step Response Tuning Loop...")
         
         # Initial Hover
-        t_end = time.time() + 5.0
-        while rclpy.ok() and time.time() < t_end:
-            rclpy.spin_once(mission, timeout_sec=0.05)
+        # t_end = time.time() + 5.0
+        # while rclpy.ok() and time.time() < t_end:
+        #     rclpy.spin_once(mission, timeout_sec=0.05)
 
-        # Step magnitudes (in degrees)
-        steps = [45.0, -45.0, 90.0, -90.0]
-        step_duration = 4.0
+        # --- TUNING SEQUENCE ---
+        mission.get_logger().info("Starting Continuous Tuning Loop...")
 
-        while rclpy.ok():
-            for step_deg in steps:
-                step_rad = math.radians(step_deg)
-                
-                # Apply Step Error
-                mission.get_logger().info(f">>> Applying Step Error: {step_deg} deg")
-                mission.override_yaw_error = step_rad
-                mission.override_setpoint = mission.normalize_angle(mission.yaw + step_rad)
-                mission.start_recording()
-                
-                t_end = time.time() + step_duration
-                while rclpy.ok() and time.time() < t_end:
-                    rclpy.spin_once(mission, timeout_sec=0.05)
-                
-                mission.stop_and_report(f"Step {step_deg} deg")
-                
-                t_end = time.time() + 3.0
-                while rclpy.ok() and time.time() < t_end:
-                    rclpy.spin_once(mission, timeout_sec=0.05)
-  
         
-                # # Move Forward
-                # mission.send_car_command(speed, 0.0)
-                # t_end = time.time() + 3.0
-                # while rclpy.ok() and time.time() < t_end:
-                #     rclpy.spin_once(mission, timeout_sec=0.05)
+        # Initial Hover
+        # t_end = time.time() + 5.0
+        # while rclpy.ok() and time.time() < t_end:
+        #     rclpy.spin_once(mission, timeout_sec=0.05)
 
-                # # Stop
-                # mission.send_car_command(0.0, 0.0)
-                # t_end = time.time() + 2.0
-                # while rclpy.ok() and time.time() < t_end:
-                #     rclpy.spin_once(mission, timeout_sec=0.05)  
+        # Correction factor for backward movement to compensate for drift
+        # If the car moves forward more than backward, increase this > 1.0
+        # back_correction = 1.17
+        # move_duration = 2.0
 
+
+        # while rclpy.ok():
+        #     for speed in [6.0]:
+        #         # Move Forward
+        #         mission.start_recording()
+        #         mission.send_car_command(speed, 0.0)
+        #         t_end = time.time() + move_duration
+        #         while rclpy.ok() and time.time() < t_end:
+        #             rclpy.spin_once(mission, timeout_sec=0.05)
+
+        #         # Stop
+        #         mission.send_car_command(0.0, 0.0)
+        #         t_end = time.time() + 5.0
+        #         while rclpy.ok() and time.time() < t_end:
+        #             rclpy.spin_once(mission, timeout_sec=0.05)
+        #         mission.stop_and_report(f"Forward Speed {speed}")
+
+        #         # Move Backward
+        #         mission.start_recording()
+        #         mission.send_car_command(-speed, 0.0)
+        #         # Apply correction to duration
+        #         t_end = time.time() + (move_duration * back_correction)
+        #         while rclpy.ok() and time.time() < t_end:
+        #             rclpy.spin_once(mission, timeout_sec=0.05)
+
+        #         # Stop
+        #         mission.send_car_command(0.0, 0.0)
+        #         t_end = time.time() + 5.0
+        #         while rclpy.ok() and time.time() < t_end:
+        #             rclpy.spin_once(mission, timeout_sec=0.05)  # todo; add vel pubs to mainloop
+        #         mission.stop_and_report(f"Backward Speed {speed}")
+        
      
 
         # run_seconds = 60.0
