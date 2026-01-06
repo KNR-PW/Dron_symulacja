@@ -63,6 +63,11 @@ class FollowDetections(DroneController):
         # start with a safe downwards angle (match webots default)
         self.gimbal_angle_deg = 80.0
 
+        # --- PID Constants (Unified) ---
+        self.pid_yaw_kp = 0.8
+        self.pid_yaw_ki = 0.2
+        self.pid_yaw_kd = 0.5
+
         self.roll = None
         self.pitch_rad = None
         self.yaw = None
@@ -79,6 +84,10 @@ class FollowDetections(DroneController):
         self.last_kf_time = time.time()
 
         self.state = "OK"
+        
+        # --- Tuning Override ---
+        self.override_yaw_error = None # If set (float), control loop uses this instead of vision
+        self.override_setpoint = None 
 
         # ---- Subskrypcja markera ----
         # self.sub = self.create_subscription(MiddleOfAruco, self.detections_topic, self.on_marker, 10)
@@ -357,6 +366,9 @@ class FollowDetections(DroneController):
             x_stab = x_body * cos_y - y_body * sin_y
             y_stab = x_body * sin_y + y_body * cos_y
             
+            self.last_raw_x_stab = x_stab
+            self.last_raw_y_stab = y_stab
+
             self.kf.update(np.array([x_stab, y_stab]))
 
         self.last_seen = time.time()
@@ -375,12 +387,72 @@ class FollowDetections(DroneController):
     def radians_to_degrees(self, radians: float) -> float:
         return radians * (180.0 / math.pi)
 
+    def normalize_angle(self, angle):
+        """Normalize angle to [-pi, pi]."""
+        while angle > math.pi:
+            angle -= 2.0 * math.pi
+        while angle < -math.pi:
+            angle += 2.0 * math.pi
+        return angle
+
     def drone_control_loop(self):
 
         # Calculate dt for KF
         now = time.time()
         dt = now - self.last_kf_time
         self.last_kf_time = now
+
+        # --- TUNING OVERRIDE MODE ---
+        if self.override_yaw_error is not None:
+            # Bypass all vision logic
+            if self.override_setpoint is not None and self.yaw is not None:
+                yaw_error = self.normalize_angle(self.override_setpoint - self.yaw)
+            else:
+                yaw_error = 0.0
+            
+            # --- PID LOGIC (Copy used for tuning) ---
+            # Proportional term
+            error = yaw_error
+            p_term = self.pid_yaw_kp * error
+
+            # Integral term with anti-windup
+            if not hasattr(self, 'integral_error'):
+                self.integral_error = 0.0
+            self.integral_error += error * dt
+            self.integral_error = clamp(self.integral_error, -1.0, 1.0)
+            i_term = self.pid_yaw_ki * self.integral_error
+
+            # Derivative term
+            if not hasattr(self, 'prev_error'):
+                self.prev_error = error
+            derivative = (error - self.prev_error) / dt if dt > 0 else 0.0
+            self.prev_error = error
+            d_term = self.pid_yaw_kd * derivative
+
+            yaw_rate = p_term # + i_term + d_term
+            
+            # Publish Debug
+            dbg_yaw = Point()
+            dbg_yaw.x = float(math.degrees(0.0)) # Target (0 for tuning usually, or the setpoint?)
+            dbg_yaw.y = float(math.degrees(self.yaw)) # Error being fed
+            dbg_yaw.z = float(math.degrees(self.override_setpoint)) # Response
+            self.pub_dbg_yaw.publish(dbg_yaw)
+
+            dbg_vel = Point()
+            dbg_vel.x = 0.0
+            dbg_vel.y = float(math.degrees(yaw_rate))
+            dbg_vel.z = float(math.degrees(self.current_yaw_rate))
+            self.pub_dbg_vel.publish(dbg_vel)
+
+            # Record
+            if self.recording:
+                self.error_history.append(yaw_error)
+                self.time_history.append(time.time() - self.start_time)
+            
+            # Send
+            self.send_vectors(0.0, 0.0, 0.0, yaw_rate)
+            return
+        # ----------------------------
 
         # --- FIX: Wait for KF initialization ---
         if not self.kf.initialized:
@@ -395,9 +467,18 @@ class FollowDetections(DroneController):
         # ---------------------------------------
 
         # Predict position (GPS Denied / Relative)
-        pred_stab = self.kf.predict(dt)
-        x_pred_stab = pred_stab[0]
-        y_pred_stab = pred_stab[1]
+        # pred_stab = self.kf.predict(dt)
+        # x_pred_stab = pred_stab[0]
+        # y_pred_stab = pred_stab[1]
+
+        # --- BYPASS KALMAN FILTER (Raw Data) ---
+        if hasattr(self, 'last_raw_x_stab'):
+             x_pred_stab = self.last_raw_x_stab
+             y_pred_stab = self.last_raw_y_stab
+        else:
+             pred_stab = self.kf.predict(dt)
+             x_pred_stab = pred_stab[0]
+             y_pred_stab = pred_stab[1]
 
         if (time.time() - self.last_seen) > self.lost_timeout:
             # brak markera niedawno -> wyhamuj
@@ -440,7 +521,6 @@ class FollowDetections(DroneController):
 
         # Yaw Control
         # Calculate angle to target in body frame
-        # angle = atan2(y, x)
         angle_to_target = math.atan2(y_target_body, x_target_body)
         
         # Use this angle as error for Yaw PID
@@ -455,14 +535,9 @@ class FollowDetections(DroneController):
             self.error_history.append(yaw_error)
             self.time_history.append(time.time() - self.start_time)
 
-        # PID controller for yaw rate
-        YAW_KP = 2.5  # Proportional gain
-        YAW_KI = 0.2  # Integral gain
-        YAW_KD = 0.5  # Derivative gain
-
         # Proportional term
         error = yaw_error # Changed from self.ex_f
-        p_term = YAW_KP * error
+        p_term = self.pid_yaw_kp * error
 
         # Integral term with anti-windup
         if not hasattr(self, 'integral_error'):
@@ -470,22 +545,22 @@ class FollowDetections(DroneController):
         self.integral_error += error * dt
         # Clamp integral to prevent windup
         self.integral_error = clamp(self.integral_error, -1.0, 1.0)
-        i_term = YAW_KI * self.integral_error
+        i_term = self.pid_yaw_ki * self.integral_error
 
         # Derivative term
         if not hasattr(self, 'prev_error'):
             self.prev_error = error
         derivative = (error - self.prev_error) / dt if dt > 0 else 0.0
         self.prev_error = error
-        d_term = YAW_KD * derivative
+        d_term = self.pid_yaw_kd * derivative
 
         # Reset integral when error is zero to prevent overshoot
-        if abs(error) < 0.01:
-            self.integral_error = 0.0
+        # if abs(error) < 0.01:
+        #     self.integral_error = 0.0
 
         # Total PID output
         # yaw_rate = p_term + i_term + d_term
-        yaw_rate = p_term
+        yaw_rate = p_term # only P now for tuning
         
         # Clamp yaw rate to reasonable speed (e.g., 45 deg/s = ~0.8 rad/s)
         # yaw_rate = clamp(yaw_rate, -0.8, 0.8)
@@ -527,7 +602,7 @@ class FollowDetections(DroneController):
             # Send vectors. 
             # ARGUMENTS: (Forward_Speed, Right_Speed, Vertical_Speed, Yaw_Rate)
             # self.send_vectors(vx, 0.0, vz, yaw_rate)
-            self.send_vectors(0.0, 0.0, vz, yaw_rate)
+            self.send_vectors(0.0, 0.0, vz, yaw_rate) # only yaw for tuning
             
 
     # ──────────────────────────────────────────────────────────
@@ -633,49 +708,38 @@ def main():
         # mission.center_detection()
         mission.fly_to_detection()
 
-        # --- TUNING SEQUENCE ---
-        mission.get_logger().info("Starting Continuous Tuning Loop...")
+        # --- TUNING SEQUENCE (Step Response) ---
+        mission.get_logger().info("Starting Step Response Tuning Loop...")
         
         # Initial Hover
         t_end = time.time() + 5.0
         while rclpy.ok() and time.time() < t_end:
             rclpy.spin_once(mission, timeout_sec=0.05)
 
-        # Correction factor for backward movement to compensate for drift
-        # If the car moves forward more than backward, increase this > 1.0
-        back_correction = 1.17
-        move_duration = 2.0
+        # Step magnitudes (in degrees)
+        steps = [45.0, -45.0, 90.0, -90.0]
+        step_duration = 4.0
 
         while rclpy.ok():
-            for speed in [6.0]:
-                # Move Forward
+            for step_deg in steps:
+                step_rad = math.radians(step_deg)
+                
+                # Apply Step Error
+                mission.get_logger().info(f">>> Applying Step Error: {step_deg} deg")
+                mission.override_yaw_error = step_rad
+                mission.override_setpoint = mission.normalize_angle(mission.yaw + step_rad)
                 mission.start_recording()
-                mission.send_car_command(speed, 0.0)
-                t_end = time.time() + move_duration
+                
+                t_end = time.time() + step_duration
                 while rclpy.ok() and time.time() < t_end:
                     rclpy.spin_once(mission, timeout_sec=0.05)
-                mission.stop_and_report(f"Forward Speed {speed}")
-
-                # Stop
-                mission.send_car_command(0.0, 0.0)
-                t_end = time.time() + 5.0
+                
+                mission.stop_and_report(f"Step {step_deg} deg")
+                
+                t_end = time.time() + 3.0
                 while rclpy.ok() and time.time() < t_end:
                     rclpy.spin_once(mission, timeout_sec=0.05)
-
-                # Move Backward
-                mission.start_recording()
-                mission.send_car_command(-speed, 0.0)
-                # Apply correction to duration
-                t_end = time.time() + (move_duration * back_correction)
-                while rclpy.ok() and time.time() < t_end:
-                    rclpy.spin_once(mission, timeout_sec=0.05)
-                mission.stop_and_report(f"Backward Speed {speed}")
-
-                # Stop
-                mission.send_car_command(0.0, 0.0)
-                t_end = time.time() + 5.0
-                while rclpy.ok() and time.time() < t_end:
-                    rclpy.spin_once(mission, timeout_sec=0.05)  
+  
         
                 # # Move Forward
                 # mission.send_car_command(speed, 0.0)
