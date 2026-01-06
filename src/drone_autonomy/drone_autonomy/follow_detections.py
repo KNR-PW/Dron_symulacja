@@ -65,7 +65,7 @@ class FollowDetections(DroneController):
 
         # --- PID Constants (Unified) ---
         self.pid_yaw_kp = 1.1
-        self.pid_yaw_ki = 0.2
+        self.pid_yaw_ki = 0.4
         self.pid_yaw_kd = 0.5
 
         self.roll = None
@@ -144,6 +144,8 @@ class FollowDetections(DroneController):
         self.pub_dbg_yaw = self.create_publisher(Point, '/debug/yaw', 10)
         self.pub_dbg_gimbal = self.create_publisher(Point, '/debug/gimbal', 10)
         self.pub_dbg_vel = self.create_publisher(Point, '/debug/vel', 10)
+
+        self.pub_dbg_target_pos = self.create_publisher(Point, '/debug/target_pos', 10)
 
         # Car control publisher
         self.car_pub = self.create_publisher(Twist, '/cmd_vel', 10)
@@ -340,14 +342,19 @@ class FollowDetections(DroneController):
             gimbal_angle_rad = self.degrees_to_radians(self.gimbal_angle_deg)
             overall_pitch_rad = gimbal_angle_rad - self.pitch_rad
             
+            # --- FIX: Clamp pitch to avoid singularity/inversion ---
+            # Assume we never look "up" relative to horizon for ground targets
+            overall_pitch_rad = clamp(overall_pitch_rad, 0.01, 1.5) # 5 deg to ~86 deg
+            # -----------------------------------------------------
+
             if (self.gimbal_angle_deg >= 89.0 and self.radians_to_degrees(overall_pitch_rad) >= 90.0):
                 half_vertical_pixel_count = 240.0
                 pitch_offset = 0.6545 * self.ey_px / half_vertical_pixel_count
                 overall_pitch_rad += pitch_offset
 
             denom = math.tan(overall_pitch_rad)
-            if abs(denom) < 0.01: 
-                d_ground = 20.0
+            if abs(denom) < 0.1: 
+                d_ground = 30.0
             else:
                 d_ground = self.altitude / denom
             
@@ -467,6 +474,7 @@ class FollowDetections(DroneController):
         # ---------------------------------------
 
         # Predict position (GPS Denied / Relative)
+        # Uses Constant Velocity Model to estimate target position between frames
         # pred_stab = self.kf.predict(dt)
         # x_pred_stab = pred_stab[0]
         # y_pred_stab = pred_stab[1]
@@ -508,6 +516,12 @@ class FollowDetections(DroneController):
         
         x_target_body = x_pred_stab * cos_ny - y_pred_stab * sin_ny
         y_target_body = x_pred_stab * sin_ny + y_pred_stab * cos_ny
+
+        dbg_target = Point()
+        dbg_target.x = float(x_target_body)
+        dbg_target.y = float(y_target_body)
+        dbg_target.z = 0.0
+        self.pub_dbg_target_pos.publish(dbg_target)
         
         # Now use x_target_body (Forward dist) and y_target_body (Lateral dist) for control
         
@@ -559,8 +573,8 @@ class FollowDetections(DroneController):
         #     self.integral_error = 0.0
 
         # Total PID output
-        # yaw_rate = p_term + i_term + d_term
-        yaw_rate = p_term # only P now for tuning
+        # yaw_rate = p_term # only P now for tuning
+        yaw_rate = p_term + i_term # + d_term
         
         # Clamp yaw rate to reasonable speed (e.g., 45 deg/s = ~0.8 rad/s)
         # yaw_rate = clamp(yaw_rate, -0.8, 0.8)
@@ -609,7 +623,7 @@ class FollowDetections(DroneController):
         # Send vectors. 
         # ARGUMENTS: (Forward_Speed, Right_Speed, Vertical_Speed, Yaw_Rate)
         self.send_vectors(vx, 0.0, vz, yaw_rate)
-            # self.send_vectors(0.0, 0.0, vz, yaw_rate) # only yaw for tuning
+        # self.send_vectors(0.0, 0.0, vz, yaw_rate) # only yaw for tuning
             
 
     # ──────────────────────────────────────────────────────────
@@ -717,6 +731,10 @@ def main():
         mission.send_car_command(2.5, 0.5)
 
         mission.fly_to_detection()
+
+        # --- KEEP ALIVE LOOP ---
+        while rclpy.ok():
+            rclpy.spin_once(mission, timeout_sec=0.1)
 
         # --- TUNING SEQUENCE (Step Response) ---
         # mission.get_logger().info("Starting Step Response Tuning Loop...")
