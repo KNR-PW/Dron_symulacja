@@ -108,11 +108,31 @@ class DroneHandler(Node):
             self.wait_fc_ready()
         self.state = "OK"
         self.get_logger().info("\033[92mCopter connected, ready to arm")
+
+        # --- Request Higher Telemetry Rate ---
+        try:
+            # Request update rate of 50Hz for Attitude (MAV_DATA_STREAM_EXTRA1)
+            self.vehicle._master.mav.request_data_stream_send(
+                self.vehicle._master.target_system,
+                self.vehicle._master.target_component,
+                mavutil.mavlink.MAV_DATA_STREAM_EXTRA1,
+                50, 1
+            )
+            # 50Hz for Position
+            self.vehicle._master.mav.request_data_stream_send(
+                self.vehicle._master.target_system,
+                self.vehicle._master.target_component,
+                mavutil.mavlink.MAV_DATA_STREAM_POSITION,
+                50, 1
+            )
+        except Exception as e:
+            self.get_logger().warn(f"Failed to set high-rate telemetry: {e}")
+        # -----------------------------------
         
         # Add listener for ATTITUDE message to get angular velocities
         self.vehicle.add_message_listener('ATTITUDE', self.attitude_msg_callback)
 
-        self.timer = self.create_timer(.1, self.telemetry_callback)
+        self.timer = self.create_timer(.02, self.telemetry_callback)
 
     def attitude_msg_callback(self, vehicle, name, message):
         """
