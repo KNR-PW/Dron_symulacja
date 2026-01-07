@@ -13,12 +13,15 @@ import uuid
 import os
 from typing import Literal, TypedDict
 from datetime import datetime
-
+import math
 from langchain_anthropic import ChatAnthropic
 from langgraph.types import Command, interrupt
 from langgraph.graph import END, START, StateGraph
 from langgraph.checkpoint.memory import InMemorySaver
-
+#współrzedne geograficzne do obliczeń dystansu
+HOME_LATITUDE = 52.229770
+HOME_LONGITUDE = 21.011780
+EARTH_RADIUS_METERS = 6371000
 # Import narzędzi z osobnego pliku
 from drone_tools import (
     DRONE_TOOLS,
@@ -33,12 +36,27 @@ load_dotenv()
 # ============================================================================
 # Data Types
 # ============================================================================
+#Obliczanie odległości między dwoma punktami GPS
+def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """
+    Oblicza odległość między dwoma punktami GPS używając formuły haversine.
+    """
+    lat1_rad = math.radians(lat1)
+    lat2_rad = math.radians(lat2)
+    delta_lat = math.radians(lat2 - lat1)
+    delta_lon = math.radians(lon2 - lon1)
+    
+    a = math.sin(delta_lat / 2) ** 2 + \
+        math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(delta_lon / 2) ** 2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return EARTH_RADIUS_METERS * c
 
 class ParsedMission(TypedDict):
     waypoints: list[dict]
     estimated_duration_seconds: int
     max_altitude_meters: float
     max_distance_meters: float
+    total_distance_meters: float
     summary: str
     warnings: list[str]
 
@@ -61,6 +79,8 @@ class MissionAgentState(TypedDict):
     error: str | None
     confirmed: bool
     retry_message: str | None
+    total_input_tokens: int
+    total_output_tokens: int
 
 
 # ============================================================================
@@ -68,9 +88,9 @@ class MissionAgentState(TypedDict):
 # ============================================================================
 
 llm = ChatAnthropic(
-    model="claude-sonnet-4-20250514",
+    model="claude-sonnet-4-5-20250929",
     temperature=0,
-    max_tokens=4096
+    max_tokens=8900
 )
 
 # LLM z podłączonymi narzędziami z drone_tools.py
@@ -106,7 +126,7 @@ Reply ONLY with one word:
 Examples:
 - "takeoff 10m, fly north" → VALID
 - "wystartuj i leć" → VALID  
-- "dupa" → INVALID
+- "maslo" → INVALID
 - "hello how are you" → INVALID
 - "10 metrów do góry" → VALID
 - "asdfghjkl" → INVALID
@@ -114,7 +134,8 @@ Examples:
     
     response = llm.invoke(validation_prompt)
     result = response.content.strip().upper()
-    
+    input_tokens = response.response_metadata.get('usage', {}).get('input_tokens', 0)
+    output_tokens = response.response_metadata.get('usage', {}).get('output_tokens', 0)
     if "VALID" in result and "INVALID" not in result:
         return {"is_valid_mission": True, "retry_message": None}
     else:
@@ -123,7 +144,12 @@ Examples:
             msg = "❌ Nie rozpoznaję tego jako misji drona. Opisz misję używając komend jak: takeoff, fly, hover, land.\nPrzykład: 'wystartuj 10m, leć 20m na północ, zawisaj 5s, ląduj'"
         else:
             msg = "❌ I don't recognize this as a drone mission. Describe a mission using commands like: takeoff, fly, hover, land.\nExample: 'takeoff 10m, fly 20m north, hover 5s, land'"
-        return {"is_valid_mission": False, "retry_message": msg}
+        return {
+            "is_valid_mission": False, 
+            "retry_message": msg,
+            "total_input_tokens": state.get("total_input_tokens", 0) + input_tokens,
+            "total_output_tokens": state.get("total_output_tokens", 0) + output_tokens
+        }
 
 
 def detect_language(state: MissionAgentState) -> MissionAgentState:
@@ -135,12 +161,18 @@ Text: {state['user_input']}"""
     lang = response.content.strip().lower()
     if lang not in ["pl", "en"]:
         lang = "en"
-    return {"language": lang}
+    input_tokens = response.response_metadata.get('usage', {}).get('input_tokens', 0)
+    output_tokens = response.response_metadata.get('usage', {}).get('output_tokens', 0)
+    return {
+        "language": lang,
+        "total_input_tokens": state.get("total_input_tokens", 0) + input_tokens,
+        "total_output_tokens": state.get("total_output_tokens", 0) + output_tokens
+    }
 
 
 def parse_mission_with_tools(state: MissionAgentState) -> MissionAgentState:
     """
-    Parsuje misję używając narzędzi z drone_tools.py.
+    parsowanie misji z użyciem narzędzi z drone_tools.py.
     Narzędzia spoza ALLOWED_COMMANDS są ignorowane.
     """
     
@@ -153,6 +185,13 @@ AVAILABLE TOOLS (USE ONLY THESE):
 {tool_descriptions}
 
 USER MISSION: {state['user_input']}
+
+CRITICAL INSTRUCTIONS:
+- DO NOT write any explanation or text
+- DO NOT say "I'll parse this" or similar
+- ONLY call tools, one after another
+- Start IMMEDIATELY with takeoff tool
+- Call ALL required tools for the entire mission
 
 RULES:
 1. Start with takeoff (required!)
@@ -171,22 +210,29 @@ COORDINATE SYSTEM for goto_relative:
 Parse the mission step by step, calling appropriate tools for each action."""
 
     try:
-        # Wywołaj LLM z narzędziami
+        # Wywołanie LLM z narzędziami
         response = llm_with_tools.invoke(parse_prompt)
         
-        # Zbierz wywołania narzędzi
+        input_tokens = response.response_metadata.get('usage', {}).get('input_tokens', 0)
+        output_tokens = response.response_metadata.get('usage', {}).get('output_tokens', 0)
+        # Zbieranie wywołania narzędzi
         waypoints = []
         warnings = []
         max_altitude = 0.0
         total_distance = 0.0
+        max_distance_from_home = 0.0  
         photo_count = 0
+
+        current_lat = HOME_LATITUDE
+        current_lon = HOME_LONGITUDE
+        max_distance_from_home
         
         if hasattr(response, 'tool_calls') and response.tool_calls:
             for tc in response.tool_calls:
                 tool_name = tc['name']
                 tool_args = tc['args']
                 
-                # Sprawdź czy narzędzie jest dozwolone (używamy funkcji z drone_tools)
+                #  Czy narzędzie jest dozwolone  (funkcja z drone_tools)
                 if not is_valid_command(tool_name):
                     warnings.append(f"Ignored unknown command: {tool_name}")
                     continue
@@ -200,22 +246,56 @@ Parse the mission step by step, calling appropriate tools for each action."""
                     alt = float(tool_args.get("altitude", 10))
                     max_altitude = max(max_altitude, alt)
                 elif tool_name == "goto_relative":
-                    north = abs(float(tool_args.get("north", 0)))
-                    east = abs(float(tool_args.get("east", 0)))
+                    north = float(tool_args.get("north", 0))
+                    east = float(tool_args.get("east", 0))
                     total_distance += (north**2 + east**2)**0.5
+                    # Przybliżona aktualizacja pozycji GPS dla goto_relative
+                    # 1 stopień szerokości ≈ 111320 m, 1 stopień długości ≈ 111320 * cos(lat) m
+                    current_lat += north / 111320
+                    current_lon += east / (111320 * math.cos(math.radians(current_lat)))
+
+                    distance_from_home = haversine_distance(
+                        HOME_LATITUDE, HOME_LONGITUDE, current_lat, current_lon)
+                    max_distance_from_home = max(max_distance_from_home, distance_from_home)
                 elif tool_name == "goto_global":
+                    target_lat = float(tool_args.get("lat", HOME_LATITUDE))
+                    target_lon = float(tool_args.get("lon", HOME_LONGITUDE))
                     alt = float(tool_args.get("alt", 10))
                     max_altitude = max(max_altitude, alt)
+
+                    #obliczanie dystansu od obecnej pozycji do celu
+                    segment_distance = haversine_distance(
+                        current_lat, current_lon, target_lat, target_lon)
+                    total_distance += segment_distance
+                    #obliczanie odległości od domu
+                    distance_from_home = haversine_distance(
+                        HOME_LATITUDE, HOME_LONGITUDE, target_lat, target_lon)
+                    max_distance_from_home = max(max_distance_from_home, distance_from_home)
+
+                    #akutalizacja pozycji
+                    current_lat = target_lat
+                    current_lon = target_lon
+                elif tool_name == "rtl":
+                    return_distance = haversine_distance(
+                        current_lat, current_lon, HOME_LATITUDE, HOME_LONGITUDE)
+                    total_distance += return_distance
+                    current_lat = HOME_LATITUDE
+                    current_lon = HOME_LONGITUDE
                 elif tool_name == "take_photo":
                     photo_count += 1
         
         if not waypoints:
-            return {"error": "Could not parse mission into valid commands"}
+            lang = state.get("language", "en")
+            if lang == "pl":
+                return {"error": "Nie udało się przekształcić misji w poprawne komendy. Użyj słów: takeoff/wystartuj, fly/leć, land/ląduj"}
+            return {"error": "Could not parse mission into valid commands. Use words like: takeoff, fly, land"}
         
         # Wygeneruj podsumowanie
         summary_prompt = f"Summarize this drone mission in one sentence (max 15 words): {state['user_input']}"
         summary_response = llm.invoke(summary_prompt)
         summary = summary_response.content.strip()
+        input_tokens += summary_response.response_metadata.get('usage', {}).get('input_tokens', 0)
+        output_tokens += summary_response.response_metadata.get('usage', {}).get('output_tokens', 0)
         
         if photo_count > 0:
             summary += f" ({photo_count} photo(s))"
@@ -229,12 +309,16 @@ Parse the mission step by step, calling appropriate tools for each action."""
             "waypoints": waypoints,
             "estimated_duration_seconds": estimated_duration,
             "max_altitude_meters": max_altitude,
-            "max_distance_meters": total_distance,
+            "max_distance_meters": max_distance_from_home,
+            "total_distance_meters": total_distance,
             "summary": summary,
             "warnings": warnings
         }
         
-        return {"parsed_mission": parsed_mission, "error": None}
+        return {"parsed_mission": parsed_mission,
+                 "error": None,
+                 "total_input_tokens": state.get("total_input_tokens", 0) + input_tokens,
+                 "total_output_tokens": state.get("total_output_tokens", 0) + output_tokens}
         
     except Exception as e:
         return {"error": f"Parse failed: {str(e)}"}
@@ -266,11 +350,19 @@ def validate_mission(state: MissionAgentState) -> MissionAgentState:
     
     # Sprawdź dystans
     max_dist = parsed.get("max_distance_meters", 0)
-    if max_dist > 500:
-        issues.append(f"Long distance ({max_dist}m) - check battery")
+    if max_dist > 800:
+        issues.append(f"Long distance ({max_dist}m) - check RC range")
         risk_level = "medium" if risk_level == "low" else risk_level
         requires_confirmation = True
-    
+    total_dist = parsed.get("total_distance_meters", 0)
+    if total_dist > 2000:
+        issues.append(f"Total flight distance ({total_dist:.0f}m) - check battery capacity")
+        risk_level = "critical"
+        requires_confirmation = True
+    elif total_dist > 1000:
+        issues.append(f"Long total flight ({total_dist:.0f}m) - verify battery")
+        risk_level = "medium" if risk_level == "low" else risk_level
+        requires_confirmation = True
     # Sprawdź strukturę misji
     waypoints = parsed.get("waypoints", [])
     if waypoints:
@@ -413,7 +505,7 @@ def take_photo(node, prefix='photo'):
     return False
 '''
     
-    # Wygeneruj kompletny kod - PROSTY FORMAT jak test_mission.py
+    # generacja pełnego kodu ROS2
     ros2_code = f'''#!/usr/bin/env python3
 """
 Auto-generated mission: {mission_id}
@@ -466,7 +558,7 @@ if __name__ == "__main__":
 # ============================================================================
 
 def route_after_input_validation(state: MissionAgentState) -> Literal["parse_mission_with_tools", "__end__"]:
-    """Jeśli input jest niepoprawny, kończymy."""
+    """Jeśli input jest niepoprawny, konieczna jest ponowna próba."""
     if state.get("is_valid_mission"):
         return "parse_mission_with_tools"
     return "__end__"
@@ -493,6 +585,8 @@ def human_review(state: MissionAgentState) -> Command[Literal["generate_ros2_cod
         "risk": validation.get("risk_level", "?"),
         "issues": validation.get("issues", []),
         "waypoints": len(parsed.get("waypoints", [])),
+        "max_distance_m": parsed.get("max_distance_meters", 0), 
+        "total_distance_m": parsed.get("total_distance_meters", 0),
     }
     
     human_decision = interrupt(review_info)
@@ -553,15 +647,18 @@ def build_mission_graph():
 # ============================================================================
 
 def print_banner():
-    print("""
+    print(f"""
 ╔═══════════════════════════════════════════════════════════════════╗
-║       🚁 KNR Drone Mission Planner (Natural Language)            ║
+║       🚁 KNR Drone Mission Planner (Natural Language)             ║
 ╠═══════════════════════════════════════════════════════════════════╣
-║  Examples:                                                        ║
-║  • "takeoff 10m, fly 20m north, hover 5s, land"                  ║
-║  • "wystartuj 15m, leć 30m północ, zrób zdjęcie, ląduj"          ║
+║  📍 Home position: {HOME_LATITUDE}, {HOME_LONGITUDE}              ║
 ║                                                                   ║
-║  Commands: 'quit' | 'help' | 'tools'                             ║
+║  Examples:                                                        ║
+║  • "takeoff 10m, fly 20m north, hover 5s, land"                   ║
+║  • "wystartuj 15m, leć 30m północ, zrób zdjęcie, ląduj"           ║
+║  • "takeoff 10m, goto 52.2305,21.0120, land"                      ║
+║                                                                   ║
+║  Commands: 'quit' | 'help' | 'tools'                              ║
 ╚═══════════════════════════════════════════════════════════════════╝
     """)
 
@@ -595,6 +692,9 @@ def run_interactive():
 ╔═══════════════════════════════════════════════════════════════════╗
 ║                        HELP - Commands                            ║
 ╠═══════════════════════════════════════════════════════════════════╣
+║  📍 HOME POSITION: {HOME_LATITUDE}, {HOME_LONGITUDE}              ║
+║     (all distances calculated from this point)                    ║
+║                                                                   ║
 ║  DIRECTIONS:                                                      ║
 ║    north/south = forward/backward                                 ║
 ║    east/west = right/left                                         ║
@@ -627,7 +727,9 @@ def run_interactive():
                 "mission_id": None,
                 "error": None,
                 "confirmed": False,
-                "retry_message": None
+                "retry_message": None,
+                "total_input_tokens": 0,
+                "total_output_tokens": 0
             }
             
             print("⏳ Processing mission...")
@@ -642,7 +744,10 @@ def run_interactive():
             if "__interrupt__" in result:
                 data = result["__interrupt__"][0].value
                 print(f"\n⚠️  Review required!")
+                print(f"   📍 Home: {HOME_LATITUDE}, {HOME_LONGITUDE}") 
                 print(f"   Risk level: {data.get('risk', 'unknown')}")
+                print(f"   Max distance from home: {data.get('max_distance_m', 0):.1f}m")
+                print(f"   Total flight distance: {data.get('total_distance_m', 0):.1f}m")
                 print(f"   Issues: {', '.join(data.get('issues', ['None']))}")
                 confirm = input("\n   Approve mission? (y/n): ").strip().lower()
                 result = app.invoke(
@@ -655,9 +760,17 @@ def run_interactive():
             elif result.get("ros2_code"):
                 mission_id = result['mission_id']
                 pm = result.get("parsed_mission", {})
-                
+                lang = result.get("language", "?")
+
                 print(f"\n✅ Mission generated: {mission_id}")
+                print(f"🌐 Language: {lang}")
                 print(f"📝 Summary: {pm.get('summary', 'N/A')}")
+                print(f"📍 Home: {HOME_LATITUDE}, {HOME_LONGITUDE}")
+                print(f"📏 Max distance from home: {pm.get('max_distance_meters', 0):.1f}m")
+                print(f"📏Total flight distance: {pm.get('total_distance_meters', 0):.1f}m")
+                input_tokens = result.get("total_input_tokens", 0)
+                output_tokens = result.get("total_output_tokens", 0)
+                print(f"🪙 Tokens used: Input={input_tokens}, Output={output_tokens}")
                 print(f"📍 Waypoints ({len(pm.get('waypoints', []))}):")
                 
                 for i, wp in enumerate(pm.get('waypoints', [])):
