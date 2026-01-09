@@ -47,35 +47,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1-mesa-dev libglu1-mesa-dev freeglut3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /tools
-
-# === Użytkownik px4 ===
-RUN useradd -m -s /bin/bash px4 && \
-    echo "px4 ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
-    chown -R px4:px4 /tools
-
-
-# === Pobranie PX4-Autopilot ===
-RUN git clone https://github.com/PX4/PX4-Autopilot.git --recursive
-RUN ./PX4-Autopilot/Tools/setup/ubuntu.sh --no-nuttx -y
-WORKDIR /tools//PX4-Autopilot
-RUN make px4_sitl
-
-# # === pobieranie agenta uXRCE-DDS
-# WORKDIR /tools
-# RUN git clone -b v2.4.3 https://github.com/eProsima/Micro-XRCE-DDS-Agent.git
-# WORKDIR /tools/Micro-XRCE-DDS-Agent/build
-# RUN cmake ..
-# RUN make
-# RUN sudo make install
-# RUN sudo ldconfig /usr/local/lib/
-
 
 # pobranie potrzebnych bibliotek 
 
 RUN pip3 install \
     dronekit \
     haversine \
+    paho-mqtt \
     --break-system-packages
 
 # naprawianie biblioteki dronekit
@@ -83,7 +61,9 @@ RUN pip3 install \
 RUN sed -i 's/collections.MutableMapping/collections.abc.MutableMapping/g' /usr/local/lib/python3.12/dist-packages/dronekit/__init__.py
 RUN sed -i '45 s/imp/importlib/1' /usr/lib/python3/dist-packages/past/builtins/misc.py
 
+# pobieranie ros_gz_bridge
 
+RUN apt-get update && apt-get install -y ros-jazzy-ros-gz-bridge
 
 USER root
 WORKDIR /root

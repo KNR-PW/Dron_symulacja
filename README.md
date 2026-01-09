@@ -23,7 +23,7 @@ sudo systemctl restart docker
 ### 3. Pull the KNR Drone Simulation Docker Image
 Download the prebuilt Docker image from Docker Hub:
 ```bash
-docker image pull staskolo/knr-drone-sim:latest
+docker image pull dierust/knr_ap_sim:latest
 ```
 
 ### 4. Start the Docker Container
@@ -36,12 +36,12 @@ Navigate to the `docker/docker_ap` directory and execute the setup script:
 If your host has nvidia gpu:
 ```bash
 cd docker/docker_ap
-./setup_container_gpu.sh staskolo/knr-drone-sim:latest
+./setup_container_gpu.sh dierust/knr_ap_sim:latest
 ```
 If your host doesnt have nvidia gpu:
 ```bash
 cd docker/docker_ap
-./setup_container_cpu.sh staskolo/knr-drone-sim:latest
+./setup_container_cpu.sh dierust/knr_ap_sim:latest
 ```
 Once executed, you will be attached to the newly created Docker container.
 
@@ -49,12 +49,12 @@ Once executed, you will be attached to the newly created Docker container.
 > In some cases, the provided setup scripts may not work correctly and the container might not mount the `src` directory as expected (for example, you see an empty container after running `ls`).  
 > If this happens, you can start the container manually with the following command (replace `/absolute/path/to/Dron_symulacja/src` with the full path to your `src` directory on your machine):
 > ```bash
-> docker run --gpus all -it   --name knr_drone   -v /absolute/path/to/Dron_symulacja/src:/root/ros_ws/src   -e DISPLAY=$DISPLAY   -v /tmp/.X11-unix:/tmp/.X11-unix   --device /dev/dri   staskolo/knr-drone-sim:latest
+> docker run --gpus all -it   --name knr_drone   -v /absolute/path/to/Dron_symulacja/src:/root/ros_ws/src   -e DISPLAY=$DISPLAY   -v /tmp/.X11-unix:/tmp/.X11-unix   --device /dev/dri   dierust/knr_ap_sim:latest
 
 > ```
 > For systems without NVIDIA GPU, remove the `--gpus all` flag:
 > ```bash
-> docker run -it   --name knr_drone   -v /absolute/path/to/Dron_symulacja/src:/root/ros_ws/src   -e DISPLAY=$DISPLAY   -v /tmp/.X11-unix:/tmp/.X11-unix   --device /dev/dri   staskolo/knr-drone-sim:latest
+> docker run -it   --name knr_drone   -v /absolute/path/to/Dron_symulacja/src:/root/ros_ws/src   -e DISPLAY=$DISPLAY   -v /tmp/.X11-unix:/tmp/.X11-unix   --device /dev/dri   dierust/knr_ap_sim:latest
 > ```
 
 ### 5. ROS2 Workspace and Build Process

@@ -9,6 +9,15 @@ W katalogu Dron_symulacja musicie wykonać komende
 ```bash
 git submodule update --init --recursive
 ```
+Oraz w katalogu KNR_Drone_PX4_Autopilot
+```bash
+cd KNR_Drone_PX4_Autopilot && git submodule update --init --recursive
+```
+Teraz musisz zainicjalizować pakiet PX4
+```bash
+./Tools/setup/ubuntu.sh
+```
+Po czym **zrestartuj komputer!!!**
 Następnie musicie wejść do folderu **docker/docker_px4** i tam jest specjalnie przygotowany skrypt do stworzenia konteneru
 ```bash
 cd docker/docker_px4
