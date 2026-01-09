@@ -55,6 +55,7 @@ RUN pip install \
     transforms3d \
     colorama \
     tabulate \
+    paho-mqtt \
     requests
 
 # Fix dronekit

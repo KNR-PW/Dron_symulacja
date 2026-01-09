@@ -4,6 +4,6 @@
 [submodule "src/px4_msgs"]
 	path = src/px4_msgs
 	url = https://github.com/PX4/px4_msgs.git
-[submodule "src/px4_ros_com"]
-	path = src/px4_ros_com
-	url = https://github.com/PX4/px4_ros_com.git
+[submodule "KNR_Drone_PX4_Autopilot"]
+	path = KNR_Drone_PX4_Autopilot
+	url = https://github.com/KNR-PW/KNR_Drone_PX4_Autopilot.git

@@ -1,0 +1,1 @@
+cd ../KNR_Drone_PX4_Autopilot && make px4_sitl gz_tiltrotor_aruco
