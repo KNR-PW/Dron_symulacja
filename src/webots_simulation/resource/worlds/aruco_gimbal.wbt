@@ -18,9 +18,10 @@ WorldInfo {
   FPS 80
 }
 Viewpoint {
-  orientation 0.10461546750515424 0.8325602148592867 -0.5439660766924131 0.4540322910115094
-  position -19.93279027162137 -1.6784545664547406 7.335271632458219
+  orientation 0.00998385955071902 0.9967985057733226 -0.0793288184491791 0.2507945272616201
+  position -14.61607192037044 -6.315137117756345 2.8482053449885787
   follow "Iris"
+  followType "Mounted Shot"
   followSmoothness 0.01
 }
 TexturedBackground {
@@ -209,7 +210,6 @@ Robot {
   controller "<extern>"
   supervisor TRUE
 }
-
 Robot {
   children [
     Emitter {
