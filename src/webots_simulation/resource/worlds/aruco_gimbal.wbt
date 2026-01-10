@@ -19,7 +19,7 @@ WorldInfo {
 }
 Viewpoint {
   orientation 0.10461546750515424 0.8325602148592867 -0.5439660766924131 0.4540322910115094
-  position -19.121021455197578 -1.2139553814692592 9.016775290906752
+  position -19.93279027162137 -1.6784545664547406 7.335271632458219
   follow "Iris"
   followSmoothness 0.01
 }
@@ -90,6 +90,10 @@ DEF Iris Iris {
                   device [
                     RotationalMotor {
                       name "servo"
+                      controlPID 1.2 0 0
+                    }
+                    PositionSensor {
+                      name "servo_sensor"
                     }
                   ]
                   endPoint Solid {

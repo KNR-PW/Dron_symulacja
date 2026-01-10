@@ -28,7 +28,11 @@ def get_args():
     parser.add_argument("--uses-propellers",
                         type=bool,
                         default=True,
-                        help="Whether the vehicle uses propellers. This is important as we need to linearize thrust if so")
+                        help="If the motors are creating slightly exponential thrust (as is the case for propellers usually)")
+    parser.add_argument("--gimbal-sensor",
+                        type=str,
+                        default="servo_sensor",
+                        help="Name of the gimbal position sensor")
     parser.add_argument("--motor-cap",
                         type=float,
                         default=float('inf'),
@@ -121,6 +125,7 @@ if __name__ == "__main__":
                                 camera_name=args.camera,
                                 gimbal_camera_name=args.gimbal_camera,
                                 gimbal_servo_name=args.gimbal_servo,
+                                gimbal_sensor_name=args.gimbal_sensor,
                                 camera_fps=args.camera_fps,
                                 camera_stream_port=args.camera_port,
                                 rangefinder_name=args.rangefinder,

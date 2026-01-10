@@ -18,6 +18,7 @@ from typing import List, Union
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
+from std_msgs.msg import Float32
 from cv_bridge import CvBridge
 # Here we set up environment variables so we can run this script
 # as an external controller outside of Webots (useful for debugging)
@@ -63,6 +64,7 @@ class WebotsArduVehicleRos():
                  gimbal_camera_name: str = None,
                  gimbal_camera_stream_port: int = None,
                  gimbal_servo_name: str = None,
+                 gimbal_sensor_name: str = None,
                  rangefinder_name: str = None,
                  rangefinder_fps: int = 10,
                  rangefinder_stream_port: int = None,
@@ -157,6 +159,12 @@ class WebotsArduVehicleRos():
         if gimbal_servo_name is not None:
             self.gimbal_servo = self.robot.getDevice(gimbal_servo_name)
             self.gimbal_servo.setPosition(45.0 * 3.14 / 180.0) # point gimbal downwards by default
+
+        if gimbal_sensor_name is not None:
+            self.gimbal_sensor = self.robot.getDevice(gimbal_sensor_name)
+            if self.gimbal_sensor:
+                self.gimbal_sensor.enable(self._timestep)
+                self.gimbal_sensor_pub = self.node.create_publisher(Float32, '/gimbal/current_angle', 10)
   
         # init rangefinder
         if rangefinder_name is not None:
@@ -181,6 +189,13 @@ class WebotsArduVehicleRos():
             'set_gimbal_angle',
             self.handle_set_gimbal_angle_request
         )
+
+        # self.gimbal_sub = self.node.create_subscription(
+        #     Float32,
+        #     '/gimbal/cmd_pitch',
+        #     self.handle_gimbal_pitch_message,
+        #     10
+        # )
 
         # start ArduPilot SITL communication thread
         self._sitl_thread = Thread(daemon=True, target=self._handle_sitl, args=[sitl_address, 9002+10*instance])
@@ -341,25 +356,11 @@ class WebotsArduVehicleRos():
             sleep_duration = (cam_sample_period / 1000.0) - elapsed_time
             if sleep_duration > 0:
                 time.sleep(sleep_duration)
-    
-    # def set_gimbal_angle(self, angle_radians: float):
-    #     """Sets the position of the gimbal servo.
-
-    #     Args:
-    #         angle_radians (float): The desired angle in radians.
-    #     """
-    #     if hasattr(self, 'gimbal_servo'):
-    #         self.gimbal_servo.setPosition(angle_radians)
-    #     else:
-    #         self.node.get_logger().warn("Gimbal servo not initialized.")
 
     def handle_set_gimbal_angle_request(self, request, response):
         """Handles the SetGimbalAngle service request."""
-        # self.node.get_logger().info(f"Received service request to set angle to {request.angle_degrees} degrees.") # <-- ADD THIS
         if hasattr(self, 'gimbal_servo') and self.gimbal_servo is not None:
             angle_radians = math.radians(request.angle_degrees)
-            # self.node.get_logger().info(f"Setting servo position to {angle_radians} radians.") # <-- ADD THIS
-            
             self.gimbal_servo.setPosition(angle_radians)
             
             response.success = True
@@ -369,12 +370,34 @@ class WebotsArduVehicleRos():
             response.success = False
             response.message = "Gimbal servo was not initialized."
         return response
+
+    # def handle_gimbal_pitch_message(self, msg):
+    #     """Handles the /gimbal/cmd_pitch topic message (degrees)."""
+    #     if hasattr(self, 'gimbal_servo') and self.gimbal_servo is not None:
+    #          # Limit to common range if needed, e.g. -90 to +90
+    #          angle_radians = math.radians(msg.data)
+    #          self.gimbal_servo.setPosition(angle_radians)
     
     def _ros_spin_thread(self):
         """Spins the ROS 2 node to process callbacks."""
         self.node.get_logger().info("Starting ROS 2 spin thread.")
+        
+        if hasattr(self, 'gimbal_sensor') and self.gimbal_sensor:
+            self._gimbal_sensor_thread = Thread(daemon=True, target=self._publish_gimbal_sensor)
+            self._gimbal_sensor_thread.start()
+
         rclpy.spin(self.node)
 
+    def _publish_gimbal_sensor(self):
+        while self._webots_connected:
+            val = self.gimbal_sensor.getValue()
+            # Convert radians to degrees for consistency with the rest of the node
+            deg = math.degrees(val)
+            msg = Float32()
+            msg.data = deg
+            self.gimbal_sensor_pub.publish(msg)
+            time.sleep(self._timestep / 1000.0)
+            
     def get_camera_gray_image(self) -> np.ndarray:
         """Get the grayscale image from the camera as a numpy array of bytes"""
         img = self.get_camera_image()

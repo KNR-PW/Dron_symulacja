@@ -13,6 +13,7 @@ from drone_interfaces.msg import VelocityVectors, Telemetry
 from drone_interfaces.srv import ToggleVelocityControl, SetGimbalAngle
 from drone_autonomy.drone_comunication.drone_controller import DroneController
 from std_srvs.srv import SetBool
+from std_msgs.msg import Float32
 from geometry_msgs.msg import Point, Twist, PointStamped
 
 # TODO: fix aruco node (numpy)
@@ -32,13 +33,11 @@ class FollowDetections(DroneController):
         self.declare_parameter('detections_topic', '/detections')
         self.declare_parameter('target_alt', 2.0)
         self.declare_parameter('kp', 0.05) # declared as input parameter, currently 0.6
-        self.declare_parameter('deadband_px', 0)
         self.declare_parameter('max_vel', 2.0)
         self.declare_parameter('lowpass', 0.3)
         self.declare_parameter('lost_timeout', 0.8)  # s
 
         # Gimbal tracking params
-        self.declare_parameter('gimbal_kp_deg', 1.5)     # degrees per normalized image unit
         self.declare_parameter('gimbal_min_deg', -15.0)
         self.declare_parameter('gimbal_max_deg', 90.0)
         self.declare_parameter('gimbal_rate_hz', 50.0)    # command rate
@@ -48,7 +47,6 @@ class FollowDetections(DroneController):
         self.cx = self.img_w / 2.0
         self.cy = self.img_h / 2.0
         self.kp = float(self.get_parameter('kp').value)
-        self.deadband_px = int(self.get_parameter('deadband_px').value)
         self.max_vel = float(self.get_parameter('max_vel').value)
         self.lowpass = float(self.get_parameter('lowpass').value)
         self.lost_timeout = float(self.get_parameter('lost_timeout').value)
@@ -56,12 +54,12 @@ class FollowDetections(DroneController):
         self.target_alt = float(self.get_parameter('target_alt').value)
 
         # gimbal state
-        self.gimbal_kp_deg = float(self.get_parameter('gimbal_kp_deg').value)
         self.gimbal_min_deg = float(self.get_parameter('gimbal_min_deg').value)
         self.gimbal_max_deg = float(self.get_parameter('gimbal_max_deg').value)
         self.gimbal_rate_hz = float(self.get_parameter('gimbal_rate_hz').value)
         # start with a safe downwards angle (match webots default)
         self.gimbal_angle_deg = 80.0
+        self.gimbal_setpoint = 80.0  # Internal integrator state for smooth control
 
         # --- PID Constants (Unified) ---
         self.pid_yaw_kp = 1.5
@@ -100,6 +98,8 @@ class FollowDetections(DroneController):
         self.ex_f = 0.0
         self.ey_f = 0.0
         self.last_seen = time.time()
+
+        self.delta_deg_f = 0.0
         
         # --- Ground Truth & Validation ---
         self.car_true_pos = None
@@ -121,7 +121,7 @@ class FollowDetections(DroneController):
 
         self.get_logger().info(
             f"Start follow_detections: img=({self.img_w}x{self.img_h}) "
-            f"kp={self.kp} max_vel={self.max_vel} deadband={self.deadband_px}px"
+            f"kp={self.kp} max_vel={self.max_vel}"
         )
 
         self.set_gimbal_cli = self.create_client(SetGimbalAngle, 'set_gimbal_angle')
@@ -158,7 +158,13 @@ class FollowDetections(DroneController):
 
         # Car control publisher
         self.car_pub = self.create_publisher(Twist, '/cmd_vel', 10)
-        
+
+        # self.gimbal_pub = self.create_publisher(Float32, '/gimbal/cmd_pitch', 10)
+        self.create_subscription(Float32, '/gimbal/current_angle', self.gimbal_status_callback, 10)
+
+    def gimbal_status_callback(self, msg):
+        """Updates the known physical state of the gimbal."""
+        self.gimbal_angle_deg = msg.data
 
     def telemetry_callback(self, msg):
         """Callback to update altitude from telemetry topic."""
@@ -241,57 +247,88 @@ class FollowDetections(DroneController):
             self.get_logger().error(f'Service calling unsuccessful: {e}')
 
     # ──────────────────────────────────────────────────────────
-    def gimbal_control_loop(self): # TODO: pid not p, plot ey_f in real time
+    def gimbal_control_loop(self): # TODO: De-roll???
         """Periodically adjust gimbal pitch to keep the marker centered vertically.
         Uses the filtered vertical error ey_f (normalized)."""
         # only act when centering requested
         if not getattr(self, "centering", False):
+            # Sync internal state to reality while idle so we are ready to start
+            self.gimbal_setpoint = self.gimbal_angle_deg 
             return
         # only track when we have a recent detection
         if (time.time() - self.last_seen) > self.lost_timeout:
+            # Sync internal state to reality while lost so we don't jump when we find it
+            self.gimbal_setpoint = self.gimbal_angle_deg
             return
 
-        delta_deg = self.gimbal_kp_deg * float(self.ey_f)
+        fov_y_rad = self.degrees_to_radians(75.0) # because 640 x 480, and the cameras fov is 100deg 
+        delta_rad = (self.ey_px / (self.img_h / 2.0)) * (fov_y_rad / 2.0)
 
-        # integrate with a small step to avoid jumps
-        max_step = max(1.0, abs(self.gimbal_kp_deg) * 0.5)  # cap step to avoid jerks
-        delta_deg = max(-max_step, min(max_step, delta_deg))
-        self.gimbal_angle_deg = clamp(self.gimbal_angle_deg + delta_deg, self.gimbal_min_deg, self.gimbal_max_deg)
+        kalman_pred = (self.kf.x[0], self.kf.x[1]) if self.kf.initialized else None
+        
+        # if (time.time() - self.last_seen) > 2.0 and kalman_pred is not None:
+        #     sin_ny = math.sin(-self.yaw)
+        #     cos_ny = math.cos(-self.yaw)
+            
+        #     x_target_body = kalman_pred[0] * cos_ny - kalman_pred[1] * sin_ny
+        #     # y_target_body = kalman_pred[0] * sin_ny + kalman_pred[1] * cos_ny
 
-        # send non-blocking request
+        #     height = self.altitude
+            
+        #     #! is using gimbal_angle_deg as an input variable not wrong?
+        #     delta_deg = self.gimbal_angle_deg - self.radians_to_degrees(math.atan2(height, x_target_body))
+
+        # delta_deg = self.gimbal_kp_deg * float(self.ey_f) # TODO: try and follow the kalman state?
+        # delta_deg = self.gimbal_kp_deg * pitch_rel_deg
+
+        delta_deg = self.radians_to_degrees(delta_rad) # webots pid will handle the regulation
+
+        # low-pass
+        a = clamp(self.lowpass, 0.0, 1.0)
+        self.delta_deg_f = (1 - a) * self.delta_deg_f + a * delta_deg
+
+        # Control Logic: Integrate visual error into an internal setpoint.
+        # This decouples the control loop from sensor lag (previously target = sensor + error caused oscillation).
+        # Gain K < 1.0 acts as a damper.
+        K_gimbal = 0.2  
+        
+        # If we lost tracking for a while, reset setpoint to current reality to avoid jumps
+        # if (time.time() - self.last_seen) > 0.5:
+        #    self.gimbal_setpoint = self.gimbal_angle_deg
+
+        # self.gimbal_setpoint += delta_deg * K_gimbal
+        self.gimbal_setpoint = self.gimbal_angle_deg + self.delta_deg_f * K_gimbal
+        
+        # Calculate new target angle based on current state (updated via callback) + visual error
+        self.gimbal_setpoint = clamp(self.gimbal_setpoint, self.gimbal_min_deg, self.gimbal_max_deg)
+        target_angle = self.gimbal_setpoint
+
+        # Publish command via Topic
+        # msg = Float32()
+        # msg.data = float(target_angle)
+        # self.gimbal_pub.publish(msg)
+
+        # send non-blocking request (Service fallback)
         try:
             req = SetGimbalAngle.Request()
-            req.angle_degrees = float(self.gimbal_angle_deg)
+            # req.angle_degrees = float(self.gimbal_angle_deg)
+            req.angle_degrees = float(target_angle)
             self.set_gimbal_cli.call_async(req)
         except Exception:
             pass
 
         # Publish debug info
         dbg_msg = Point()
-        dbg_msg.x = 0.0  # target error
-        dbg_msg.y = float(self.ey_f)  # current error
-        dbg_msg.z = float(delta_deg)  # output
+        dbg_msg.x = 0.0 
+        dbg_msg.y = float(target_angle) 
+        dbg_msg.z = float(self.gimbal_angle_deg)
         self.pub_dbg_gimbal.publish(dbg_msg)
-
-        # debug log occasionally
-        # self._gimbal_dbg_cnt += 1
-        # if self._gimbal_dbg_cnt >= max(1, int(self.gimbal_rate_hz)):
-        #     self._gimbal_dbg_cnt = 0
-        #     self.get_logger().info(f"gimbal: ey_f={self.ey_f:.3f} angle={self.gimbal_angle_deg:.2f} last_seen={time.time()-self.last_seen:.2f}s")
 
     # ──────────────────────────────────────────────────────────
     # def on_marker(self, msg: MiddleOfAruco):
     #     # błąd w pikselach względem środka obrazu
     #     self.ex_px = float(msg.x) - self.cx
     #     self.ey_px = float(msg.y) - self.cy
-
-    #     # martwa strefa
-    #     if abs(self.ex_px) < self.deadband_px:
-    #         self.ex_px = 0.0
-    #         self.x_flag = True
-    #     if abs(self.ey_px) < self.deadband_px:
-    #         self.ey_px = 0.0
-    #         self.y_flag = True
 
     #     # normalizacja do [-1,1]
     #     ex = self.ex_px / (self.img_w / 2.0)
@@ -326,47 +363,27 @@ class FollowDetections(DroneController):
         cx = best.bbox.center.position.x
         cy = best.bbox.center.position.y
 
-        # cx = bbox.center.position.x
-        # cy = bbox.center.position.y
-
         # błąd w pikselach względem środka obrazu
         self.ex_px = float(cx) - self.cx
         self.ey_px = float(cy) - self.cy
 
         # self.get_logger().info(f"Tracking: {obj_name} with score: {score:.2f}, detection error: ex_px={self.ex_px}, ey_px={self.ey_px}")
-
-        # martwa strefa
-        if abs(self.ex_px) < self.deadband_px:
-            self.ex_px = 0.0
-            self.x_flag = True
-        if abs(self.ey_px) < self.deadband_px:
-            self.ey_px = 0.0
-            self.y_flag = True
-
-        # normalizacja do [-1,1]
-        ex = self.ex_px / (self.img_w / 2.0)
-        ey = self.ey_px / (self.img_h / 2.0)
-
-        # low-pass
-        a = clamp(self.lowpass, 0.0, 1.0)
-        self.ex_f = (1 - a) * self.ex_f + a * ex
-        self.ey_f = (1 - a) * self.ey_f + a * ey
         
         # --- KALMAN FILTER UPDATE (GPS Denied) ---
         if self.altitude is not None and self.pitch_rad is not None and self.yaw is not None:
             # 1. Calculate Distance on Ground (Body Frame)
             gimbal_angle_rad = self.degrees_to_radians(self.gimbal_angle_deg)
             overall_pitch_rad = gimbal_angle_rad - self.pitch_rad
-            
+
+            # if (self.gimbal_angle_deg >= 89.0 and self.radians_to_degrees(overall_pitch_rad) >= 90.0):
+            half_vertical_pixel_count = 240.0
+            pitch_offset = 0.6545 * self.ey_px / half_vertical_pixel_count
+            overall_pitch_rad += pitch_offset
+
             # --- FIX: Clamp pitch to avoid singularity/inversion ---
             # Assume we never look "up" relative to horizon for ground targets
             overall_pitch_rad = clamp(overall_pitch_rad, 0.01, 1.5) # 5 deg to ~86 deg
             # -----------------------------------------------------
-
-            if (self.gimbal_angle_deg >= 89.0 and self.radians_to_degrees(overall_pitch_rad) >= 90.0):
-                half_vertical_pixel_count = 240.0
-                pitch_offset = 0.6545 * self.ey_px / half_vertical_pixel_count
-                overall_pitch_rad += pitch_offset
 
             denom = math.tan(overall_pitch_rad)
             if abs(denom) < 0.1: 
@@ -509,15 +526,21 @@ class FollowDetections(DroneController):
              # Estimated Global Position of Car = Drone True Pos + Vision Vector (NED/ENU?)
              est_car_pos = self.drone_true_pos.copy()
              est_car_pos[0] += x_pred_stab
-             est_car_pos[1] += y_pred_stab
+             est_car_pos[1] -= y_pred_stab
              
              delta = est_car_pos - self.car_true_pos
              dist_error = np.linalg.norm(delta[:2]) # 2D error
 
 
-             self.get_logger().info(f"VALIDATION: True={self.car_true_pos[:2]} Drone={self.drone_true_pos[:2]} Est={est_car_pos[:2]} Delta={delta[:2]}")
+            #  self.get_logger().info(
+            #      f"VALIDATION: Car=({self.car_true_pos[0]:.2f}, {self.car_true_pos[1]:.2f}) "
+            #      f"Drone=({self.drone_true_pos[0]:.2f}, {self.drone_true_pos[1]:.2f}) "
+            #     #  f"Pred=({x_pred_stab:.2f}, {y_pred_stab:.2f}) "
+            #      f"Est=({est_car_pos[0]:.2f}, {est_car_pos[1]:.2f}) "
+            #      f"Delta=({delta[0]:.2f}, {delta[1]:.2f})"
+            #      f" Err={dist_error:.2f}m"
+            #  )
              
-             #  self.get_logger().info(f"VALIDATION: True={self.car_true_pos[:2]} Est={est_car_pos[:2]} Delta={delta[:2]} Err={dist_error:.2f}m")
              dbg_car_delta = Point()
              dbg_car_delta.x = delta[0]
              dbg_car_delta.y = delta[1]
@@ -687,7 +710,6 @@ class FollowDetections(DroneController):
         self.state = "BUSY"
         self.centering = True
         self.get_logger().info("wlaczam centrowanie detekcji (gimbal only, non-blocking)")
-        # gimbal_control_loop is already running on its own timer
  
     def stop_centering(self):
         """Stop gimbal centering (non-blocking)."""
@@ -743,7 +765,7 @@ def main():
     
     try:
         mission.arm()
-        target_height = 5.0
+        target_height = 4.0
         
         mission.set_gimbal_angle(45.0)
         mission.takeoff(target_height)
@@ -761,7 +783,7 @@ def main():
             
             if current_alt is not None:
                 # Check if we are close enough (e.g. within 0.5m)
-                if abs(current_alt - target_height) < 0.5:
+                if abs(current_alt - target_height) < 0.2:
                     mission.get_logger().info(f"Target altitude reached: {current_alt:.2f}m")
                     break
             
