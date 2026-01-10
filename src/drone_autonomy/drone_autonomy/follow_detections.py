@@ -16,7 +16,6 @@ from std_srvs.srv import SetBool
 from std_msgs.msg import Float32
 from geometry_msgs.msg import Point, Twist, PointStamped
 
-# TODO: fix aruco node (numpy)
 # TODO: fix wrong world opening
 
 def clamp(v, lo, hi):
@@ -261,45 +260,38 @@ class FollowDetections(DroneController):
             self.gimbal_setpoint = self.gimbal_angle_deg
             return
 
-        fov_y_rad = self.degrees_to_radians(75.0) # because 640 x 480, and the cameras fov is 100deg 
-        delta_rad = (self.ey_px / (self.img_h / 2.0)) * (fov_y_rad / 2.0)
-
         kalman_pred = (self.kf.x[0], self.kf.x[1]) if self.kf.initialized else None
         
-        # if (time.time() - self.last_seen) > 2.0 and kalman_pred is not None:
-        #     sin_ny = math.sin(-self.yaw)
-        #     cos_ny = math.cos(-self.yaw)
+        if (time.time() - self.last_seen) > 1.0 and kalman_pred is not None:
+            sin_ny = math.sin(-self.yaw)
+            cos_ny = math.cos(-self.yaw)
             
-        #     x_target_body = kalman_pred[0] * cos_ny - kalman_pred[1] * sin_ny
-        #     # y_target_body = kalman_pred[0] * sin_ny + kalman_pred[1] * cos_ny
+            x_target_body = kalman_pred[0] * cos_ny - kalman_pred[1] * sin_ny
+            # y_target_body = kalman_pred[0] * sin_ny + kalman_pred[1] * cos_ny
 
-        #     height = self.altitude
+            height = self.altitude
             
-        #     #! is using gimbal_angle_deg as an input variable not wrong?
-        #     delta_deg = self.gimbal_angle_deg - self.radians_to_degrees(math.atan2(height, x_target_body))
+            # Fix: Calculate delta as Target - Current (not Current - Target)
+            target_angle_abs = self.radians_to_degrees(math.atan2(height, x_target_body))
+            delta_deg = target_angle_abs - self.gimbal_angle_deg
+        else:
+            fov_y_rad = self.degrees_to_radians(75.0) # because 640 x 480, and the cameras fov is 100deg 
+            delta_rad = (self.ey_px / (self.img_h / 2.0)) * (fov_y_rad / 2.0)
+
+            delta_deg = self.radians_to_degrees(delta_rad) # webots pid will handle the regulation
 
         # delta_deg = self.gimbal_kp_deg * float(self.ey_f) # TODO: try and follow the kalman state?
         # delta_deg = self.gimbal_kp_deg * pitch_rel_deg
-
-        delta_deg = self.radians_to_degrees(delta_rad) # webots pid will handle the regulation
 
         # low-pass
         a = clamp(self.lowpass, 0.0, 1.0)
         self.delta_deg_f = (1 - a) * self.delta_deg_f + a * delta_deg
 
-        # Control Logic: Integrate visual error into an internal setpoint.
-        # This decouples the control loop from sensor lag (previously target = sensor + error caused oscillation).
-        # Gain K < 1.0 acts as a damper.
-        K_gimbal = 0.2  
-        
-        # If we lost tracking for a while, reset setpoint to current reality to avoid jumps
-        # if (time.time() - self.last_seen) > 0.5:
-        #    self.gimbal_setpoint = self.gimbal_angle_deg
+        K_gimbal = 0.2 # damping factor for smoother gimbal movement
 
         # self.gimbal_setpoint += delta_deg * K_gimbal
         self.gimbal_setpoint = self.gimbal_angle_deg + self.delta_deg_f * K_gimbal
         
-        # Calculate new target angle based on current state (updated via callback) + visual error
         self.gimbal_setpoint = clamp(self.gimbal_setpoint, self.gimbal_min_deg, self.gimbal_max_deg)
         target_angle = self.gimbal_setpoint
 
@@ -668,7 +660,8 @@ class FollowDetections(DroneController):
         #     except Exception:
         #         pass
         # else:
-            # Publish debug info
+
+        # Publish debug info
         dbg_yaw = Point()
         dbg_yaw.x = 0.0
         dbg_yaw.y = float(math.degrees(yaw_error))
@@ -687,20 +680,18 @@ class FollowDetections(DroneController):
         # dbg_vel.z = float(vx)
         # self.pub_dbg_vel.publish(dbg_vel)
 
-
         # Send vectors. 
         # ARGUMENTS: (Forward_Speed, Right_Speed, Vertical_Speed, Yaw_Rate)
-        # self.send_vectors(vx, 0.0, vz, yaw_rate)
+        self.send_vectors(vx, 0.0, vz, yaw_rate)
         # self.send_vectors(0.0, 0.0, vz, yaw_rate) # only yaw for tuning
-        self.send_vectors(0.0, 0.0, 0.0, 0.0) # only yaw for tuning
-            
+        # self.send_vectors(0.0, 0.0, 0.0, 0.0) # no movement for tuning
 
     # ──────────────────────────────────────────────────────────
     def fly_to_detection(self):        
         # Start gimbal centering + drone approach (control loop)
         self.state = "BUSY"
         self.centering = True
-        self.get_logger().info("wlaczam nadlatywanie do detekcji (gimbal centering + approach)")
+        self.get_logger().info("Gimbal centering + approach started")
         # start approach control loop at 50 Hz (or adjust)
         self.timer = self.create_timer(0.02, self.drone_control_loop) # TODO: faster?
         # self.wait_busy()
@@ -709,13 +700,13 @@ class FollowDetections(DroneController):
     def center_detection(self):
         self.state = "BUSY"
         self.centering = True
-        self.get_logger().info("wlaczam centrowanie detekcji (gimbal only, non-blocking)")
+        self.get_logger().info("Gimbal centering started (gimbal only)")
  
     def stop_centering(self):
         """Stop gimbal centering (non-blocking)."""
         self.centering = False
         self.state = "OK"
-        self.get_logger().info("zatrzymano centrowanie detekcji")
+        self.get_logger().info("Detection centering stopped")
         # if approach control is running, stop it too
         try:
             if hasattr(self, 'timer'):
@@ -798,7 +789,7 @@ def main():
         # mission.send_goto_relative(0.0, -6.5, 0.0)
         # mission.center_detection()
 
-        mission.send_car_command(0.0, 0.0)
+        mission.send_car_command(4.0, 0.25)
 
         mission.fly_to_detection()
 
