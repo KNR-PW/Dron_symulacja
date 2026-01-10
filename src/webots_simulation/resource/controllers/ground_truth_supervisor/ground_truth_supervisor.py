@@ -51,12 +51,22 @@ class GroundTruthPublisher(Node):
         # Publish Car Position
         if self.car_node:
             pos = self.car_node.getPosition()
+            orientation = self.car_node.getOrientation()
+            
+            # Offset the position by 1.5m in the car's local X direction
+            # Orientation matrix columns are global axes corresponding to local X, Y, Z
+            # Column 0 is local X vector in global coordinates
+            # Indices: 0, 3, 6
+            dx = orientation[0] * 1.5
+            dy = orientation[3] * 1.5
+            dz = orientation[6] * 1.5
+
             msg = PointStamped()
             msg.header.stamp = self.get_clock().now().to_msg()
             msg.header.frame_id = "map"
-            msg.point.x = pos[0]
-            msg.point.y = pos[1]
-            msg.point.z = pos[2]
+            msg.point.x = pos[0] + dx
+            msg.point.y = pos[1] + dy
+            msg.point.z = pos[2] + dz
             self.car_pub.publish(msg)
 
 def main():
