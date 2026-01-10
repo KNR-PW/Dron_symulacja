@@ -46,6 +46,10 @@ data_files.append(('share/' + package_name + '/controllers' + '/ardupilot_sitl_c
     # 'resource/worlds/depth_mavic_world_no_gravity.wbt',
 ))
 
+data_files.append(('share/' + package_name + '/controllers' + '/ground_truth_supervisor', 
+    glob('resource/controllers/ground_truth_supervisor/*.py')
+))
+
 data_files.append(('share/' + package_name + '/resource', [
     'resource/webots_sim_manager.urdf'
 ]))

@@ -13,7 +13,7 @@ from drone_interfaces.msg import VelocityVectors, Telemetry
 from drone_interfaces.srv import ToggleVelocityControl, SetGimbalAngle
 from drone_autonomy.drone_comunication.drone_controller import DroneController
 from std_srvs.srv import SetBool
-from geometry_msgs.msg import Point, Twist
+from geometry_msgs.msg import Point, Twist, PointStamped
 
 # TODO: fix aruco node (numpy)
 # TODO: fix wrong world opening
@@ -64,9 +64,9 @@ class FollowDetections(DroneController):
         self.gimbal_angle_deg = 80.0
 
         # --- PID Constants (Unified) ---
-        self.pid_yaw_kp = 1.1
-        self.pid_yaw_ki = 0.4
-        self.pid_yaw_kd = 0.2
+        self.pid_yaw_kp = 1.5
+        self.pid_yaw_ki = 0.5
+        self.pid_yaw_kd = 0.1
 
         self.roll = None
         self.pitch_rad = None
@@ -100,6 +100,13 @@ class FollowDetections(DroneController):
         self.ex_f = 0.0
         self.ey_f = 0.0
         self.last_seen = time.time()
+        
+        # --- Ground Truth & Validation ---
+        self.car_true_pos = None
+        self.drone_true_pos = None
+        self.create_subscription(PointStamped, '/sim/ground_truth/car', self.on_car_ground_truth, 10)
+        self.create_subscription(PointStamped, '/sim/ground_truth/drone', self.on_drone_ground_truth, 10)
+        # ---------------------------------
 
         # Dodanie flag dotyczących osiągnięcia punktu celowego
         self.x_flag = False
@@ -146,6 +153,8 @@ class FollowDetections(DroneController):
         self.pub_dbg_gimbal = self.create_publisher(Point, '/debug/gimbal', 10)
         self.pub_dbg_target_pos = self.create_publisher(Point, '/debug/target_pos', 10)
         self.pub_dbg_vx = self.create_publisher(Point, '/debug/vx', 10)
+        
+        self.pub_car_delta = self.create_publisher(Point, '/debug/car_delta', 10)
 
         # Car control publisher
         self.car_pub = self.create_publisher(Twist, '/cmd_vel', 10)
@@ -293,6 +302,13 @@ class FollowDetections(DroneController):
     #     self.ex_f = (1 - a) * self.ex_f + a * ex
     #     self.ey_f = (1 - a) * self.ey_f + a * ey
     #     self.last_seen = time.time()
+
+    def on_car_ground_truth(self, msg):
+        self.car_true_pos = np.array([msg.point.x, msg.point.y, msg.point.z])
+        # self.get_logger().info(f"Car GT: {self.car_true_pos}", throttle_duration_sec=2.0)
+
+    def on_drone_ground_truth(self, msg):
+        self.drone_true_pos = np.array([msg.point.x, msg.point.y, msg.point.z])
 
     def on_detection(self, msg: Detection2DArray):
         self.get_logger().debug(f"Received {len(msg.detections)} detections")
@@ -488,6 +504,29 @@ class FollowDetections(DroneController):
         x_pred_stab = pred_stab[0]
         y_pred_stab = pred_stab[1]
 
+        # --- VALIDATION LOGIC ---
+        if self.car_true_pos is not None and self.drone_true_pos is not None:
+             # Estimated Global Position of Car = Drone True Pos + Vision Vector (NED/ENU?)
+             est_car_pos = self.drone_true_pos.copy()
+             est_car_pos[0] += x_pred_stab
+             est_car_pos[1] += y_pred_stab
+             
+             delta = est_car_pos - self.car_true_pos
+             dist_error = np.linalg.norm(delta[:2]) # 2D error
+
+
+             self.get_logger().info(f"VALIDATION: True={self.car_true_pos[:2]} Drone={self.drone_true_pos[:2]} Est={est_car_pos[:2]} Delta={delta[:2]}")
+             
+             #  self.get_logger().info(f"VALIDATION: True={self.car_true_pos[:2]} Est={est_car_pos[:2]} Delta={delta[:2]} Err={dist_error:.2f}m")
+             dbg_car_delta = Point()
+             dbg_car_delta.x = delta[0]
+             dbg_car_delta.y = delta[1]
+             dbg_car_delta.z = 0.0 # TODO: dist error?
+             self.pub_car_delta.publish(dbg_car_delta)
+        else:
+             self.get_logger().info(f"WAITING FOR GT: Car={self.car_true_pos is not None} Drone={self.drone_true_pos is not None}", throttle_duration_sec=2.0)
+        # ------------------------
+
         if (time.time() - self.last_seen) > self.lost_timeout:
             # brak markera niedawno -> wyhamuj
             self.get_logger().warn(f"Detection lost for more than {self.lost_timeout}s, stopping!")
@@ -628,8 +667,9 @@ class FollowDetections(DroneController):
 
         # Send vectors. 
         # ARGUMENTS: (Forward_Speed, Right_Speed, Vertical_Speed, Yaw_Rate)
-        self.send_vectors(vx, 0.0, vz, yaw_rate)
+        # self.send_vectors(vx, 0.0, vz, yaw_rate)
         # self.send_vectors(0.0, 0.0, vz, yaw_rate) # only yaw for tuning
+        self.send_vectors(0.0, 0.0, 0.0, 0.0) # only yaw for tuning
             
 
     # ──────────────────────────────────────────────────────────
@@ -639,7 +679,7 @@ class FollowDetections(DroneController):
         self.centering = True
         self.get_logger().info("wlaczam nadlatywanie do detekcji (gimbal centering + approach)")
         # start approach control loop at 50 Hz (or adjust)
-        self.timer = self.create_timer(0.02, self.drone_control_loop)
+        self.timer = self.create_timer(0.02, self.drone_control_loop) # TODO: faster?
         # self.wait_busy()
  
  
@@ -703,12 +743,15 @@ def main():
     
     try:
         mission.arm()
-        target_height = 3.0
+        target_height = 5.0
         
         mission.set_gimbal_angle(45.0)
         mission.takeoff(target_height)
         
         mission.toggle_control()
+
+        mission.get_logger().info("Enabling Hybrid Tracker Node...")
+        mission.enable_tracker_node(True)
 
         # Wait for drone to reach target altitude
         mission.get_logger().info(f"Waiting to reach target altitude ({target_height}m)...")
@@ -725,8 +768,7 @@ def main():
             # Optional: Log status every now and then
             # mission.get_logger().info(f"Climbing... {current_alt}")
 
-        mission.get_logger().info("Enabling Hybrid Tracker Node...")
-        mission.enable_tracker_node(True)
+        
         mission.last_seen = time.time()
                     
         # mission.send_vectors(0.0, -6.5, 0.0, 0.0)
@@ -734,7 +776,7 @@ def main():
         # mission.send_goto_relative(0.0, -6.5, 0.0)
         # mission.center_detection()
 
-        mission.send_car_command(4.0, 0.25)
+        mission.send_car_command(0.0, 0.0)
 
         mission.fly_to_detection()
 
