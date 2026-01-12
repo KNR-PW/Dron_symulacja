@@ -49,19 +49,20 @@ def main(args=None):
     
     # Arm drone
     mission.arm()
-    time.sleep(10)  # było 2
-
-    mission.takeoff(15.0)
-    time.sleep(30)  # było 3 - KLUCZOWE!
-
-    mission.send_goto_relative(25.0, -5.0, 0.0)
-    time.sleep(20)  # było 2
-
-    take_photo(mission, 'photo')
+    time.sleep(2)
+    
+    # === MISSION WAYPOINTS ===
+    # Step 1: Takeoff to 10.0m
+    mission.takeoff(10.0)
     time.sleep(3)
-
+    # Step 2: Move relative N:25.0, E:-5.0, D:0.0
+    mission.send_goto_relative(25.0, -5.0, 0.0)
+    time.sleep(2)
+    take_photo(mission, 'photo')
+    time.sleep(1)
+    # Step 4: Return to launch
     mission.rtl()
-    time.sleep(20)
+    time.sleep(2)
     
     print("✅ Mission complete!")
     

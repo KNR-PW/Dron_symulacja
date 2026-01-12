@@ -1,0 +1,28 @@
+<sdf version="1.9">
+  <model name="barrel_green">
+    <static>true</static>
+    <link name="link">
+      <visual name="visual">
+        <geometry>
+          <cylinder>
+            <radius>0.3</radius>
+            <length>0.9</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>0 1 0 1</ambient>
+          <diffuse>0 1 0 1</diffuse>
+        </material>
+      </visual>
+      <collision name="collision">
+        <geometry>
+          <cylinder>
+            <radius>0.3</radius>
+            <length>0.9</length>
+          </cylinder>
+        </geometry>
+      </collision>
+    </link>
+  </model>
+</sdf>
+

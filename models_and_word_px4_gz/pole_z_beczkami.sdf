@@ -1,0 +1,75 @@
+<?xml version="1.0" ?>
+<sdf version="1.9">
+  <world name="pole_z_beczkami">
+
+    <!-- GPS -->
+    <spherical_coordinates>
+      <surface_model>EARTH_WGS84</surface_model>
+      <latitude_deg>52.229770</latitude_deg>
+      <longitude_deg>21.011780</longitude_deg>
+      <elevation>100.0</elevation>
+    </spherical_coordinates>
+
+    <!-- Światło -->
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Sun</uri>
+    </include>
+
+    <!-- Pole (ziemia) -->
+    <model name="pole">
+      <static>true</static>
+      <pose>20 0 0 0 0 0</pose>
+      <link name="ground">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>40 30</size>
+            </plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>40 30</size>
+            </plane>
+          </geometry>
+          <material>
+            <pbr>
+              <metal>
+                <albedo_map>materials/textures/plowed_field.png</albedo_map>
+              </metal>
+            </pbr>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Beczki -->
+    <include>
+      <uri>model://barrel_blue</uri>
+      <pose>25 -5 0 0 0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://barrel_green</uri>
+      <pose>30 6 0 0 0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://barrel_red</uri>
+      <pose>35 0 0 0 0 0</pose>
+    </include>
+
+    <!-- Drzewka -->
+    <include>
+      <uri>model://small_tree</uri>
+      <pose>18 -10 0 0 0 0</pose>
+    </include>
+
+   
+
+  </world>
+</sdf>
+
