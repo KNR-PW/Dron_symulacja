@@ -114,12 +114,6 @@ class ArucoNode(rclpy.node.Node):
         self.marker_size = self.get_parameter("marker_size").value
         self.get_logger().info(f"Marker size: {self.marker_size} m")
         
-        self.dev_mode = self.get_parameter("dev").value
-        if self.dev_mode == "true":
-            self.dev_mode = True
-            self.get_logger().info("Dev mode enabled")
-        else:
-            self.dev_mode = "false"
 
         dictionary_id_name = self.get_parameter("aruco_dictionary_id").value
         self.get_logger().info(f"Aruco dictionary: {dictionary_id_name}")
@@ -170,8 +164,6 @@ class ArucoNode(rclpy.node.Node):
 
     def image_callback(self, img_msg: Image):
         # Upewnij się, że zdekodujemy poprawnie nawet przy encodingu 8UC3
-        if self.dev_mode:
-            self.get_logger().info("dziala?")
         try:
             cv_image_color = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding="bgr8")
         except Exception:
