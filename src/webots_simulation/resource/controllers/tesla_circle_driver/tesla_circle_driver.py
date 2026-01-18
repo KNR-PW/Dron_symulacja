@@ -4,6 +4,7 @@ import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from vehicle import Driver
+from controller import Keyboard
 
 class CarDriverNode(Node):
     def __init__(self):
@@ -32,15 +33,38 @@ def main(args=None):
     driver = Driver()
     timestep = int(driver.getBasicTimeStep())
     
+    keyboard = Keyboard()
+    keyboard.enable(timestep)
+
     # 2. Initialize ROS 2
     rclpy.init(args=args)
     car_node = CarDriverNode()
+    
+    car_node.get_logger().info("Manual Control: [W/S] Speed, [A/D] Steer, [SPACE] Brake")
 
     # 3. Main Simulation Loop
     while driver.step() != -1:
         # Process ROS 2 callbacks (check for new cmd_vel messages)
         rclpy.spin_once(car_node, timeout_sec=0)
         
+        # Keyboard Control
+        key = keyboard.getKey()
+        while key > 0:
+            if key == ord('W'):
+                # car_node.target_speed_kmh += 0.1
+                car_node.target_speed_kmh = min(car_node.target_speed_kmh + 0.1, 30.0)  # Max speed limit
+            elif key == ord('S'):
+                # car_node.target_speed_kmh -= 0.1
+                car_node.target_speed_kmh = max(car_node.target_speed_kmh - 0.1, -15.0)  # Max reverse limit
+            elif key == ord('A'):
+                car_node.target_steering_rad = max(car_node.target_steering_rad - 0.003, -0.5)
+            elif key == ord('D'):
+                car_node.target_steering_rad = min(car_node.target_steering_rad + 0.003, 0.5)
+            elif key == ord(' '): # Brake
+                car_node.target_speed_kmh = 0.0
+                car_node.target_steering_rad = 0.0
+            key = keyboard.getKey()
+
         # Apply the values received from ROS to the Webots vehicle
         driver.setCruisingSpeed(car_node.target_speed_kmh)
         driver.setSteeringAngle(car_node.target_steering_rad)

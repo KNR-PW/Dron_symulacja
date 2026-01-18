@@ -796,30 +796,40 @@ def main():
 
         mission.get_logger().info("Starting simple car loop: Forward -> Stop -> Turn -> Forward")
         
-        while rclpy.ok():
-             # Drive forward
-             mission.send_car_command(4.0, 0.0)
-             t_next = time.time() + 5.0
-             while rclpy.ok() and time.time() < t_next:
-                 rclpy.spin_once(mission, timeout_sec=0.1)
+        # while rclpy.ok():
+        #      # Drive forward
+        #      mission.send_car_command(4.0, 0.0)
+        #      t_next = time.time() + 5.0
+        #      while rclpy.ok() and time.time() < t_next:
+        #          rclpy.spin_once(mission, timeout_sec=0.1)
             
-             # Stop
-             mission.send_car_command(4.0, 0.5)
-             t_next = time.time() + 5.0
-             while rclpy.ok() and time.time() < t_next:
-                 rclpy.spin_once(mission, timeout_sec=0.1)
+        #      # Stop
+        #      mission.send_car_command(4.0, 0.5)
+        #      t_next = time.time() + 5.0
+        #      while rclpy.ok() and time.time() < t_next:
+        #          rclpy.spin_once(mission, timeout_sec=0.1)
 
-             # Turn (~180 degrees)
-             mission.send_car_command(4.0, 0.0) # ~ 3.14s needed for 180 deg at 1.0 rad/s
-             t_next = time.time() + 5.0
-             while rclpy.ok() and time.time() < t_next:
-                 rclpy.spin_once(mission, timeout_sec=0.1)
 
-             # Brief stop to settle turn
-             mission.send_car_command(4.0, -0.5)
-             t_next = time.time() + 5.0
-             while rclpy.ok() and time.time() < t_next:
-                 rclpy.spin_once(mission, timeout_sec=0.1)
+        #      mission.send_car_command(0.0, 0.0)
+        #      t_next = time.time() + 4.0
+        #      while rclpy.ok() and time.time() < t_next:
+        #          rclpy.spin_once(mission, timeout_sec=0.1)
+
+
+        #     #  # Turn (~180 degrees)
+        #     #  mission.send_car_command(4.0, 0.0) # ~ 3.14s needed for 180 deg at 1.0 rad/s
+        #     #  t_next = time.time() + 4.0
+        #     #  while rclpy.ok() and time.time() < t_next:
+        #     #      rclpy.spin_once(mission, timeout_sec=0.1)
+
+        #      # Brief stop to settle turn
+        #      mission.send_car_command(4.0, -0.5)
+        #      t_next = time.time() + 5.0
+        # while rclpy.ok() and time.time() < t_next:
+        #     rclpy.spin_once(mission, timeout_sec=0.1)
+
+        while rclpy.ok():
+            rclpy.spin_once(mission, timeout_sec=0.1)
 
         # --- KEEP ALIVE LOOP ---
         # while rclpy.ok():
