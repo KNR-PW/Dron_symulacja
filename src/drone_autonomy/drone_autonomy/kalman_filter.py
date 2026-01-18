@@ -1,7 +1,7 @@
 import numpy as np
 
 class KalmanFilter:
-    def __init__(self, process_noise=0.1, measurement_noise=0.1):
+    def __init__(self, process_noise=1.0, measurement_noise=0.1): # TODO: test for different values
         # State: [x, y, vx, vy] (Relative position in Yaw-Stabilized Frame)
         self.x = np.zeros(4)
         self.P = np.eye(4)
@@ -46,5 +46,6 @@ class KalmanFilter:
         y = z - self.H @ self.x
         S = self.H @ self.P @ self.H.T + self.R
         K = self.P @ self.H.T @ np.linalg.inv(S)
+        
         self.x = self.x + K @ y
         self.P = (np.eye(4) - K @ self.H) @ self.P

@@ -62,7 +62,7 @@ class FollowDetections(DroneController):
 
         # --- PID Constants (Unified) ---
         self.pid_yaw_kp = 1.5
-        self.pid_yaw_ki = 0.5
+        self.pid_yaw_ki = 0.2
         self.pid_yaw_kd = 0.1
 
         self.roll = None
@@ -246,7 +246,7 @@ class FollowDetections(DroneController):
             self.get_logger().error(f'Service calling unsuccessful: {e}')
 
     # ──────────────────────────────────────────────────────────
-    def gimbal_control_loop(self): # TODO: De-roll???
+    def gimbal_control_loop(self):
         """Periodically adjust gimbal pitch to keep the marker centered vertically.
         Uses the filtered vertical error ey_f (normalized)."""
         # only act when centering requested
@@ -634,7 +634,7 @@ class FollowDetections(DroneController):
 
         # Total PID output
         # yaw_rate = p_term # only P now for tuning
-        yaw_rate = p_term + i_term # + d_term
+        yaw_rate = p_term #+ i_term # + d_term
         
         # Clamp yaw rate to reasonable speed (e.g., 45 deg/s = ~0.8 rad/s)
         # yaw_rate = clamp(yaw_rate, -0.8, 0.8)
@@ -661,10 +661,11 @@ class FollowDetections(DroneController):
         #         pass
         # else:
 
+        
         # Publish debug info
         dbg_yaw = Point()
         dbg_yaw.x = 0.0
-        dbg_yaw.y = float(math.degrees(yaw_error))
+        dbg_yaw.y = float(math.degrees(self.normalize_angle(yaw_error+self.yaw)))
         dbg_yaw.z = float(math.degrees(self.yaw))
         self.pub_dbg_yaw.publish(dbg_yaw)
 
@@ -756,7 +757,7 @@ def main():
     
     try:
         mission.arm()
-        target_height = 4.0
+        target_height = 5.0
         
         mission.set_gimbal_angle(45.0)
         mission.takeoff(target_height)
@@ -789,13 +790,40 @@ def main():
         # mission.send_goto_relative(0.0, -6.5, 0.0)
         # mission.center_detection()
 
-        mission.send_car_command(4.0, 0.25)
+        # mission.send_car_command(4.0, 0.25)
 
         mission.fly_to_detection()
 
-        # --- KEEP ALIVE LOOP ---
+        mission.get_logger().info("Starting simple car loop: Forward -> Stop -> Turn -> Forward")
+        
         while rclpy.ok():
-            rclpy.spin_once(mission, timeout_sec=0.1)
+             # Drive forward
+             mission.send_car_command(4.0, 0.0)
+             t_next = time.time() + 5.0
+             while rclpy.ok() and time.time() < t_next:
+                 rclpy.spin_once(mission, timeout_sec=0.1)
+            
+             # Stop
+             mission.send_car_command(4.0, 0.5)
+             t_next = time.time() + 5.0
+             while rclpy.ok() and time.time() < t_next:
+                 rclpy.spin_once(mission, timeout_sec=0.1)
+
+             # Turn (~180 degrees)
+             mission.send_car_command(4.0, 0.0) # ~ 3.14s needed for 180 deg at 1.0 rad/s
+             t_next = time.time() + 5.0
+             while rclpy.ok() and time.time() < t_next:
+                 rclpy.spin_once(mission, timeout_sec=0.1)
+
+             # Brief stop to settle turn
+             mission.send_car_command(4.0, -0.5)
+             t_next = time.time() + 5.0
+             while rclpy.ok() and time.time() < t_next:
+                 rclpy.spin_once(mission, timeout_sec=0.1)
+
+        # --- KEEP ALIVE LOOP ---
+        # while rclpy.ok():
+        #     rclpy.spin_once(mission, timeout_sec=0.1)
 
         # --- TUNING SEQUENCE (Step Response) ---
         # mission.get_logger().info("Starting Step Response Tuning Loop...")
