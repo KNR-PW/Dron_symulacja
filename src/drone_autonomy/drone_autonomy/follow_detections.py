@@ -15,6 +15,9 @@ from drone_autonomy.drone_comunication.drone_controller import DroneController
 from std_srvs.srv import SetBool
 from std_msgs.msg import Float32
 from geometry_msgs.msg import Point, Twist, PointStamped
+import subprocess
+
+
 
 # TODO: fix wrong world opening
 
@@ -536,7 +539,7 @@ class FollowDetections(DroneController):
              dbg_car_delta = Point()
              dbg_car_delta.x = delta[0]
              dbg_car_delta.y = delta[1]
-             dbg_car_delta.z = 0.0 # TODO: dist error?
+             dbg_car_delta.z = dist_error
              self.pub_car_delta.publish(dbg_car_delta)
         else:
              self.get_logger().info(f"WAITING FOR GT: Car={self.car_true_pos is not None} Drone={self.drone_true_pos is not None}", throttle_duration_sec=2.0)
@@ -548,6 +551,7 @@ class FollowDetections(DroneController):
             self.send_vectors(0.0, 0.0, 0.0, 0.0)
             self.state = "OK"
             self.centering = False
+            self.land()
             try:
                 self.timer.cancel()
             except Exception:
@@ -797,15 +801,68 @@ def main():
         
     except KeyboardInterrupt:
         mission.get_logger().info("Keyboard interrupt, stopping mission.")
-        mission.enable_tracker_node(False) #TODO: Fix
-        mission.send_car_command(0.0, 0.0)
+        # Attempt minimal Python-side cleanup
+        try:
+            mission.send_car_command(0.0, 0.0)
+            mission.land()
+            mission.stop_centering() # Zatrzymuje zarówno gimbal, jak i pętlę sterowania
+            mission.enable_tracker_node(False) 
+        except: 
+            pass
+            
     finally:
-        mission.get_logger().info("Stopping any active loops and landing.")
-        mission.land()
-        mission.stop_centering() # Zatrzymuje zarówno gimbal, jak i pętlę sterowania
-        mission.toggle_control()
-        mission.destroy_node()
-        rclpy.shutdown()
+        print("\n\n=== FINAL CLEANUP ATTEMPT ===")
+        # 1. Force Disable Tracker using subprocess (System Call)
+        # This bypasses any broken ROS context logic in Python
+        try:
+            print("Force-disabling tracker via 'ros2 service call'...")
+            # Use the actual service name from the client (handles namespaces correctly)
+            srv_name = mission.tracker_client.srv_name if hasattr(mission, 'tracker_client') else '/enable_tracker'
+            
+            subprocess.run([
+                "ros2", "service", "call", 
+                srv_name, "std_srvs/srv/SetBool", 
+                "{data: false}"
+            ], timeout=5, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print(f"Tracker disabled signal sent to {srv_name}.")
+        except Exception as e:
+            print(f"Failed to force disable tracker: {e}")
+
+        # 2. Force Stop Car
+        try:
+            print("Force-stopping car via 'ros2 topic pub'...")
+            subprocess.run([
+                "ros2", "topic", "pub", "--once", 
+                "/cmd_vel", "geometry_msgs/msg/Twist", 
+                "{linear: {x: 0.0}, angular: {z: 0.0}}"
+            ], timeout=2, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except: pass
+
+        # 3. Force LAND (The Standard Mission Cleanup often fails if context is dead)
+        try:
+            print("Force-landing via 'ros2 action send'...")
+            subprocess.run([
+                "ros2", "action", "send_goal", 
+                "/knr_hardware/land", "drone_interfaces/action/Land",
+                "{}"
+            ], timeout=2, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception as e:
+            print(f"Force land failed: {e}")
+
+        # 4. Standard Mission Cleanup (Best Effort)
+        if rclpy.ok():
+            try: mission.land() # Internal method might still work if context is partially alive
+            except: pass
+            try: mission.stop_centering()
+            except: pass
+            try: mission.toggle_control()
+            except: pass
+            
+        try: mission.destroy_node()
+        except: pass
+        try: rclpy.shutdown()
+        except: pass
+        print("=== CLEANUP DONE ===\n")
 
 
 if __name__ == '__main__':
