@@ -4,7 +4,7 @@ from drone_comunication import DroneController
 from rclpy.action import ActionClient
 
 from rclpy.node import Node
-from drone_interfaces.srv import SetMode, VtolServoCalib
+from drone_interfaces.srv import SetMode, PreflightCalibrationControlService
 from drone_interfaces.action import (
     Arm,
     Takeoff)
@@ -12,26 +12,39 @@ from drone_interfaces.action import (
 class TestClient(DroneController):
     def __init__(self):
         super().__init__()
-        self.cli = self.create_client(VtolServoCalib, 'knr_hardware/calib_servo')
+        self.cli = self.create_client(PreflightCalibrationControlService, 'knr_hardware/preflight_calibration_control_service')
         while not self.cli.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info('Waiting for calib_servo service...')
-    def set_servo(self, angle_4: float, angle_5: float):
-        req = VtolServoCalib.Request()
-        req.angle_4 = angle_4  
-        req.angle_5 = angle_5  
+            self.get_logger().info('Waiting for preflight_calibration_control_service...')
+    
+    def start_calib(self, action: int):
+        req = PreflightCalibrationControlService.Request()
+        req.action = action
         self.future = self.cli.call_async(req)
+        self.get_logger().info(f'Sent calibration request with action: {action}')
 
 
 
 def main(args=None):
     rclpy.init(args=args)
-    # mission = Test_PX4()
-    # mission.arm()
-    # mission.send_mode('LAND')
-    mission = TestClient()
-    mission.arm()
-    mission.set_servo(45.0,45.0)  # Value in degrees, calculated from the OZ to the axis of rotation of the motor 
-    # time.sleep(30)
+    try:
+        print("Creating TestClient...")
+        mission = TestClient()
+        print("TestClient created - service is ready!")
+        
+        print("Sending calibration START (action=1)...")
+        mission.start_calib(1)  # Valid actions: 0=STOP, 1=START
+        
+        print("Waiting for response...")
+        time.sleep(2)
+        
+        print("Done!")
+    except Exception as e:
+        print(f"ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        mission.destroy_node()
+        rclpy.shutdown()
 
     # mission.send_goto_global(47.398183, 8.54611, 5.0)
 

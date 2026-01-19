@@ -10,7 +10,7 @@ from rclpy.executors import MultiThreadedExecutor
 from rclpy.action import ActionServer,  CancelResponse
 
 from drone_interfaces.msg import VelocityVectors, Telemetry
-from drone_interfaces.srv import SetMode, ToggleVelocityControl, SetServo, VtolServoCalib
+from drone_interfaces.srv import SetMode, ToggleVelocityControl, SetServo, VtolServoCalib, PreflightCalibrationControlService
 from drone_interfaces.action import  Arm, Takeoff, GotoGlobal, GotoRelative, SetYawAction, SetActuatorTest
 
 from px4_msgs.msg import (
@@ -24,6 +24,7 @@ from px4_msgs.msg import (
     BatteryStatus,
     ActuatorServos,
     OffboardControlMode,
+    PreflightCalibrationControl,
 )
 #TODO 
 #1. (DONE)makes check if we get a new topic before we send mode to offboard
@@ -75,6 +76,7 @@ class DroneHandlerPX4(Node):
         self.toggle_velocity_control_srv = self.create_service(ToggleVelocityControl, NAMESPACE+'toggle_v_control', self.toggle_velocity_control)
         self.servo = self.create_service(SetServo, NAMESPACE+'set_servo', self.set_servo_callback)
         self.calib_servo_srv = self.create_service(VtolServoCalib,NAMESPACE + 'calib_servo',self.calib_servo_callback)
+        self.preflight_calibration_control_srv = self.create_service(PreflightCalibrationControlService,NAMESPACE+'preflight_calibration_control_service',self.preflight_calibration_control_callback)
         #declare actions
         self.arm = ActionServer(self,Arm, NAMESPACE+'Arm',self.arm_callback)
         self.takeoff = ActionServer(self, Takeoff, NAMESPACE+'takeoff',self.takeoff_callback, cancel_callback=self.cancel_callback)
@@ -98,6 +100,7 @@ class DroneHandlerPX4(Node):
         self.vehicle_command_publisher = self.create_publisher(VehicleCommand, '/fmu/in/vehicle_command', qos_profile)
         self.trajectory_setpoint_publisher = self.create_publisher(TrajectorySetpoint, '/fmu/in/trajectory_setpoint', qos_profile)
         self.actuator_pub = self.create_publisher(ActuatorServos,'/fmu/in/actuator_servos', 10)
+        self.preflight_calibration_control_pub = self.create_publisher(PreflightCalibrationControl,'/fmu/in/preflight_calibration_control',10)
         
         self.telemetry_publisher = self.create_publisher(Telemetry, NAMESPACE+'telemetry',10)
 
@@ -601,22 +604,14 @@ class DroneHandlerPX4(Node):
         pwm = int((angle_clamped / 90.0) * 1000.0)
         return pwm
 
-    def calib_servo(self, angle_deg_4: float, angle_deg_5: float):
-        # actuator 4
-        pwm3 = self._angle_to_pwm(angle_deg_4)
-        # actuator 5
-        pwm4 = self._angle_to_pwm(angle_deg_5)
+    def calib_servo(self, action: int):
         self.get_logger().info(
-            f"calib_servo: S4 angle={angle_deg_4}° pwm={pwm3}, "
-            f"S5 angle={angle_deg_5}° pwm={pwm4}"
+            f"Starting calibration angle = {action}"
         )
         start = time.time()
         Hz = 50 # Publication freq
         Duration = 10 #Pulication time
         while time.time() - start < Duration:   #Publication loop
-            self._enable_direct_actuator()
-            self.set_servo(4, pwm3)
-            self.set_servo(5, pwm4)
             time.sleep(1/Hz)  
 
     def calib_servo_callback(self, request, response):
@@ -624,14 +619,29 @@ class DroneHandlerPX4(Node):
             f"-- Calib tilts service called: angle_4={request.angle_4}, angle_5={request.angle_5} --"
         )
         try:
-            self.calib_servo(request.angle_4, request.angle_5)
-            response.success = True
+            self.calib_servo(request.action)
             response.message = "Tilts calibrated successfully"
         except Exception as e:
             self.get_logger().error(f"Calib tilts error: {e}")
             response.success = False
             response.message = f"Error: {e}"
         return response
+    def preflight_calibration_control_callback(self, request, response):
+        self.get_logger().info(
+            f"-- Preflight calibration control service called: action={request.action} --"
+        )
+        try:
+            self._calibration_message(request.action)
+            response.result = "Preflight calibration command sent successfully"
+        except Exception as e:
+            self.get_logger().error(f"Preflight calibration control error: {e}")
+            response.result = f"Error: {e}"
+        return response
+    def _calibration_message(self, action: int):      #Helper function for sending calibration message
+        msg = PreflightCalibrationControl()
+        msg.action = action
+        msg.timestamp = self.get_clock().now().nanoseconds // 1000
+        self.preflight_calibration_control_pub.publish(msg)
     def _enable_direct_actuator(self):   #Helper function for enabling direct actuator output
         msg = OffboardControlMode()
         msg.direct_actuator = True
@@ -659,7 +669,7 @@ class DroneHandlerPX4(Node):
         timeout = goal_handle.request.timeout
 
         feedback_msg = SetActuatorTest.Feedback()
-        feedback.state = 'Sending VEHICLE_CMD_ACTUATOR_TEST'
+        feedback_msg.state = 'Sending VEHICLE_CMD_ACTUATOR_TEST'
         goal_handle.publish_feedback(feedback_msg)
 
         # uint16 VEHICLE_CMD_DO_MOTOR_TEST=209 # Motor test command. |Instance (@range 1, )|throttle type|throttle|timeout [s]|Motor count|Test order|Unused|
