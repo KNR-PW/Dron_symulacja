@@ -782,125 +782,18 @@ def main():
             # Optional: Log status every now and then
             # mission.get_logger().info(f"Climbing... {current_alt}")
 
-        
         mission.last_seen = time.time()
                     
-        # mission.send_vectors(0.0, -6.5, 0.0, 0.0)
+        mission.send_car_command(4.0, 0.25)
 
-        # mission.send_goto_relative(0.0, -6.5, 0.0)
         # mission.center_detection()
-
-        # mission.send_car_command(4.0, 0.25)
-
         mission.fly_to_detection()
 
         mission.get_logger().info("Starting simple car loop: Forward -> Stop -> Turn -> Forward")
-        
-        # while rclpy.ok():
-        #      # Drive forward
-        #      mission.send_car_command(4.0, 0.0)
-        #      t_next = time.time() + 5.0
-        #      while rclpy.ok() and time.time() < t_next:
-        #          rclpy.spin_once(mission, timeout_sec=0.1)
-            
-        #      # Stop
-        #      mission.send_car_command(4.0, 0.5)
-        #      t_next = time.time() + 5.0
-        #      while rclpy.ok() and time.time() < t_next:
-        #          rclpy.spin_once(mission, timeout_sec=0.1)
-
-
-        #      mission.send_car_command(0.0, 0.0)
-        #      t_next = time.time() + 4.0
-        #      while rclpy.ok() and time.time() < t_next:
-        #          rclpy.spin_once(mission, timeout_sec=0.1)
-
-
-        #     #  # Turn (~180 degrees)
-        #     #  mission.send_car_command(4.0, 0.0) # ~ 3.14s needed for 180 deg at 1.0 rad/s
-        #     #  t_next = time.time() + 4.0
-        #     #  while rclpy.ok() and time.time() < t_next:
-        #     #      rclpy.spin_once(mission, timeout_sec=0.1)
-
-        #      # Brief stop to settle turn
-        #      mission.send_car_command(4.0, -0.5)
-        #      t_next = time.time() + 5.0
-        # while rclpy.ok() and time.time() < t_next:
-        #     rclpy.spin_once(mission, timeout_sec=0.1)
 
         while rclpy.ok():
             rclpy.spin_once(mission, timeout_sec=0.1)
 
-        # --- KEEP ALIVE LOOP ---
-        # while rclpy.ok():
-        #     rclpy.spin_once(mission, timeout_sec=0.1)
-
-        # --- TUNING SEQUENCE (Step Response) ---
-        # mission.get_logger().info("Starting Step Response Tuning Loop...")
-        
-        # Initial Hover
-        # t_end = time.time() + 5.0
-        # while rclpy.ok() and time.time() < t_end:
-        #     rclpy.spin_once(mission, timeout_sec=0.05)
-
-        # --- TUNING SEQUENCE ---
-        mission.get_logger().info("Starting Continuous Tuning Loop...")
-
-        
-        # Initial Hover
-        # t_end = time.time() + 5.0
-        # while rclpy.ok() and time.time() < t_end:
-        #     rclpy.spin_once(mission, timeout_sec=0.05)
-
-        # Correction factor for backward movement to compensate for drift
-        # If the car moves forward more than backward, increase this > 1.0
-        # back_correction = 1.17
-        # move_duration = 2.0
-
-
-        # while rclpy.ok():
-        #     for speed in [6.0]:
-        #         # Move Forward
-        #         mission.start_recording()
-        #         mission.send_car_command(speed, 0.0)
-        #         t_end = time.time() + move_duration
-        #         while rclpy.ok() and time.time() < t_end:
-        #             rclpy.spin_once(mission, timeout_sec=0.05)
-
-        #         # Stop
-        #         mission.send_car_command(0.0, 0.0)
-        #         t_end = time.time() + 5.0
-        #         while rclpy.ok() and time.time() < t_end:
-        #             rclpy.spin_once(mission, timeout_sec=0.05)
-        #         mission.stop_and_report(f"Forward Speed {speed}")
-
-        #         # Move Backward
-        #         mission.start_recording()
-        #         mission.send_car_command(-speed, 0.0)
-        #         # Apply correction to duration
-        #         t_end = time.time() + (move_duration * back_correction)
-        #         while rclpy.ok() and time.time() < t_end:
-        #             rclpy.spin_once(mission, timeout_sec=0.05)
-
-        #         # Stop
-        #         mission.send_car_command(0.0, 0.0)
-        #         t_end = time.time() + 5.0
-        #         while rclpy.ok() and time.time() < t_end:
-        #             rclpy.spin_once(mission, timeout_sec=0.05)  # todo; add vel pubs to mainloop
-        #         mission.stop_and_report(f"Backward Speed {speed}")
-        
-     
-
-        # run_seconds = 60.0
-        # mission.get_logger().info(f"Running fly_to_detection mission for {run_seconds}s...")
-        # t0 = time.time()
-
-        # while rclpy.ok(): # and (time.time() - t0) < run_seconds:
-        #     rclpy.spin_once(mission, timeout_sec=0.1)
-        #     # Sprawdź, czy misja się zakończyła (np. dron dotarł do celu)
-        #     if mission.state != "BUSY":
-        #         mission.get_logger().info("Mission finished, proceeding to land.")
-        #         break
         
     except KeyboardInterrupt:
         mission.get_logger().info("Keyboard interrupt, stopping mission.")

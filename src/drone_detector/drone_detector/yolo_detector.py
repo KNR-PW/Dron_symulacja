@@ -13,6 +13,9 @@ from ultralytics import YOLO
 # ros2 run rqt_image_view rqt_image_view
 # and choose #detections/annotated
 
+# collecting data for rmse:
+# ros2 run drone_autonomy benchmark_tracker --ros-args -p samples:=6000
+
 class YoloDetector:
     def __init__(self, weights_path='yolov8n.pt', target_class_ids=None, conf_threshold=0.5):
         self.model = YOLO(weights_path)
