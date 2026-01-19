@@ -25,7 +25,6 @@ setup(
             "host_bridge=drone_hardware.host_hardware:main",
             "uart_bridge = drone_hardware.uartbridge:main",
             "hbridge = drone_hardware.hbridge:main",
-            "actuator_test_server=drone_hardware.actuator_test_server:main",
             "drone_handler_px4=drone_hardware.drone_handler_px4:main"
         ],
     },
