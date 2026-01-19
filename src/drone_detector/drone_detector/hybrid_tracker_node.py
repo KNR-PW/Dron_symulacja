@@ -171,15 +171,19 @@ class HybridTrackerNode(Node):
                     if w > 0 and h > 0:
                         bbox_int = (int(x1), int(y1), int(w), int(h))
                         
-                        # Re-initialize tracker (correct drift or start new track)
-                        self.tracker.init(frame, bbox_int)
-                        self.tracking_active = True
-                        self.tracked_class_name = best_det['class_name']
-                        
-                        # If we weren't tracking, use this detection result
-                        if not tracking_success:
-                            final_bbox = (int(x1), int(y1), int(x2), int(y2))
-                            self._add_detection_to_msg(detections_msg, x1, y1, w, h, best_det['class_name'], best_det['confidence'])
+                        # Fix: Ensure bbox has valid dimensions before initializing KCF
+                        if w > 1 and h > 1 and x1 >= 0 and y1 >= 0:
+                            # Re-initialize tracker (correct drift or start new track)
+                            self.tracker.init(frame, bbox_int)
+                            self.tracking_active = True
+                            self.tracked_class_name = best_det['class_name']
+                            
+                            # If we weren't tracking, use this detection result
+                            if not tracking_success:
+                                final_bbox = (int(x1), int(y1), int(x2), int(y2))
+                                self._add_detection_to_msg(detections_msg, x1, y1, w, h, best_det['class_name'], best_det['confidence'])
+                        else:
+                            self.get_logger().warn(f"Ignored invalid YOLO bbox: {bbox_int}")
                     
                     # self.get_logger().info("successful detection")
 
