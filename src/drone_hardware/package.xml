@@ -8,6 +8,9 @@
   <license>TODO: License declaration</license>
 
   <depend>python3-numpy</depend>
+  <depend>rclpy</depend>
+  <depend>px4_msgs</depend>
+  <depend>drone_interfaces</depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

@@ -17,6 +17,7 @@ from drone_interfaces.action import (
     Takeoff,
     GotoRelative,
     GotoGlobal,
+    SetActuatorTest,
     SetYawAction
 )
 
@@ -39,12 +40,12 @@ class DroneController(Node):
         self.toggle_velocity_control_cli = self.create_client(ToggleVelocityControl,NAMESPACE_HARDWARE+'toggle_v_control')
         self.velocity_publisher = self.create_publisher(VelocityVectors,NAMESPACE_HARDWARE+'velocity_vectors', 10)
 
-        self._wait_for_service(self._mode_client, NAMESPACE_HARDWARE+'set_mode')
-        if not DEV:
-            self._wait_for_service(self._gps_client, NAMESPACE_HARDWARE+'get_location_relative')
-            self._wait_for_service(self._atti_client, NAMESPACE_HARDWARE+'get_attitude')
-            self._wait_for_service(self._speed_client, NAMESPACE_HARDWARE+'set_speed')
-        self._photo_client = self.create_client(MakePhoto, '/mission_make_photo')
+        # self._wait_for_service(self._mode_client, NAMESPACE_HARDWARE+'set_mode')
+        # if not DEV:
+        #     self._wait_for_service(self._gps_client, NAMESPACE_HARDWARE+'get_location_relative')
+        #     self._wait_for_service(self._atti_client, NAMESPACE_HARDWARE+'get_attitude')
+        #     self._wait_for_service(self._speed_client, NAMESPACE_HARDWARE+'set_speed')
+        # self._photo_client = self.create_client(MakePhoto, '/mission_make_photo')
         # self._wait_for_service(self._start_video_client, 'turn_on_video')
         # self._wait_for_service(self._stop_video_client, 'turn_off_video')
 
@@ -55,6 +56,7 @@ class DroneController(Node):
         self._goto_rel_client = ActionClient(self, GotoRelative, NAMESPACE_HARDWARE+'goto_relative')
         self._goto_glob_client = ActionClient(self, GotoGlobal, NAMESPACE_HARDWARE+'goto_global')
         self._yaw_client     = ActionClient(self, SetYawAction, NAMESPACE_HARDWARE+'Set_yaw')
+        self._set_actuator_client = ActionClient(self, SetActuatorTest, NAMESPACE_HARDWARE+'set_actuator_test')
 
         # --- Telemetry subscriber ---
         self.create_subscription(Telemetry, NAMESPACE_HARDWARE+'telemetry', self._telemetry_cb, 10)
