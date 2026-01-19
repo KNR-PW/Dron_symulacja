@@ -16,10 +16,11 @@ def generate_launch_description():
             )
         )
     )
+
     # Node do drona
     drone_node = Node(
         package='drone_hardware',
-        executable='drone_handler',
+        executable='drone_handler_px4',
     )
 
     # Node do kamery
@@ -30,6 +31,15 @@ def generate_launch_description():
             {'camera_topic': 'oak/rgb/image_raw'}
         ]
     )
+    # Node do kalibracji serw 
+    calibration_node = Node(
+        package='drone_hardware',
+        executable='actuator_test_server',  
+        name='preflight_calibration_publisher',
+        output='screen',
+        emulate_tty=True,
+    )
+
     # Node aruco
     aruco_node = Node(
         package='ros2_aruco',
@@ -42,6 +52,7 @@ def generate_launch_description():
     #
     return LaunchDescription([
         depthai_launch,   # kamera
+        calibration_node, # kalibracja ser
         drone_node,       # sterowanie dronem
         recorder_node,    # nagrywanie
         aruco_node        # detekcja ArUco

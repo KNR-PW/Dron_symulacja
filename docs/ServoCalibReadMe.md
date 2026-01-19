@@ -21,7 +21,7 @@ Node `drone_handler_px4` z service'iem `preflight_calibration_control_service` u
 
 ### Sposób 1: Poprzez Python (test_mission.py)
 
-Utwórz lub zmodyfikuj plik `test_mission.py`:
+Utwórz lub zmodyfikuj plik `vtol_servo_test.py`:
 
 ```python
 import rclpy
@@ -75,9 +75,16 @@ if __name__ == "__main__":
 source /home/knr/Dron_symulacja/install/setup.bash
 ros2 run drone_hardware drone_handler_px4
 
-# Terminal 2 - uruchom test
+# Terminal 2 - Uruchom MicroXRCE
+W raspberce mamy alias "xrce" wpisujesz tylko to i ci powinno wyskoczyć
+
+# Terminal 3 - uruchom launch file 
+cd /home/knr/Dron_symulacja/src/drone_bringup/drone_bringup
+vtol_preflight.launch.py
+
+# Terminal 4 - uruchom test
 cd /home/knr/Dron_symulacja/src/drone_autonomy/drone_autonomy
-python3 test_mission.py
+python3 vtol_servo_test.py
 ```
 
 ---
@@ -89,8 +96,11 @@ python3 test_mission.py
 source /home/knr/Dron_symulacja/install/setup.bash
 ros2 run drone_hardware drone_handler_px4
 ```
-
-**Terminal 2 - wyślij żądanie kalibracji:**
+**Terminal 2 - microXRCE:**
+```bash
+xrce
+```
+**Terminal 3 - wyślij żądanie kalibracji:**
 
 START kalibracji:
 ```bash
@@ -101,4 +111,4 @@ ros2 service call knr_hardware/preflight_calibration_control_service drone_inter
 
 - **Service not found**: Upewnij się, że `drone_handler_px4` jest uruchomiony
 - **Battery status not ready**: Node czeka na dane z akumulatora - to normalne w symulacji
-- **Servo doesn't move**: Sprawdź połączenie serwomechanizmu z Orange Cube na PWM porcie 
+- **Servo doesn't move**: Sprawdź połączenie serwomechanizmu z Orange Cube na PWM porcie

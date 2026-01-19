@@ -1,72 +1,81 @@
-import time
 import rclpy
+import time
+from drone_comunication import DroneController
 from rclpy.action import ActionClient
+
 from rclpy.node import Node
+from drone_interfaces.srv import SetMode, PreflightCalibrationControlService
+from drone_interfaces.action import (
+    Arm,
+    Takeoff)
 
-from .drone_comunication import DroneController
-from drone_interfaces.action import (SetActuatorTest)
-
-class ActuatorTestClient(DroneController):
+class TestClient(DroneController):
     def __init__(self):
         super().__init__()
-        self._client = ActionClient(self, SetActuatorTest, "set_actuator_test")
+        self.cli = self.create_client(PreflightCalibrationControlService, 'knr_hardware/preflight_calibration_control_service')
+        while not self.cli.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('Waiting for preflight_calibration_control_service...')
+    
+    def start_calib(self, action: int):
+        req = PreflightCalibrationControlService.Request()
+        req.action = action
+        self.future = self.cli.call_async(req)
+        self.get_logger().info(f'Sent calibration request with action: {action}')
 
-    def send_servo(self, actuator_id: int, value: float, timeout: float = 1.0):
-        if not -1.0 <= value <= 1.0:
-            self.get_logger().error("Value must be between -1 and 1")
-            return
 
-        goal = SetActuatorTest.Goal()
-        goal.actuator_id = actuator_id
-        goal.value = value
-        goal.timeout = timeout
-        if not self._client.wait_for_server(timeout_sec=2.0):
-            self.get_logger().error("set_actuator_test action server not available")
-            return
-
-        self._send_goal_future = self._client.send_goal_async(
-            goal,
-            feedback_callback=self.feedback_cb
-        )
-        self._send_goal_future.add_done_callback(self.goal_response_cb)
-
-    def feedback_cb(self, feedback):
-        self.get_logger().info(f'Feedback: {feedback.feedback.state}')
-
-    def goal_response_cb(self, future):
-        goal_handle = future.result()
-        if not goal_handle.accepted:
-            self.get_logger().error('Goal rejected')
-            return
-
-        self._result_future = goal_handle.get_result_async()
-        self._result_future.add_done_callback(self.result_cb)
-
-    def result_cb(self, future):
-        result = future.result().result
-        self.get_logger().info(f'Result: {result.message}')
-
-    def sweep_actuators(self, actuator_ids: list[int], points_num: int, timeout: float = 0.2):
-        step = 2.0 / (points_num - 1)  # -1 <---> 1
-        for actuator_id in actuator_ids:
-            self.get_logger().info(f"Sweeping actuator {actuator_id}")
-            for i in range(points_num):
-                value = -1.0 + i * step
-                self.send_servo(actuator_id, value, timeout)
-                rclpy.spin_once(self, timeout_sec=0.1)
-                time.sleep(timeout)
 
 def main(args=None):
     rclpy.init(args=args)
-    mission = ActuatorTestClient()
+    try:
+        print("Creating TestClient...")
+        mission = TestClient()
+        print("TestClient created - service is ready!")
+        
+        print("Sending calibration START (action=1)...")
+        mission.start_calib(1)  # Valid actions: 0=STOP, 1=START
+        
+        print("Waiting for response...")
+        time.sleep(2)
+        
+        print("Done!")
+    except Exception as e:
+        print(f"ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        mission.destroy_node()
+        rclpy.shutdown()
 
-    print("Starting VTOL servo test...")
-   
-    actuator_ids = list(range(8)) 
-    mission.sweep_actuators(actuator_ids, points_num=8, timeout=0.2)
+    # mission.send_goto_global(47.398183, 8.54611, 5.0)
 
+    # # time.sleep(30)
+
+    # # mission.send_goto_global(47.39797127066047, 8.54616274676383, 5.0)
+    # mission.send_goto_relative( 8.0, 0.0, 0.0)
+    # time.sleep(5)
+    # mission.send_goto_relative( 0.0, 8.0, 0.0)
+    # time.sleep(5)
+    # mission.send_goto_relative( -8.0, 0.0, 0.0)
+    # time.sleep(5)
+    # mission.send_goto_relative( 0.0, -8.0, 0.0)
+    # time.sleep(5)
+
+    # mission.send_set_yaw(3.14/2)
+    # time.sleep(5)
+    # mission.send_set_yaw(-3.14/2)
+    # time.sleep(5)
+
+    #mission.toggle_control()
+    #for x in range(100):
+        #mission.send_vectors(1.0,-1.0,0.0)
+        #time.sleep(0.1)
+
+    #mission.toggle_control()
+    #mission.land()
+    # mission.rtl()
     mission.destroy_node()
     rclpy.shutdown()
+
 
 if __name__ == "__main__":
     main()
