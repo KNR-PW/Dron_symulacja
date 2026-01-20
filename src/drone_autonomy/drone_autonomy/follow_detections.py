@@ -788,15 +788,57 @@ def main():
 
         mission.last_seen = time.time()
                     
-        mission.send_car_command(4.0, 0.25)
+        # mission.send_car_command(4.0, 0.25)
 
         # mission.center_detection()
+        # mission.send_goto_relative(0.0, -6.5, 0.0)
         mission.fly_to_detection()
 
         mission.get_logger().info("Starting simple car loop: Forward -> Stop -> Turn -> Forward")
 
+        # while rclpy.ok():
+        #     rclpy.spin_once(mission, timeout_sec=0.1)
+
+        # t_end = time.time() + 5.0
+        # while rclpy.ok() and time.time() < t_end:
+        #     rclpy.spin_once(mission, timeout_sec=0.05)
+
+        translation = 5.0 # meters
+        back_correction = 1.17
+
+        # time = speed / translation
+
         while rclpy.ok():
-            rclpy.spin_once(mission, timeout_sec=0.1)
+            speed = 3.0
+            # for speed in [2.0, 4.0, 6.0]:
+            while True:
+                # Move Forward
+                mission.send_car_command(speed, 0.0)
+                t_end = time.time() + (speed / translation)
+                while rclpy.ok() and time.time() < t_end:
+                    rclpy.spin_once(mission, timeout_sec=0.05)
+
+                # Stop
+                mission.send_car_command(0.0, 0.0)
+                t_end = time.time() + 5.0
+                while rclpy.ok() and time.time() < t_end:
+                    rclpy.spin_once(mission, timeout_sec=0.05)
+
+                # Move Backward
+                mission.send_car_command(-speed, 0.0)
+                # Apply correction to duration
+                t_end = time.time() + ((speed / translation) * back_correction)
+                while rclpy.ok() and time.time() < t_end:
+                    rclpy.spin_once(mission, timeout_sec=0.05)
+
+                # Stop
+                mission.send_car_command(0.0, 0.0)
+                t_end = time.time() + 5.0
+                while rclpy.ok() and time.time() < t_end:
+                    rclpy.spin_once(mission, timeout_sec=0.05)
+
+                speed += 1.0
+        
 
         
     except KeyboardInterrupt:
