@@ -21,6 +21,9 @@ from drone_interfaces.action import (
 )
 
 class DroneController(Node):
+    '''
+    Its high level class where we have all needed functions to control the drone and get data from it.
+    '''
     def __init__(self):
         super().__init__('drone_controller')
         # --- Declare KNR Namespaces ---
@@ -76,6 +79,12 @@ class DroneController(Node):
         self.photo_idx = 1
 
     def take_mission_photo(self, ext='jpg'):
+        '''
+        Takes one photo from drone and save in desire folder.
+        It communicate with image_recorder_KT.py
+        
+        :param ext: Parameters to select in with filename extension you want to take photo.
+        '''
         req = MakePhoto.Request()
         req.prefix = f'Zdj{self.photo_idx}'
         req.ext = ext
@@ -110,6 +119,17 @@ class DroneController(Node):
         return True
 
     def set_speed(self, speed) -> bool:
+        '''
+        Function to set desire maximum velocity of the drone in meters/seconds.
+        To work properly you need type this method twice:
+        once with 0 speed, and second with your speed.\n
+        **For now only works in Ardupilot!!!**
+        
+        :param speed: Parameter to set velocity in meters/seconds.
+        :return: True if methods work properly, 
+        False if something dont work.
+        :rtype: bool
+        '''
         req = SetSpeed.Request()
         req.speed = float(speed)
         fut = self._speed_client.call_async(req)
@@ -121,6 +141,15 @@ class DroneController(Node):
         return True
 
     def arm(self) -> bool:
+        '''
+        Method to arming the drone and set mode to:
+        * Guided - Ardupilot
+        * Offboard - PX4
+
+        :return: True if methods work properly, 
+        False if something dont work.
+        :rtype: bool
+        '''
         self.get_logger().info('Seting mode to guided...')
         if not self._set_mode('GUIDED'):
             return False
@@ -128,24 +157,68 @@ class DroneController(Node):
         return self._send_action(self._arm_client, Arm.Goal())
 
     def land(self) -> bool:
+        '''
+        Method to set LAND mode in drone to safely land.
+        
+        :return: True if methods work properly, 
+        False if something dont work.
+        :rtype: bool
+        '''
         if not self._set_mode('LAND'):
             return False
         self.get_logger().info('Landing drone...')
         return True
 
     def rtl(self) -> bool:
+        '''
+        Method to set Return To Land (rtl) mode.
+        This mode first set selected altitude in firmware, then
+        goes to the start point where it was armed and land
+        in there.
+        
+        :return: True if methods work properly, 
+        False if something dont work.
+        :rtype: bool
+        '''
         if not self._set_mode('RTL'):
             return False
         self.get_logger().info('RTL mode...')
         return True
 
     def takeoff(self, altitude: float) -> bool:
+        '''
+        Method to set desire altitude after armed drone.
+        You should use this method only when drone isn't in the air.
+        If you want set higher altitude in the air you should use
+        go_to_relative method.
+        
+        :param altitude: Param to set how high you want put your drone in meters.
+        :type altitude: float
+        :return: True if methods work properly, 
+        False if something dont work.
+        :rtype: bool
+        '''
         self.get_logger().info(f'Taking off to {altitude} m')
         goal = Takeoff.Goal()
         goal.altitude = altitude
         return self._send_action(self._takeoff_client, goal)
 
     def send_goto_relative(self, north, east, down) -> bool:
+        '''
+        Method to control your drone in NED frame, which it means
+        you how far it should go in north, east or down in meters
+        according to compass.
+        
+        :param north: Parameter to set how far it will go in **+ N north** , **- N south** direction
+        :type north: float
+        :param east: Parameter to set how far it will go in **+ N east**, **- N west** direction
+        :type east: float
+        :param down: Parameter to set how far it will go in **+ N down**, **- N up** direction
+        :type down: float
+        :return: True if methods work properly, 
+        False if something dont work.
+        :rtype: bool
+        '''
         north = float(north)
         east = float(east)
         down = float(down)
@@ -154,6 +227,19 @@ class DroneController(Node):
         return self._send_action(self._goto_rel_client, goal)
 
     def send_goto_global(self, lat, lon, alt) -> bool:
+        '''
+        Method to set desire GPS point where drone should go in GCS system.
+        
+        :param lat: Parameter to set latitude.
+        :type lat: float
+        :param lon: Parameter to set longitude.
+        :type lon: float
+        :param alt: Parameter to set altitude.
+        :param alt: float
+        :return: True if methods work properly, 
+        False if something dont work.
+        :rtype: bool
+        '''
         lat = float(lat)
         lon = float(lon)
         alt = float(alt)
@@ -167,6 +253,21 @@ class DroneController(Node):
     #     return self._send_action(self._shoot_client, goal)
 
     def send_set_yaw(self, yaw: float, relative: bool = True) -> bool:
+        '''
+        Method to set angle of rotation in yaw axis in radians.
+        Yaw in:
+        * **+ N** means clockwise rotation 
+        * **- N** counter clockwise rotation
+        
+        :param self: Description
+        :param yaw: Parameter to set angle in **radians**
+        :type yaw: float
+        :param relative: Parameter to set if our rotation will be relative to our current position: True, or to global drone heading: False 
+        :type relative: bool
+        :return: True if methods work properly, 
+        False if something dont work.
+        :rtype: bool
+        '''
         self.get_logger().info(f'Setting yaw to {yaw} rad, relative={relative}')
         goal = SetYawAction.Goal(yaw=yaw, relative=relative)
         return self._send_action(self._yaw_client, goal)
@@ -205,6 +306,12 @@ class DroneController(Node):
         self._busy = False
 
     def get_gps(self):
+        '''
+        Method to get current gps location from drone. 
+        
+        :return: (north, east, down)
+        :rtype: tuple
+        '''
         req = GetLocationRelative.Request()
         fut = self._gps_client.call_async(req)
         rclpy.spin_until_future_complete(self, fut, timeout_sec=2.0)
@@ -214,6 +321,12 @@ class DroneController(Node):
         return (fut.result().north, fut.result().east, fut.result().down)
 
     def get_yaw(self) -> float:
+        '''
+        Method to get actual yaw of drone.
+        
+        :return: Yaw angle in radians
+        :rtype: float
+        '''
         req = GetAttitude.Request()
         fut = self._atti_client.call_async(req)
         rclpy.spin_until_future_complete(self, fut, timeout_sec=2.0)
@@ -246,6 +359,9 @@ class DroneController(Node):
         super().destroy_node()
 
     def start_video(self):
+        '''
+        Method to start video that is recording by video_recorder.py
+        '''
         req = TurnOnVideo.Request()
         fut = self._start_video_client.call_async(req)
         rclpy.spin_until_future_complete(self, fut, timeout_sec=2.0)
@@ -256,6 +372,10 @@ class DroneController(Node):
         return True
     
     def stop_video(self):
+        '''
+        Method to stop video.
+        
+        '''
         req = TurnOffVideo.Request()
         fut = self._stop_video_client.call_async(req)
         rclpy.spin_until_future_complete(self, fut, timeout_sec=2.0)
@@ -267,6 +387,16 @@ class DroneController(Node):
     
 # functions to fly by vectors
     def send_vectors(self, vx, vy, vz, yaw=0.0):
+        '''
+        Method to send velocity vector in FRD frame to drone_handler.
+        WARNING Before you want use this method you should first use toggle_control method and
+        after you done using velocity vector.
+        
+        :param vx: Vector in meters/seconds which is in **front** of drone direction
+        :param vy: Vector in meters/seconds which is in **right** of drone direction
+        :param vz: Vector in meters/seconds which is in **down** of drone direction
+        :param yaw: Angle in radians which is in clockwise of drone
+        '''
         vectors = VelocityVectors()
         vectors.vx = float(vx)
         vectors.vy = float(vy)
@@ -275,11 +405,19 @@ class DroneController(Node):
         self.velocity_publisher.publish(vectors)
         
     def toggle_control(self):
+        '''
+        Method to toggle control method in drone.
+        By the default drone is control by GPS high level method for example:
+        go_to_relative and go_to_global methods.
+        If you use this control toggle now drone will listen for yours velocity vector and
+        only for this control will react. 
+        
+        '''
         req = ToggleVelocityControl.Request()
         future = self.toggle_velocity_control_cli.call_async(req)
         rclpy.spin_until_future_complete(self, future, timeout_sec=10)
         if future.result().result:
-            self.get_logger().info("true")
+            self.get_logger().info("turn into velocity control mode")
         else:
-            self.get_logger().info("false")
+            self.get_logger().info("turn off velocity control mode")
         return future.result()

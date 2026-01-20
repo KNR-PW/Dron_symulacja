@@ -8,12 +8,13 @@ def main(args=None):
     mission.arm()
 
     mission.takeoff(5.0)
-
+    mission.send_goto_global(47.3977,8.544, 10.0)
     mission.send_goto_relative(5.0, 0.0, 0.0)
-    mission.send_goto_relative(0.0, 5.0, 0.0)
+    # mission.send_goto_relative(0.0, 5.0, 0.0)
     mission.send_goto_relative(-5.0, 0.0, 0.0)
-    mission.send_goto_relative(0.0, -5.0, 0.0)
-
+    # mission.send_goto_relative(0.0, -5.0, 0.0)
+    mission.send_set_yaw(3.14)
+    time.sleep(5)
     # time.sleep(30)
 
     # mission.toggle_control()
