@@ -434,58 +434,6 @@ class FollowDetections(DroneController):
         dt = now - self.last_kf_time
         self.last_kf_time = now
 
-        # --- TUNING OVERRIDE MODE ---
-        # if self.override_yaw_error is not None:
-        #     # Bypass all vision logic
-        #     if self.override_setpoint is not None and self.yaw is not None:
-        #         yaw_error = self.normalize_angle(self.override_setpoint - self.yaw)
-        #     else:
-        #         yaw_error = 0.0
-            
-        #     # --- PID LOGIC (Copy used for tuning) ---
-        #     # Proportional term
-        #     error = yaw_error
-        #     p_term = self.pid_yaw_kp * error
-
-        #     # Integral term with anti-windup
-        #     if not hasattr(self, 'integral_error'):
-        #         self.integral_error = 0.0
-        #     self.integral_error += error * dt
-        #     self.integral_error = clamp(self.integral_error, -1.0, 1.0)
-        #     i_term = self.pid_yaw_ki * self.integral_error
-
-        #     # Derivative term
-        #     if not hasattr(self, 'prev_error'):
-        #         self.prev_error = error
-        #     derivative = (error - self.prev_error) / dt if dt > 0 else 0.0
-        #     self.prev_error = error
-        #     d_term = self.pid_yaw_kd * derivative
-
-        #     yaw_rate = p_term + i_term # + d_term
-            
-        #     # Publish Debug
-        #     dbg_yaw = Point()
-        #     dbg_yaw.x = float(math.degrees(0.0)) # Target (0 for tuning usually, or the setpoint?)
-        #     dbg_yaw.y = float(math.degrees(self.yaw)) # Error being fed
-        #     dbg_yaw.z = float(math.degrees(self.override_setpoint)) # Response
-        #     self.pub_dbg_yaw.publish(dbg_yaw)
-
-        #     dbg_vel = Point()
-        #     dbg_vel.x = 0.0
-        #     dbg_vel.y = float(math.degrees(yaw_rate))
-        #     dbg_vel.z = float(math.degrees(self.current_yaw_rate))
-        #     self.pub_dbg_vel.publish(dbg_vel)
-
-        #     # Record
-        #     if self.recording:
-        #         self.error_history.append(yaw_error)
-        #         self.time_history.append(time.time() - self.start_time)
-            
-        #     # Send
-        #     self.send_vectors(0.0, 0.0, 0.0, yaw_rate)
-        #     return
-        # ----------------------------
-
         # --- FIX: Wait for KF initialization ---
         if not self.kf.initialized:
             if (now - self.last_seen) > self.lost_timeout:
@@ -498,52 +446,32 @@ class FollowDetections(DroneController):
             return
         # ---------------------------------------
 
-        # Predict position (GPS Denied / Relative)
-        # Uses Constant Velocity Model to estimate target position between frames
-        # pred_stab = self.kf.predict(dt)
-        # x_pred_stab = pred_stab[0]
-        # y_pred_stab = pred_stab[1]
-
-        # --- BYPASS KALMAN FILTER (Raw Data) ---
-        # if hasattr(self, 'last_raw_x_stab'):
-        #      x_pred_stab = self.last_raw_x_stab
-        #      y_pred_stab = self.last_raw_y_stab
-        # else:
         pred_stab = self.kf.predict(dt)
         x_pred_stab = pred_stab[0]
         y_pred_stab = pred_stab[1]
 
         # --- VALIDATION LOGIC ---
         if self.car_true_pos is not None and self.drone_true_pos is not None:
-             # Estimated Global Position of Car = Drone True Pos + Vision Vector (NED/ENU?)
              est_car_pos = self.drone_true_pos.copy()
              est_car_pos[0] += x_pred_stab
              est_car_pos[1] -= y_pred_stab
-             
+
              delta = est_car_pos - self.car_true_pos
-             dist_error = np.linalg.norm(delta[:2]) # 2D error
+             dist_error = np.linalg.norm(delta[:2])  # 2D error
 
-
-            #  self.get_logger().info(
-            #      f"VALIDATION: Car=({self.car_true_pos[0]:.2f}, {self.car_true_pos[1]:.2f}) "
-            #      f"Drone=({self.drone_true_pos[0]:.2f}, {self.drone_true_pos[1]:.2f}) "
-            #     #  f"Pred=({x_pred_stab:.2f}, {y_pred_stab:.2f}) "
-            #      f"Est=({est_car_pos[0]:.2f}, {est_car_pos[1]:.2f}) "
-            #      f"Delta=({delta[0]:.2f}, {delta[1]:.2f})"
-            #      f" Err={dist_error:.2f}m"
-            #  )
-             
              dbg_car_delta = Point()
              dbg_car_delta.x = delta[0]
              dbg_car_delta.y = delta[1]
              dbg_car_delta.z = dist_error
              self.pub_car_delta.publish(dbg_car_delta)
         else:
-             self.get_logger().info(f"WAITING FOR GT: Car={self.car_true_pos is not None} Drone={self.drone_true_pos is not None}", throttle_duration_sec=2.0)
+             self.get_logger().info(
+                 f"WAITING FOR GT: Car={self.car_true_pos is not None} Drone={self.drone_true_pos is not None}",
+                 throttle_duration_sec=2.0
+             )
         # ------------------------
 
         if (time.time() - self.last_seen) > self.lost_timeout:
-            # brak markera niedawno -> wyhamuj
             self.get_logger().warn(f"Detection lost for more than {self.lost_timeout}s, stopping!")
             self.send_vectors(0.0, 0.0, 0.0, 0.0)
             self.state = "OK"
@@ -558,16 +486,15 @@ class FollowDetections(DroneController):
         if h_m is None or self.yaw is None:
             self.get_logger().error("Altitude/Yaw not available, skipping control step")
             return
-            
         # --- RECONSTRUCT TARGET IN BODY FRAME ---
         # We have predicted position in Stabilized Frame (x_pred_stab, y_pred_stab)
         # We need to rotate it back to Body Frame using current Yaw
         # x_body = x_stab * cos(-yaw) - y_stab * sin(-yaw)
         # y_body = x_stab * sin(-yaw) + y_stab * cos(-yaw)
-        
+
         sin_ny = math.sin(-self.yaw)
         cos_ny = math.cos(-self.yaw)
-        
+
         x_target_body = x_pred_stab * cos_ny - y_pred_stab * sin_ny
         y_target_body = x_pred_stab * sin_ny + y_pred_stab * cos_ny
 
@@ -576,48 +503,57 @@ class FollowDetections(DroneController):
         dbg_target.y = float(y_target_body)
         dbg_target.z = 0.0
         self.pub_dbg_target_pos.publish(dbg_target)
-        
-        # Now use x_target_body (Forward dist) and y_target_body (Lateral dist) for control
-        
+
+        # Forward distance to target (body X)
         d_ground_m = x_target_body
         # Offset for camera position
         d_ground_m += 0.05 
 
-        # Front speed (vx)
-        vx = self.kp * d_ground_m 
+        # --- STOP 0.5m BEFORE TARGET (standoff control), even if target is behind us ---
+        standoff_m = 0.5
+
+        if abs(d_ground_m) < standoff_m:
+            d_ground_m = 0.0
+
+
+        # # If the target is behind (d_ground_m < 0), we want to stop at -standoff_m.
+        # # Keep direction stable near zero to avoid sign flipping.
+        # if not hasattr(self, "_target_dir"):
+        #     self._target_dir = 1.0
+        # if abs(d_ground_m) > 0.10:
+        #     self._target_dir = 1.0 if d_ground_m >= 0.0 else -1.0
+
+        # desired_distance_m = self._target_dir * standoff_m
+        # forward_error_m = d_ground_m - desired_distance_m
+        # ---------------------------------------------------------------------------
+
+        # Front speed (vx): drive the forward_error to 0 (supports forward and backward motion)
+        vx = self.kp * d_ground_m
         vx = clamp(vx, -self.max_vel, self.max_vel)
 
         dbg_vx = Point()
-        dbg_vx.x = 0.0
-        dbg_vx.y = float(vx) # TODO: plot the distance and the velocity separately, like yaw
-        dbg_vx.z = float(d_ground_m)
+        dbg_vx.x = 0.0 # float(forward_error_m)  # control error (m)
+        dbg_vx.y = float(vx)               # commanded vx
+        dbg_vx.z = float(d_ground_m)       # measured distance to target
         self.pub_dbg_vx.publish(dbg_vx)
 
-        # Yaw Control
-        # Calculate angle to target in body frame
+        # Yaw Control - calculate angle to target in body frame
         angle_to_target = math.atan2(y_target_body, x_target_body)
-        
-        # Use this angle as error for Yaw PID
-        # Note: self.ex_f was pixel error. Now we use physical angle error.
-        # We can map angle back to "normalized pixel error" for your PID or use angle directly.
-        # Let's use angle directly (radians) and adjust KP.
-        
         yaw_error = angle_to_target
-        
+
         # --- RECORDING ---
         if self.recording:
             self.error_history.append(yaw_error)
             self.time_history.append(time.time() - self.start_time)
 
         # Proportional term
-        error = yaw_error # Changed from self.ex_f
+        error = yaw_error
         p_term = self.pid_yaw_kp * error
 
         # Integral term with anti-windup
         if not hasattr(self, 'integral_error'):
             self.integral_error = 0.0
         self.integral_error += error * dt
-        # Clamp integral to prevent windup
         self.integral_error = clamp(self.integral_error, -1.0, 1.0)
         i_term = self.pid_yaw_ki * self.integral_error
 
@@ -628,44 +564,30 @@ class FollowDetections(DroneController):
         self.prev_error = error
         d_term = self.pid_yaw_kd * derivative
 
-        # Reset integral when error is zero to prevent overshoot
-        # if abs(error) < 0.01:
-        #     self.integral_error = 0.0
+        yaw_rate = p_term  # + i_term + d_term (enable if needed)
 
-        # Total PID output
-        # yaw_rate = p_term # only P now for tuning
-        yaw_rate = p_term #+ i_term # + d_term
-        
         # Clamp yaw rate to reasonable speed (e.g., 45 deg/s = ~0.8 rad/s)
         # yaw_rate = clamp(yaw_rate, -0.8, 0.8)
 
-        # Dodatkowe logowanie do debugowania
-        # self.get_logger().info(f"Control: h={h_m:.2f}, d={d_ground_m:.2f} -> vx={vx:.2f}, yaw_rate={yaw_rate:.2f}")
-
         vz = 0.0
 
-        # if (abs(d_ground_m) < 3.0):
-        # vz = self.kp * (h_m - self.target_alt)
-        # vz = clamp(vz, -self.max_vel, self.max_vel)
-        
-        # Check completion (using body frame distance)
-        # if abs(d_ground_m) < 0.2 and abs(yaw_error) < 0.1:
-        #     # Osiągnięto cel -> zatrzymaj ruch
-        #     self.get_logger().info("Target reached, stopping approach.")
+        # Stop the approach loop once we are at the standoff distance (and roughly aligned)
+        # if abs(forward_error_m) < 0.05 and abs(yaw_error) < 0.1:
+        #     self.get_logger().info("Standoff reached (~0.5m). Stopping approach.")
         #     self.send_vectors(0.0, 0.0, 0.0, 0.0)
         #     self.state = "OK"
+        #     # keep gimbal centering if you want; comment next line to keep tracking
         #     self.centering = False
         #     try:
         #         self.timer.cancel()
         #     except Exception:
         #         pass
-        # else:
+        #     return
 
-        
         # Publish debug info
         dbg_yaw = Point()
         dbg_yaw.x = 0.0
-        dbg_yaw.y = float(math.degrees(self.normalize_angle(yaw_error+self.yaw)))
+        dbg_yaw.y = float(math.degrees(self.normalize_angle(yaw_error + self.yaw)))
         dbg_yaw.z = float(math.degrees(self.yaw))
         self.pub_dbg_yaw.publish(dbg_yaw)
 
@@ -675,17 +597,10 @@ class FollowDetections(DroneController):
         dbg_vel.z = float(math.degrees(self.current_yaw_rate))
         self.pub_dbg_vel.publish(dbg_vel)
 
-        # dbg_vel = Point()
-        # dbg_vel.x = 0.0
-        # dbg_vel.y = float(d_ground_m)
-        # dbg_vel.z = float(vx)
-        # self.pub_dbg_vel.publish(dbg_vel)
-
-        # Send vectors. 
+        # Send vectors.
         # ARGUMENTS: (Forward_Speed, Right_Speed, Vertical_Speed, Yaw_Rate)
-        self.send_vectors(vx, 0.0, vz, yaw_rate)
-        # self.send_vectors(0.0, 0.0, vz, yaw_rate) # only yaw for tuning
-        # self.send_vectors(0.0, 0.0, 0.0, 0.0) # no movement for tuning
+        # self.send_vectors(vx, 0.0, vz, yaw_rate)
+        self.send_vectors(0.0, 0.0, vz, yaw_rate)
 
     # ──────────────────────────────────────────────────────────
     def fly_to_detection(self):        
@@ -803,18 +718,18 @@ def main():
         # while rclpy.ok() and time.time() < t_end:
         #     rclpy.spin_once(mission, timeout_sec=0.05)
 
-        translation = 5.0 # meters
+        translation = 12.0 # meters
         back_correction = 1.17
 
         # time = speed / translation
 
         while rclpy.ok():
-            speed = 3.0
+            speed = 4.0
             # for speed in [2.0, 4.0, 6.0]:
             while True:
                 # Move Forward
                 mission.send_car_command(speed, 0.0)
-                t_end = time.time() + (speed / translation)
+                t_end = time.time() + 5.0
                 while rclpy.ok() and time.time() < t_end:
                     rclpy.spin_once(mission, timeout_sec=0.05)
 
@@ -827,7 +742,7 @@ def main():
                 # Move Backward
                 mission.send_car_command(-speed, 0.0)
                 # Apply correction to duration
-                t_end = time.time() + ((speed / translation) * back_correction)
+                t_end = time.time() + 5.0 * (back_correction)
                 while rclpy.ok() and time.time() < t_end:
                     rclpy.spin_once(mission, timeout_sec=0.05)
 
@@ -837,7 +752,7 @@ def main():
                 while rclpy.ok() and time.time() < t_end:
                     rclpy.spin_once(mission, timeout_sec=0.05)
 
-                speed += 1.0
+                speed += 2.0
         
 
         
