@@ -20,52 +20,27 @@ try:
     _HAS_GEOGRAPHICLIB = True
 except Exception:
     _HAS_GEOGRAPHICLIB = False
+    
 
-
-def haversine(lat1, lon1, lat2, lon2):
-    """
-    Oblicza odległość między dwoma punktami na Ziemi
-    na podstawie ich współrzędnych geograficznych.
-
-    Parametry:
-    lat1, lon1 -- szerokość i długość geograficzna punktu 1 (stopnie)
-    lat2, lon2 -- szerokość i długość geograficzna punktu 2 (stopnie)
-
-    Zwraca:
-    Odległość w kilometrach (float)
-    """
-
-    # Promień Ziemi w kilometrach
-    R = 6378140.0
-
-    # Zamiana stopni na radiany
-    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
-
-    # Różnice współrzędnych
-    dlat = lat2 - lat1
-    dlon = lon2 - lon1
-
-    # Wzór Haversine'a
-    a = math.sin(dlat / 2)**2 + \
-        math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2)**2
-
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-
-    distance = R * c
-    return distance
-
-
-def get_meters_points(gps_points, start_point):
-
+def gps_to_local(gps_points, start_point):
     lat0, lon0 = start_point
-    calculated_points = []
+    if not _HAS_GEOGRAPHICLIB:
+        raise ImportError("Brak biblioteki geographiclib")
+    
+    geod = Geodesic.WGS84
 
     for lat, lon in gps_points:
-        dy = haversine(lat0, lon0, lat, lon0)
-        dx = haversine(lat0, lon0, lat0, lon)
-        calculated_points.append((dx, dy))
+        p=geod.Inverse(lat0, lon0, lat, lon)
+        local_points = []
 
-    return calculated_points
+        distance = p['s12']
+        azi_deg = p['azi1']
+        azi_rad = math.radians(azi_deg)
+
+        xn = distance * math.cos(azi_rad)
+        yn = distance * math.sin(azi_rad)
+        local_points.append((xn, yn))
+    return local_points
 
 def get_points_to_meters(gps_points, start_point, coef_lat, coef_lon):
     lat0, lon0 = start_point
@@ -166,21 +141,22 @@ def lawnmower_path(points, step, angle_deg=0, start_point=(0.0, 0.0)):
 
     full_points.extend(waypoints)
 
-    return points_to_relative_vectors(full_points)
+    return full_points
 
+def local_to_gps(local_points, start_point):
+    sx, sy = start_point
+    gps_points=[]
+    
+    for points in local_points:
+        x, y=points
 
-
-def points_to_relative_vectors(points):
-    if not points:
-        return []
-    vectors = [(0.0, 0.0)]
-    prev_x, prev_y = points[0]
-    for (x, y) in points[1:]:
-        vectors.append((x - prev_x, y - prev_y))
-        prev_x, prev_y = x, y
-    return vectors
-
-
+        distance = math.sqrt(x**2 + y**2)
+        azimuth = math.degrees(math.atan2(y, x))
+    
+        geod = Geodesic.WGS84
+        result = geod.Direct(sx, sy, azimuth, distance)
+        gps_points.append((result['lat2'], result['lon2']))
+    return gps_points
 
 def _parse_point(text: str):
     parts = [p.strip() for p in text.split(",")]
@@ -317,33 +293,6 @@ class CoverageNode(DroneController):
             except Exception:
                 pass
 
-
-    def read_gps_move_1000_read_gps(self, timeout_sec: float = 10.0):
-
-        lat1, lon1 = self._read_gps_once(timeout_sec=timeout_sec)
-        if lat1 is None or lon1 is None:
-            self.get_logger().error("Nie udało się pobrać GPS przed ruchem.")
-            return (None, None, None, None)
-
-        
-        self.get_logger().info("Wykonuje kalibracje: ")
-        
-        #Dlugosc geograficzna
-        self.send_goto_relative(1000.0, 0.0, 0.0)
-        lat2, lon2 = self._read_gps_once(timeout_sec=timeout_sec)
-
-        #Szerokosc geograficzna
-        self.send_goto_relative(0.0, 1000.0, 0.0)
-        lat3, lon3 = self._read_gps_once(timeout_sec=timeout_sec)
-        
-        self.lat_coefficient = (lat2 - lat1)
-        self.lon_coefficient = (lon3 - lon2)
-
-        self.get_logger().info(f'Roznica na 1000 metrów lat:{self.lat_coefficient}, lon:{self.lon_coefficient}')
-
-        self.send_goto_global(lat2-self.lat_coefficient,lon3-self.lon_coefficient,9.0 )
-
-
     def _log_points(self, title, pts):
         ORANGE = "\033[38;5;208m"
         RESET = "\033[0m"
@@ -356,18 +305,16 @@ class CoverageNode(DroneController):
         )
 
     def send_go_round(self, gps_points, start_point, step, angle):
-        # points =[(0, -200), (200, 0), (0, 00), (100, 0)]
-        points =[(0, -500), (200, 0), (0, 500), (100, 0)]
-        # points =[(0, -500), (200, 0), (0, 500), (100, 0)]
-        for point in points:
+        for point in gps_points:
             x,y = point
             self.get_logger().info(f"\033[35m  {x}, {y} \033[0m")
-        trajectory = lawnmower_path(points, step, angle, start_point)
-        for vector in trajectory:
-            x,y = vector
+        trajectory = lawnmower_path(gps_points, step, angle, start_point)
+        local_to_gps(trajectory, start_point)
+        for vector in local_to_gps:
+            lat, lon = vector
             z = 0.0
-            self.get_logger().info(f'Lece do: N:{x}, E:{y}, D:{z}')
-            self.send_goto_relative(x, y, z)
+            self.get_logger().info(f'Lece do: N:{lat}, E:{lon}, D:{z}')
+            self.send_goto_global(lat, lon, z)
     
 
 
@@ -381,15 +328,15 @@ def main():
         node.destroy_node()
         rclpy.shutdown()
         return
-
+    
     gps_start_point = (node.lat0, node.lon0)
+
+    local_points = gps_to_local(points, gps_start_point)
 
     node.arm()
     node.takeoff(9.0)
-    node.read_gps_move_1000_read_gps()
     try:
-       
-        node.send_go_round(points, gps_start_point, step, angle)
+        node.send_go_round(local_points, gps_start_point, step, angle)
 
         rclpy.spin(node)
     except KeyboardInterrupt:
