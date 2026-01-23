@@ -21,7 +21,7 @@ from drone_interfaces.action import (
 )
 
 class DroneController(Node):
-    def __init__(self):
+    def __init__(self, node_name: str = 'drone_controller'):
         super().__init__('drone_controller')
         # --- Declare KNR Namespaces ---
         NAMESPACE_HARDWARE = 'knr_hardware/'
