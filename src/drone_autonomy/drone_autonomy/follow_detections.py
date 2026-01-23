@@ -566,6 +566,8 @@ class FollowDetections(DroneController):
 
         yaw_rate = p_term  # + i_term + d_term (enable if needed)
 
+        vy = clamp(self.normalize_angle(yaw_error) / math.pi, -1.0, 1.0) * 2.0
+
         # Clamp yaw rate to reasonable speed (e.g., 45 deg/s = ~0.8 rad/s)
         # yaw_rate = clamp(yaw_rate, -0.8, 0.8)
 
@@ -599,8 +601,8 @@ class FollowDetections(DroneController):
 
         # Send vectors.
         # ARGUMENTS: (Forward_Speed, Right_Speed, Vertical_Speed, Yaw_Rate)
-        # self.send_vectors(vx, 0.0, vz, yaw_rate)
-        self.send_vectors(0.0, 0.0, vz, yaw_rate)
+        self.send_vectors(vx, vy, vz, yaw_rate)
+        # self.send_vectors(0.0, 0.0, vz, yaw_rate)
 
     # ──────────────────────────────────────────────────────────
     def fly_to_detection(self):        
@@ -703,7 +705,7 @@ def main():
 
         mission.last_seen = time.time()
                     
-        # mission.send_car_command(4.0, 0.25)
+        mission.send_car_command(4.0, 0.25)
 
         # mission.center_detection()
         # mission.send_goto_relative(0.0, -6.5, 0.0)
@@ -711,8 +713,8 @@ def main():
 
         mission.get_logger().info("Starting simple car loop: Forward -> Stop -> Turn -> Forward")
 
-        # while rclpy.ok():
-        #     rclpy.spin_once(mission, timeout_sec=0.1)
+        while rclpy.ok():
+            rclpy.spin_once(mission, timeout_sec=0.1)
 
         # t_end = time.time() + 5.0
         # while rclpy.ok() and time.time() < t_end:
@@ -723,36 +725,36 @@ def main():
 
         # time = speed / translation
 
-        while rclpy.ok():
-            speed = 4.0
-            # for speed in [2.0, 4.0, 6.0]:
-            while True:
-                # Move Forward
-                mission.send_car_command(speed, 0.0)
-                t_end = time.time() + 5.0
-                while rclpy.ok() and time.time() < t_end:
-                    rclpy.spin_once(mission, timeout_sec=0.05)
+        # while rclpy.ok():
+        #     speed = 3.0
+        #     # for speed in [2.0, 4.0, 6.0]:
+        #     while True:
+        #         # Move Forward
+        #         mission.send_car_command(speed, -0.2)
+        #         t_end = time.time() + 5.0
+        #         while rclpy.ok() and time.time() < t_end:
+        #             rclpy.spin_once(mission, timeout_sec=0.05)
 
-                # Stop
-                mission.send_car_command(0.0, 0.0)
-                t_end = time.time() + 5.0
-                while rclpy.ok() and time.time() < t_end:
-                    rclpy.spin_once(mission, timeout_sec=0.05)
+        #         # Stop
+        #         mission.send_car_command(0.0, 0.0)
+        #         t_end = time.time() + 5.0
+        #         while rclpy.ok() and time.time() < t_end:
+        #             rclpy.spin_once(mission, timeout_sec=0.05)
 
-                # Move Backward
-                mission.send_car_command(-speed, 0.0)
-                # Apply correction to duration
-                t_end = time.time() + 5.0 * (back_correction)
-                while rclpy.ok() and time.time() < t_end:
-                    rclpy.spin_once(mission, timeout_sec=0.05)
+        #         # # Move Backward
+        #         # mission.send_car_command(-speed, 0.0)
+        #         # # Apply correction to duration
+        #         # t_end = time.time() + 5.0 * (back_correction)
+        #         # while rclpy.ok() and time.time() < t_end:
+        #         #     rclpy.spin_once(mission, timeout_sec=0.05)
 
-                # Stop
-                mission.send_car_command(0.0, 0.0)
-                t_end = time.time() + 5.0
-                while rclpy.ok() and time.time() < t_end:
-                    rclpy.spin_once(mission, timeout_sec=0.05)
+        #         # # Stop
+        #         # mission.send_car_command(0.0, 0.0)
+        #         # t_end = time.time() + 5.0
+        #         # while rclpy.ok() and time.time() < t_end:
+        #         #     rclpy.spin_once(mission, timeout_sec=0.05)
 
-                speed += 2.0
+        #         speed += 2.0
         
 
         

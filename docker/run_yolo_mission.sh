@@ -1,1 +1,1 @@
-./dockerise_cmd.sh "source ~/ros_ws/install/setup.bash && ros2 run drone_autonomy follow_detections --ros-args -p image_width:=640 -p image_height:=480 -p detections_topic:=/detections -p target_alt:=5.0 -p kp:=0.8 -p max_vel:=6.0 -p lowpass:=0.3 -p lost_timeout:=5.0"
+./dockerise_cmd.sh "source ~/ros_ws/install/setup.bash && ros2 run drone_autonomy follow_detections --ros-args -p image_width:=640 -p image_height:=480 -p detections_topic:=/detections -p target_alt:=5.0 -p kp:=0.8 -p max_vel:=6.0 -p lowpass:=0.3 -p lost_timeout:=15.0"
