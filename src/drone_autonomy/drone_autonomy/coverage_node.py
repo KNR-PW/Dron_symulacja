@@ -20,7 +20,7 @@ try:
     _HAS_GEOGRAPHICLIB = True
 except Exception:
     _HAS_GEOGRAPHICLIB = False
-    
+
 
 def gps_to_local(gps_points, start_point):
     lat0, lon0 = start_point
@@ -41,7 +41,7 @@ def gps_to_local(gps_points, start_point):
         yn = distance * math.sin(azi_rad)
         local_points.append((xn, yn))
     return local_points
-
+ 
 def get_points_to_meters(gps_points, start_point, coef_lat, coef_lon):
     lat0, lon0 = start_point
     calculated_points = []
