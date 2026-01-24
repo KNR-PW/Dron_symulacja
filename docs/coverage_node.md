@@ -1,11 +1,4 @@
-Tak — **dokładnie o to chodzi** 👍
-Treściowo masz **100% OK**, trzeba tylko **lekko poprawić formatowanie Markdown**, bo teraz w kilku miejscach „rozjechały się” nagłówki, listy i blok kodu.
 
-Poniżej masz **gotową, poprawioną wersję Markdown** do wklejenia **1:1** (czytelna, estetyczna, repo-ready).
-
----
-
-````md
 # Coverage Node – Mapowanie terenu (ROS 2)
 
 ## Opis
