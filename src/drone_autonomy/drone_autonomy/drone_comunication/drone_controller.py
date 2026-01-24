@@ -21,11 +21,9 @@ from drone_interfaces.action import (
 )
 
 class DroneController(Node):
-    '''
-    Its high level class where we have all needed functions to control the drone and get data from it.
-    '''
-    def __init__(self):
-        super().__init__('drone_controller')
+
+    def __init__(self, node_name: str = 'drone_controller'):
+        super().__init__(node_name)
         # --- Declare KNR Namespaces ---
         NAMESPACE_HARDWARE = 'knr_hardware/'
         NAMESPACE_VIDEO = 'knr_video/'
