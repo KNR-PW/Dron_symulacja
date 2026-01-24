@@ -1,6 +1,6 @@
 import rclpy
 import time
-from drone_comunication import DroneController
+from drone_comunication.drone_controller import DroneController
 
 def main(args=None):
     rclpy.init(args=args)

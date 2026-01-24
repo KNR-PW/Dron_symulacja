@@ -1,0 +1,40 @@
+#-------------------------------------------------
+#
+#   VTOL Tilt-Rotor
+#
+#  Dimensional unit and parameter data.
+#  Mass & Inertia breakdown.
+#-------------------------------------------------
+#  Names and scalings for units to be used for trim and eigenmode calculations.
+#  The Lunit and Munit values scale the mass, xyz, and inertia table data below.
+#  Lunit value will also scale all lengths and areas in the AVL input file.
+#
+Lunit =     1.0000 m
+Munit =     1.0000 kg
+Tunit = 1.0 s
+#-------------------------
+#  Gravity and density to be used as default values in trim setup (saves runtime typing).
+#  Must be in the unit names given above (i.e. m,kg,s).
+g   = 9.81
+rho = 1.225
+#-------------------------
+#  Mass & Inertia breakdown.
+#  x y z  is location of item's own CG.
+#  Ixx... are item's inertias about item's own CG.
+#
+#  x,y,z system here must be exactly the same one used in the .avl input file
+#     (same orientation, same origin location, same length units)
+#
+#     mass          x          y          z        Ixx        Iyy        Izz        Ixy        Ixz        Iyz 
+      0.85     0.0988   7.72e-17    0.00537      0.112    0.00164      0.114          0  -3.51e-06          0 ! Main Wing
+       0.3      0.907   4.93e-17      0.203    0.00556   0.000161    0.00572          0   8.41e-06          0 ! Elevator
+      0.15      0.874  -1.27e-16     0.0786   0.000445    0.00058   0.000134          0   7.04e-05          0 ! Fin
+       0.5       -0.4          0       -0.2      0.000      0.000      0.000 ! Mech. obrotu przedni
+       0.5        0.8          0        0.2      0.000      0.000      0.000 ! Mech. obrotu tylni
+         1       -0.1          0       -0.1      0.000      0.000      0.000 ! LiPo
+      0.15       -0.4        0.4       -0.2      0.000      0.000      0.000 ! Silnik+ramie FL
+      0.15       -0.4       -0.4       -0.2      0.000      0.000      0.000 ! Silnik+ramie FR
+      0.15        0.8       -0.4        0.2      0.000      0.000      0.000 ! Silnik+ramie BL
+      0.15        0.8        0.4        0.2      0.000      0.000      0.000 ! Silnik+ramie BR
+       0.3       -0.1          0       0.01      0.000      0.000      0.000 ! Awionika
+         2       -0.3          0       -0.1      0.000      0.000      0.000 ! Payload
