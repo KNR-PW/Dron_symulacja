@@ -26,6 +26,7 @@ setup(
             'mission=drone_autonomy.mission:main',
             'fly_to_aruco_example=drone_autonomy.fly_to_aruco_example:main',
             'follow_aruco_centroid=drone_autonomy.follow_aruco_centroid:main',
+            'coverage_node=drone_autonomy.coverage_node:main',
             'PID_test_mission=drone_autonomy.PID_test_mission:main',
             'field_test_of_velocity=drone_autonomy.field_test_of_velocity:main',
         ],
