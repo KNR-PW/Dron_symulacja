@@ -13,7 +13,7 @@ from drone_interfaces.msg import VelocityVectors, Telemetry
 from drone_interfaces.srv import ToggleVelocityControl, SetGimbalAngle
 from drone_autonomy.drone_comunication.drone_controller import DroneController
 from std_srvs.srv import SetBool
-from std_msgs.msg import Float32
+from std_msgs.msg import Float32, Float32MultiArray
 from geometry_msgs.msg import Point, Twist, PointStamped
 
 # TODO: fix wrong world opening
@@ -154,6 +154,8 @@ class FollowDetections(DroneController):
         self.pub_dbg_vx = self.create_publisher(Point, '/debug/vx', 10)
         
         self.pub_car_delta = self.create_publisher(Point, '/debug/car_delta', 10)
+        # Benchmark publisher: [true_x, true_y, pred_x, pred_y, dist_error]
+        self.pub_benchmark = self.create_publisher(Float32MultiArray, '/debug/tracker_benchmark', 10)
 
         # Car control publisher
         self.car_pub = self.create_publisher(Twist, '/cmd_vel', 10)
@@ -446,6 +448,11 @@ class FollowDetections(DroneController):
             return
         # ---------------------------------------
 
+        # --- BYPASS KALMAN FILTER (Raw Data) ---
+        # if hasattr(self, 'last_raw_x_stab'):
+        #      x_pred_stab = self.last_raw_x_stab
+        #      y_pred_stab = self.last_raw_y_stab
+        # else:
         pred_stab = self.kf.predict(dt)
         x_pred_stab = pred_stab[0]
         y_pred_stab = pred_stab[1]
@@ -464,6 +471,14 @@ class FollowDetections(DroneController):
              dbg_car_delta.y = delta[1]
              dbg_car_delta.z = dist_error
              self.pub_car_delta.publish(dbg_car_delta)
+
+             # Publish benchmark data
+             try:
+                 benchmark_msg = Float32MultiArray()
+                 benchmark_msg.data = [self.car_true_pos[0], self.car_true_pos[1], est_car_pos[0], est_car_pos[1], dist_error]
+                 self.pub_benchmark.publish(benchmark_msg)
+             except Exception as e:
+                 self.get_logger().warn(f"Failed to publish benchmark data: {e}")
         else:
              self.get_logger().info(
                  f"WAITING FOR GT: Car={self.car_true_pos is not None} Drone={self.drone_true_pos is not None}",
@@ -566,7 +581,8 @@ class FollowDetections(DroneController):
 
         yaw_rate = p_term  # + i_term + d_term (enable if needed)
 
-        vy = clamp(self.normalize_angle(yaw_error) / math.pi, -1.0, 1.0) * 2.0
+        # vy = clamp(self.normalize_angle(yaw_error) / math.pi, -1.0, 1.0) * 2.0
+        vy = self.kp * y_target_body * 0.5
 
         # Clamp yaw rate to reasonable speed (e.g., 45 deg/s = ~0.8 rad/s)
         # yaw_rate = clamp(yaw_rate, -0.8, 0.8)
@@ -601,7 +617,7 @@ class FollowDetections(DroneController):
 
         # Send vectors.
         # ARGUMENTS: (Forward_Speed, Right_Speed, Vertical_Speed, Yaw_Rate)
-        self.send_vectors(vx, vy, vz, yaw_rate)
+        self.send_vectors(vx, 0.0, vz, yaw_rate)
         # self.send_vectors(0.0, 0.0, vz, yaw_rate)
 
     # ──────────────────────────────────────────────────────────

@@ -18,8 +18,8 @@ WorldInfo {
   FPS 80
 }
 Viewpoint {
-  orientation 0.00998385955071902 0.9967985057733226 -0.0793288184491791 0.2507945272616201
-  position -14.61607192037044 -6.315137117756345 2.8482053449885787
+  orientation -0.0049742813577972386 0.9987481587254443 0.04977320531679823 0.2002490306970872
+  position -15.785179983836228 -6.473279997021818 2.910660377664349
   follow "Iris"
   followType "Mounted Shot"
   followSmoothness 0.01
@@ -27,7 +27,7 @@ Viewpoint {
 TexturedBackground {
 }
 DEF Tesla3 TeslaModel3 {
-  translation 6 -8 0.4
+  translation 1 -8 0.4
   rotation 0 0 -1 -1.5707953071795862
   color 0.666667 0 0
   controller "tesla_circle_driver"
