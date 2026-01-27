@@ -44,3 +44,5 @@ saved_images/
 saved_video/
 *.jpg
 *.png
+
+docker/plots/

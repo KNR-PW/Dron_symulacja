@@ -6,7 +6,7 @@ import rclpy
 from rclpy.node import Node
 import math
 import numpy as np
-from drone_autonomy.kalman_filter import KalmanFilter
+from drone_autonomy.kalman_filter import KalmanFilter, KalmanFilterAware
 
 from vision_msgs.msg import Detection2DArray
 from drone_interfaces.msg import VelocityVectors, Telemetry
@@ -77,8 +77,9 @@ class FollowDetections(DroneController):
         self.start_time = 0.0
 
         # --- Kalman Filter ---
-        self.kf = KalmanFilter()
+        self.kf = KalmanFilterAware()
         self.last_kf_time = time.time()
+        self.drone_velocity_world = (0.0, 0.0)
 
         self.state = "OK"
         
@@ -177,6 +178,12 @@ class FollowDetections(DroneController):
             self.current_yaw_rate = msg.yaw_speed
         except AttributeError:
             self.current_yaw_rate = 0.0
+        
+        # Capture velocity from Telemetry (Real-world source)
+        if hasattr(msg, 'vx'):
+            self.drone_velocity_world = (msg.vx, msg.vy)
+        else:
+            self.drone_velocity_world = (0.0, 0.0)
 
     def start_recording(self):
         """Resets and starts recording error data."""
@@ -400,8 +407,8 @@ class FollowDetections(DroneController):
             x_stab = x_body * cos_y - y_body * sin_y
             y_stab = x_body * sin_y + y_body * cos_y
             
-            self.last_raw_x_stab = x_stab
-            self.last_raw_y_stab = y_stab
+            # self.last_raw_x_stab = x_stab
+            # self.last_raw_y_stab = y_stab
 
             self.kf.update(np.array([x_stab, y_stab]))
 
@@ -453,7 +460,8 @@ class FollowDetections(DroneController):
              x_pred_stab = self.last_raw_x_stab
              y_pred_stab = self.last_raw_y_stab
         else:
-            pred_stab = self.kf.predict(dt)
+            # Pass drone velocity to KF (compensate for our own motion)
+            pred_stab = self.kf.predict(dt, drone_velocity_xy=self.drone_velocity_world)
             x_pred_stab = pred_stab[0]
             y_pred_stab = pred_stab[1]
 
@@ -556,6 +564,13 @@ class FollowDetections(DroneController):
         angle_to_target = math.atan2(y_target_body, x_target_body)
         yaw_error = angle_to_target
 
+        # Print/debug the angle to target (yaw error)
+        self.get_logger().info(
+            f"angle_to_target={math.degrees(angle_to_target):.2f} deg "
+            f"x_body={x_target_body:.2f} m y_body={y_target_body:.2f} m",
+            throttle_duration_sec=0.5,
+        )
+
         # --- RECORDING ---
         if self.recording:
             self.error_history.append(yaw_error)
@@ -626,8 +641,8 @@ class FollowDetections(DroneController):
         self.state = "BUSY"
         self.centering = True
         self.get_logger().info("Gimbal centering + approach started")
-        # start approach control loop at 100 Hz (or adjust)
-        self.timer = self.create_timer(0.01, self.drone_control_loop) # TODO: faster?
+        # start approach control loop at 50 Hz (or adjust)
+        self.timer = self.create_timer(0.02, self.drone_control_loop) # TODO: faster?
         # self.wait_busy()
  
  

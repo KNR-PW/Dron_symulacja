@@ -21,3 +21,7 @@ float32 yaw_speed
 float64 global_lat
 float64 global_lon
 float32 global_alt
+
+float32 vx
+float32 vy
+float32 vz

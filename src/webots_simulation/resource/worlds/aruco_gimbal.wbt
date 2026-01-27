@@ -11,6 +11,7 @@ IMPORTABLE EXTERNPROTO "/root/ros_ws/install/webots_simulation/share/webots_simu
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/factory/containers/protos/PlasticCrate.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/humans/pedestrian/protos/Pedestrian.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/vehicles/protos/tesla/TeslaModel3.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/vehicles/protos/generic/BusSimple.proto"
 
 WorldInfo {
   title "Iris Mines"
@@ -18,8 +19,8 @@ WorldInfo {
   FPS 80
 }
 Viewpoint {
-  orientation -0.0049742813577972386 0.9987481587254443 0.04977320531679823 0.2002490306970872
-  position -15.785179983836228 -6.473279997021818 2.910660377664349
+  orientation 0.033725128773451116 0.9627524120639337 -0.26827301160253114 0.25956575643510704
+  position -27.85976681169357 -1.6786054465514968 9.129177345038151
   follow "Iris"
   followType "Mounted Shot"
   followSmoothness 0.01
@@ -38,6 +39,11 @@ Floor {
   size 1000 1000
   appearance Grass {
   }
+}
+BusSimple {
+  translation 12 -5.5 0.55
+  rotation 0 0 1 -1.5707953071795862
+  name "vehicle(1)"
 }
 PipeSection {
   translation 0 20 0.3

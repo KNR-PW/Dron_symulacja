@@ -557,7 +557,17 @@ class DroneHandler(Node):
             # Flight mode
             msg.flight_mode = str(self.vehicle.mode)
             
-            msg.speed = float(self.vehicle.groundspeed)  
+            msg.speed = float(self.vehicle.groundspeed)
+            
+            # Velocity Vector (Global NED)
+            if self.vehicle.velocity:
+                msg.vx = float(self.vehicle.velocity[0])
+                msg.vy = float(self.vehicle.velocity[1])
+                msg.vz = float(self.vehicle.velocity[2])
+            else:
+                 msg.vx = 0.0
+                 msg.vy = 0.0
+                 msg.vz = 0.0  
 
             gf = self.vehicle.location.global_frame
             if gf:  # check that GPS is valid
