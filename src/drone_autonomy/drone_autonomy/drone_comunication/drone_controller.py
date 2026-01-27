@@ -38,6 +38,7 @@ class DroneController(Node):
         self._start_video_client = self.create_client(TurnOnVideo, NAMESPACE_VIDEO+'turn_on_video')
         self._stop_video_client = self.create_client(TurnOffVideo, NAMESPACE_VIDEO+'turn_off_video')
         self.toggle_velocity_control_cli = self.create_client(ToggleVelocityControl,NAMESPACE_HARDWARE+'toggle_v_control')
+        self._set_guard_client = self.create_client(SetMode, 'set_brake_on_obstacle')
         self.velocity_publisher = self.create_publisher(VelocityVectors,NAMESPACE_HARDWARE+'velocity_vectors', 10)
 
         self._wait_for_service(self._mode_client, NAMESPACE_HARDWARE+'set_mode')
@@ -114,6 +115,26 @@ class DroneController(Node):
             self.get_logger().error(f'Failed to set mode to {mode}')
             return False
         self.get_logger().info(f'Mode set to: {mode}')
+        return True
+
+    def set_obstacle_avoidance(self, active: bool) -> bool:
+        """Enables or disables the obstacle avoidance guard."""
+        req = SetMode.Request()
+        req.mode = 'ON' if active else 'OFF'
+        
+        # Check if service is ready 
+        if not self._set_guard_client.wait_for_service(timeout_sec=1.0):
+            self.get_logger().warn('Obstacle Avoidance service not available')
+            return False
+            
+        fut = self._set_guard_client.call_async(req)
+        rclpy.spin_until_future_complete(self, fut, timeout_sec=2.0)
+        
+        if fut.result() is None:
+            self.get_logger().error('Failed to set obstacle avoidance mode')
+            return False
+            
+        self.get_logger().info(f'Obstacle Avoidance set to: {req.mode}')
         return True
 
     def set_speed(self, speed) -> bool:
