@@ -46,6 +46,7 @@ class DroneHandler(Node):
 
         #DECLARE PUBLISHER
         self.telemetry_publisher = self.create_publisher(Telemetry, NAMESPACE+'telemetry',10)
+        self.velocity_pub = self.create_publisher(VelocityVectors, NAMESPACE+'current_velocity', 10)
         
         #DECLARE VELOCITY CONTROL
         self.vector_receiver = self.create_subscription(VelocityVectors, NAMESPACE+'velocity_vectors', self.velocity_control_callback ,10)
@@ -521,6 +522,14 @@ class DroneHandler(Node):
         except Exception as e:
             self.get_logger().error(f"Error in telemetry callback: {e}")
             self.get_logger().info(f"ESC is not initialized yet:{self.vehicle.battery}")
+
+        # Publish current velocity
+        if self.vehicle and self.vehicle.velocity:
+            vel_msg = VelocityVectors()
+            vel_msg.vx = float(self.vehicle.velocity[0])
+            vel_msg.vy = float(self.vehicle.velocity[1])
+            vel_msg.vz = float(self.vehicle.velocity[2])
+            self.velocity_pub.publish(vel_msg)
 
     #velocty control definitions
 
