@@ -400,8 +400,8 @@ class FollowDetections(DroneController):
             x_stab = x_body * cos_y - y_body * sin_y
             y_stab = x_body * sin_y + y_body * cos_y
             
-            # self.last_raw_x_stab = x_stab
-            # self.last_raw_y_stab = y_stab
+            self.last_raw_x_stab = x_stab
+            self.last_raw_y_stab = y_stab
 
             self.kf.update(np.array([x_stab, y_stab]))
 
@@ -449,13 +449,13 @@ class FollowDetections(DroneController):
         # ---------------------------------------
 
         # --- BYPASS KALMAN FILTER (Raw Data) ---
-        # if hasattr(self, 'last_raw_x_stab'):
-        #      x_pred_stab = self.last_raw_x_stab
-        #      y_pred_stab = self.last_raw_y_stab
-        # else:
-        pred_stab = self.kf.predict(dt)
-        x_pred_stab = pred_stab[0]
-        y_pred_stab = pred_stab[1]
+        if hasattr(self, 'last_raw_x_stab'):
+             x_pred_stab = self.last_raw_x_stab
+             y_pred_stab = self.last_raw_y_stab
+        else:
+            pred_stab = self.kf.predict(dt)
+            x_pred_stab = pred_stab[0]
+            y_pred_stab = pred_stab[1]
 
         # --- VALIDATION LOGIC ---
         if self.car_true_pos is not None and self.drone_true_pos is not None:
@@ -626,8 +626,8 @@ class FollowDetections(DroneController):
         self.state = "BUSY"
         self.centering = True
         self.get_logger().info("Gimbal centering + approach started")
-        # start approach control loop at 50 Hz (or adjust)
-        self.timer = self.create_timer(0.02, self.drone_control_loop) # TODO: faster?
+        # start approach control loop at 100 Hz (or adjust)
+        self.timer = self.create_timer(0.01, self.drone_control_loop) # TODO: faster?
         # self.wait_busy()
  
  
