@@ -1,7 +1,7 @@
 import numpy as np
 
 class KalmanFilter:
-    def __init__(self, process_noise=1.0, measurement_noise=0.1):
+    def __init__(self, process_noise=0.01, measurement_noise=1.0):
         # State: [x, y, vx, vy] (Relative position in Yaw-Stabilized Frame)
         self.x = np.zeros(4)
         self.P = np.eye(4)

@@ -77,7 +77,7 @@ class FollowDetections(DroneController):
         self.start_time = 0.0
 
         # --- Kalman Filter ---
-        self.kf = KalmanFilterAware()
+        self.kf = KalmanFilter()
         self.last_kf_time = time.time()
         self.drone_velocity_world = (0.0, 0.0)
 
@@ -461,7 +461,7 @@ class FollowDetections(DroneController):
              y_pred_stab = self.last_raw_y_stab
         else:
             # Pass drone velocity to KF (compensate for our own motion)
-            pred_stab = self.kf.predict(dt, drone_velocity_xy=self.drone_velocity_world)
+            pred_stab = self.kf.predict(dt)
             x_pred_stab = pred_stab[0]
             y_pred_stab = pred_stab[1]
 
@@ -565,11 +565,11 @@ class FollowDetections(DroneController):
         yaw_error = angle_to_target
 
         # Print/debug the angle to target (yaw error)
-        self.get_logger().info(
-            f"angle_to_target={math.degrees(angle_to_target):.2f} deg "
-            f"x_body={x_target_body:.2f} m y_body={y_target_body:.2f} m",
-            throttle_duration_sec=0.5,
-        )
+        # self.get_logger().info(
+        #     f"angle_to_target={math.degrees(angle_to_target):.2f} deg "
+        #     f"x_body={x_target_body:.2f} m y_body={y_target_body:.2f} m",
+        #     throttle_duration_sec=0.5,
+        # )
 
         # --- RECORDING ---
         if self.recording:
@@ -632,8 +632,8 @@ class FollowDetections(DroneController):
 
         # Send vectors.
         # ARGUMENTS: (Forward_Speed, Right_Speed, Vertical_Speed, Yaw_Rate)
-        self.send_vectors(vx, 0.0, vz, yaw_rate)
-        # self.send_vectors(0.0, 0.0, vz, yaw_rate)
+        # self.send_vectors(vx, 0.0, vz, yaw_rate)
+        self.send_vectors(0.0, 0.0, vz, yaw_rate)
 
     # ──────────────────────────────────────────────────────────
     def fly_to_detection(self):        
@@ -705,7 +705,7 @@ def main():
     
     try:
         mission.arm()
-        target_height = 5.0
+        target_height = 4.0
         
         mission.set_gimbal_angle(45.0)
         mission.takeoff(target_height)
@@ -736,7 +736,7 @@ def main():
 
         mission.last_seen = time.time()
                     
-        mission.send_car_command(4.0, 0.25)
+        mission.send_car_command(5.0, 0.2)
 
         # mission.center_detection()
         # mission.send_goto_relative(0.0, -6.5, 0.0)

@@ -11,7 +11,7 @@ IMPORTABLE EXTERNPROTO "/root/ros_ws/install/webots_simulation/share/webots_simu
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/factory/containers/protos/PlasticCrate.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/humans/pedestrian/protos/Pedestrian.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/vehicles/protos/tesla/TeslaModel3.proto"
-EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/vehicles/protos/generic/BusSimple.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/buildings/protos/Silo.proto"
 
 WorldInfo {
   title "Iris Mines"
@@ -19,8 +19,8 @@ WorldInfo {
   FPS 80
 }
 Viewpoint {
-  orientation 0.033725128773451116 0.9627524120639337 -0.26827301160253114 0.25956575643510704
-  position -27.85976681169357 -1.6786054465514968 9.129177345038151
+  orientation 0.019145517439717662 0.955709669369694 -0.29368772026633283 0.13600634401765452
+  position -24.998300618646724 -5.943149542100642 5.345863158763708
   follow "Iris"
   followType "Mounted Shot"
   followSmoothness 0.01
@@ -28,7 +28,7 @@ Viewpoint {
 TexturedBackground {
 }
 DEF Tesla3 TeslaModel3 {
-  translation 1 -8 0.4
+  translation 2 -8 0.4
   rotation 0 0 -1 -1.5707953071795862
   color 0.666667 0 0
   controller "tesla_circle_driver"
@@ -39,11 +39,6 @@ Floor {
   size 1000 1000
   appearance Grass {
   }
-}
-BusSimple {
-  translation 12 -5.5 0.55
-  rotation 0 0 1 -1.5707953071795862
-  name "vehicle(1)"
 }
 PipeSection {
   translation 0 20 0.3
@@ -224,4 +219,7 @@ Robot {
   name "ground_truth_supervisor"
   controller "ground_truth_supervisor"
   supervisor TRUE
+}
+Silo {
+  translation 13 -7 0
 }
