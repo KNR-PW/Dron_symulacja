@@ -30,7 +30,7 @@ def plot_benchmark(csv_file):
     # --- Plot 1: Trajectory (X-Y) ---
     plt.subplot(2, 2, 1)
     plt.plot(df['true_x'], df['true_y'], 'g-', label='Ground Truth', linewidth=2, alpha=0.7)
-    plt.plot(df['pred_x'], df['pred_y'], 'r--', label='Predicted (KF)', linewidth=1.5, alpha=0.7)
+    plt.plot(df['pred_x'], df['pred_y'], 'r--', label='Predicted', linewidth=1.5, alpha=0.7)
     plt.title('Car Trajectory (X-Y)')
     plt.xlabel('X (m)')
     plt.ylabel('Y (m)')

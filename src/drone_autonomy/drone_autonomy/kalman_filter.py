@@ -56,7 +56,7 @@ class KalmanFilterAware:
     State: [x_rel, y_rel, vx_ABS, vy_ABS]
     Estimates absolute velocity of the target to avoid lag during drone acceleration.
     """
-    def __init__(self, process_noise=0.1, measurement_noise=0.5):
+    def __init__(self, process_noise=1.0, measurement_noise=0.01):
         # State: [x_rel, y_rel, vx_ABS, vy_ABS]
         self.x = np.zeros(4)
         self.P = np.eye(4)
@@ -139,7 +139,7 @@ class EKF_CTRV:
     This model assumes the target moves with constant absolute velocity and turn rate (circular motion),
     while accounting for the drone's own velocity in the relative position update.
     """
-    def __init__(self, process_noise=1.0, measurement_noise=0.001):
+    def __init__(self, process_noise=1.0, measurement_noise=0.01):
         # State: [x_rel, y_rel, v, yaw, ω]
         self.x = np.zeros(5)
         self.P = np.eye(5)
