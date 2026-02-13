@@ -6,6 +6,7 @@
   <description>TODO: Package description</description>
   <maintainer email="stas.kolodziejczyk@gmail.com">stas</maintainer>
   <license>TODO: License declaration</license>
+
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
   <test_depend>ament_pep257</test_depend>

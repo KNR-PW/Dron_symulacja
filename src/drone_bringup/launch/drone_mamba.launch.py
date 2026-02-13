@@ -20,6 +20,7 @@ def generate_launch_description():
     drone_node = Node(
         package='drone_hardware',
         executable='drone_handler',
+        executable='drone_handler',
     )
 
     # Node do kamery

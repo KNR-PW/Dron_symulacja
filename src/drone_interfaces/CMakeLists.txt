@@ -35,11 +35,9 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/CreateReport.srv"
   "srv/UpdateReport.srv"
   "srv/VtolServoCalib.srv"
-  "srv/PreflightCalibrationControlService.srv"
   "action/GotoRelative.action"
   "action/GotoGlobal.action"
   "action/Arm.action"
-  "action/SetActuatorTest.action"
   "action/SetYawAction.action"
   "action/Takeoff.action"
   DEPENDENCIES
