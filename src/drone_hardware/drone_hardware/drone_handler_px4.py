@@ -117,6 +117,9 @@ class DroneHandlerPX4(Node):
         self.offboard_setpoint_counter = 0
         self.flight_mode_flag = False #False = position points trajectory mode
                                       #True = velocity vectors trajectory mode
+        self._is_fixed_wing = False # Track current vehicle mode (False=multicopter, True=fixed-wing)
+        self._goto_global_acceptance_m_fw = 80.0  # Fixed-wing acceptance radius in meters
+        self._goto_global_acceptance_m_mc = 2.0   # Multicopter acceptance radius in meters
 
         #data structure
         self.global_position = GlobalPosition()
@@ -339,6 +342,14 @@ class DroneHandlerPX4(Node):
             self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_LAND)
         if (request.mode == 'RTL'):
             self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_RETURN_TO_LAUNCH)
+        if (request.mode == 'FIXED_WING'):
+            self.get_logger().info("Transitioning to FIXED_WING")
+            self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_VTOL_TRANSITION, param1=4.0)  # 4.0 = FIXED_WING
+            self._is_fixed_wing = True
+        if (request.mode == 'MULTICOPTER'):
+            self.get_logger().info("Transitioning to MULTICOPTER")
+            self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_VTOL_TRANSITION, param1=3.0)  # 3.0 = MULTICOPTER
+            self._is_fixed_wing = False
 
         response = SetMode.Response()
         return response
@@ -420,10 +431,14 @@ class DroneHandlerPX4(Node):
 
         feedback_msg = GotoGlobal.Feedback()
         feedback_msg.distance = self.get_distance_global(self.global_position, request_position)
+        
+        # Select acceptance radius based on vehicle type
+        acceptance_radius = self._goto_global_acceptance_m_fw if self._is_fixed_wing else self._goto_global_acceptance_m_mc
+        self.get_logger().info(f"Vehicle mode: {'FIXED_WING' if self._is_fixed_wing else 'MULTICOPTER'}, Acceptance radius: {acceptance_radius}m")
 
         self.get_logger().info(f"Distance remaining: {feedback_msg.distance} m")
 
-        while feedback_msg.distance>2:
+        while feedback_msg.distance > acceptance_radius:
             if goal_handle.is_cancel_requested:
                 goal_handle.canceled()
                 self.get_logger().info('Goal canceled')
@@ -432,7 +447,7 @@ class DroneHandlerPX4(Node):
             self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_REPOSITION, param1 = -1.0, param2 = 1.0,
                                      param5 = request_position.lat, param6 = request_position.lon, param7 = request_position.alt)
             feedback_msg.distance = self.get_distance_global(self.global_position, request_position)
-            self.get_logger().info(f"Distance remaining: {feedback_msg.distance} m")
+            self.get_logger().info(f"Distance remaining: {feedback_msg.distance} m (acceptance: {acceptance_radius}m)")
             time.sleep(1)
 
         self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, param1=1.0, param2=6.0)
