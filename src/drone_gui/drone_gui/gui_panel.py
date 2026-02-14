@@ -22,7 +22,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QPushButton, QLabel,
 from PyQt5.QtCore import QTimer, Qt
 
 # Import komunikatów i serwisu
-from drone_interfaces.msg import MiddleOfAruco
+from drone_interfaces.msg import MiddleOfAruco, VelocityVectors
 from drone_autonomy.drone_comunication.drone_controller import DroneController
 
 
@@ -56,8 +56,23 @@ class FollowArucoSimulator(DroneController):
         self.img_w = int(self.get_parameter('image_width').value)
         self.img_h = int(self.get_parameter('image_height').value)
         self.cx = self.img_w / 2.0
-        self.cy = self.img_h / 2.0
         self.aruco_topic = str(self.get_parameter('aruco_topic').value)
+
+        # 1. Parametr Obstacle Avoidance
+        self.declare_parameter('obstacle_avoidance', False)
+        self.obs_avoid = self.get_parameter('obstacle_avoidance').value
+
+        # 2. Jeśli 'obstacle_avoidance' jest True, nadpisz publishera prędkości
+        if self.obs_avoid:
+            self.get_logger().warn("Redirecting manual control to /velocity_vectors_user for Obstacle Avoidance")
+            # Zniszcz stary publisher (z klasy bazowej)
+            self.destroy_publisher(self.velocity_publisher)
+            # Utwórz nowy na topic *_user
+            self.velocity_publisher = self.create_publisher(VelocityVectors, 'knr_hardware/velocity_vectors_user', 10)
+
+
+
+
 
         # 3. Konfiguracja sterowania (Domyślne wartości)
         self.kp = 0.25          # Wzmocnienie regulatora P
