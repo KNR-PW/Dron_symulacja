@@ -18,7 +18,7 @@ docker run --gpus all \
     -e DISPLAY=$DISPLAY \
     -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
     --name knr_drone_px4 \
-    -v ./../../src:/root/ros_ws/src:rw \
+    -v ./../../../Dron_symulacja:/root/Dron_symulacja:rw \
     -it \
     --net=host \
     --ipc host \
