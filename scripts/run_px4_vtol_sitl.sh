@@ -3,7 +3,6 @@
 
 WORLD=${1:-aruco}
 
-cp -r ../knr_tiltrotor ../KNR_Drone_PX4_Autopilot/Tools/simulation/gz/models
 cd ../KNR_Drone_PX4_Autopilot
 
 

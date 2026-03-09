@@ -20,5 +20,9 @@ docker run --gpus all \
     --name knr_drone_px4 \
     -v ./../../src:/root/ros_ws/src:rw \
     -it \
-    --network host \
+    --net=host \
+    --ipc host \
+    -e GZ_PARTITION=$GZ_PARTITION \
+    -e ROS_LOCALHOST_ONLY=0 \
+    --env GZ_IP=127.0.0.1 \
     $1
