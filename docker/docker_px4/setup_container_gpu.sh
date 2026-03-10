@@ -21,8 +21,4 @@ docker run --gpus all \
     -v ./../../../Dron_symulacja:/root/Dron_symulacja:rw \
     -it \
     --net=host \
-    --ipc host \
-    -e GZ_PARTITION=$GZ_PARTITION \
-    -e ROS_LOCALHOST_ONLY=0 \
-    --env GZ_IP=127.0.0.1 \
     $1
