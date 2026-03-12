@@ -24,6 +24,9 @@ pkill -9 ruby 2>/dev/null
 echo "Uruchamianie kontenera knr_drone_px4..."
 docker start knr_drone_px4
 
+# Pomocnicza funkcja do soursowania workspace w dockerze
+SOURCE_WS="if [ -f ~/Dron_symulacja/install/setup.bash ]; then source /opt/ros/jazzy/setup.bash && source ~/Dron_symulacja/install/setup.bash; else echo \\\"OSTRZEZENIE: Nie znaleziono ~/Dron_symulacja/install/setup.bash. Zbuduj workspace - colcon build\\\"; source /opt/ros/jazzy/setup.bash; fi"
+
 cat > "$CONFIG_FILE" << EOF
 [global_config]
   suppress_multiple_term_dialog = True
@@ -77,7 +80,7 @@ cat > "$CONFIG_FILE" << EOF
       parent = child2
       order = 0
       profile = default
-      command = bash -c "echo '--- Panel 2: MicroXRCEAgent ---' && echo 'Czekam 5s na PX4...' && sleep 5 && docker exec -it knr_drone_px4 bash -c 'pkill -x MicroXRCEAgent || true; sleep 1; source /opt/ros/jazzy/setup.bash && source ~/ros_ws/install/setup.bash && MicroXRCEAgent udp4 -p 8888'; echo 'Zakończone. Wchodzę do dockera...'; docker exec -it knr_drone_px4 bash -c 'source /opt/ros/jazzy/setup.bash && source ~/ros_ws/install/setup.bash && exec bash'"
+      command = bash -c "echo '--- Panel 2: MicroXRCEAgent ---' && echo 'Czekam 5s na PX4...' && sleep 5 && docker exec -it knr_drone_px4 bash -c 'pkill -x MicroXRCEAgent || true; sleep 1; $SOURCE_WS && MicroXRCEAgent udp4 -p 8888'; echo 'Zakończone. Wchodzę do dockera...'; docker exec -it knr_drone_px4 bash -c '$SOURCE_WS && exec bash'"
     [[[child3]]]
       type = VPaned
       parent = child2
@@ -89,13 +92,13 @@ cat > "$CONFIG_FILE" << EOF
       parent = child3
       order = 0
       profile = default
-      command = bash -c "echo '--- Panel 3: drone_handler_px4 ---' && echo 'Czekam 5s na MicroXRCE...' && sleep 5 && docker exec -it knr_drone_px4 bash -c 'source /opt/ros/jazzy/setup.bash && source ~/ros_ws/install/setup.bash && ros2 run drone_hardware drone_handler_px4'; echo 'Zakończone. Wchodzę do dockera...'; docker exec -it knr_drone_px4 bash -c 'source /opt/ros/jazzy/setup.bash && source ~/ros_ws/install/setup.bash && exec bash'"
+      command = bash -c "echo '--- Panel 3: drone_handler_px4 ---' && echo 'Czekam 5s na MicroXRCE...' && sleep 5 && docker exec -it knr_drone_px4 bash -c '$SOURCE_WS && ros2 run drone_hardware drone_handler_px4'; echo 'Zakończone. Wchodzę do dockera...'; docker exec -it knr_drone_px4 bash -c '$SOURCE_WS && exec bash'"
     [[[terminal_shell]]]
       type = Terminal
       parent = child3
       order = 1
       profile = default
-      command = bash -c "echo '--- Panel 4: Shell ---' && sleep 5 && docker exec -it knr_drone_px4 bash -c 'source /opt/ros/jazzy/setup.bash && source ~/ros_ws/install/setup.bash && exec bash'"
+      command = bash -c "echo '--- Panel 4: Shell ---' && sleep 5 && docker exec -it knr_drone_px4 bash -c '$SOURCE_WS && exec bash'"
 EOF
 
 if pgrep -f "QGroundControl" > /dev/null; then
