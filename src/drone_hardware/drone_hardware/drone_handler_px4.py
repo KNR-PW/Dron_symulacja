@@ -14,22 +14,17 @@ from drone_interfaces.srv import SetMode, ToggleVelocityControl, SetServo, VtolS
 from drone_interfaces.action import  Arm, Takeoff, GotoGlobal, GotoRelative, SetYawAction
 
 from px4_msgs.msg import (
-    VehicleStatus, 
-    VehicleCommand, 
-    OffboardControlMode, 
-    VehicleGlobalPosition, 
-    TrajectorySetpoint, 
-    VehicleLocalPosition, 
+    VehicleStatus,
+    VehicleCommand,
+    OffboardControlMode,
+    VehicleGlobalPosition,
+    TrajectorySetpoint,
+    VehicleLocalPosition,
     VehicleAttitude,
     BatteryStatus,
     ActuatorServos,
     OffboardControlMode,
 )
-#TODO 
-#1. (DONE)makes check if we get a new topic before we send mode to offboard
-#2. still rebuilding the drone handler to px4
-#3. convert the flight mode in NAV state to string to be readable for a man
-#4. add more flight modes minimum is RTL
 
 class GlobalPosition():
     def __init__(self):
@@ -39,7 +34,7 @@ class GlobalPosition():
 
 class LocalPosition():
     def __init__(self):
-        # Position in local NED frame counts from start point, coordinates of start point is (0,0) 
+        # Position in local NED frame counts from start point, coordinates of start point is (0,0)
         self.x = float(0.0) # North position in NED earth-fixed frame, (metres)
         self.y = float(0.0) # East position in NED earth-fixed frame, (metres)
         self.z = float(0.0) # Down position (negative altitude) in NED earth-fixed frame, (metres)
@@ -56,7 +51,7 @@ class BatteryInfo():
         self.voltage = float(0.0)
         self.current = float(0.0)
         self.number_of_cells = 0
-    
+
 class DroneHandlerPX4(Node):
     def __init__(self):
         super().__init__('drone_handler_px4')
@@ -96,7 +91,7 @@ class DroneHandlerPX4(Node):
         self.vehicle_command_publisher = self.create_publisher(VehicleCommand, '/fmu/in/vehicle_command', qos_profile)
         self.trajectory_setpoint_publisher = self.create_publisher(TrajectorySetpoint, '/fmu/in/trajectory_setpoint', qos_profile)
         self.actuator_pub = self.create_publisher(ActuatorServos,'/fmu/in/actuator_servos', 10)
-        
+
         self.telemetry_publisher = self.create_publisher(Telemetry, NAMESPACE+'telemetry',10)
 
         #declare Main loop in timer
@@ -120,6 +115,7 @@ class DroneHandlerPX4(Node):
         self._is_fixed_wing = False # Track current vehicle mode (False=multicopter, True=fixed-wing)
         self._goto_global_acceptance_m_fw = 80.0  # Fixed-wing acceptance radius in meters
         self._goto_global_acceptance_m_mc = 2.0   # Multicopter acceptance radius in meters
+        self.error = 0 # variable to indicate an inside error with for example telemtry wchich have code 1, 0 means everything is ok
 
         #data structure
         self.global_position = GlobalPosition()
@@ -186,10 +182,10 @@ class DroneHandlerPX4(Node):
 
             if self.offboard_setpoint_counter < 11:
                 self.offboard_setpoint_counter += 1
-            
+
             if self.offboard_setpoint_counter == 10:
                 self.get_logger().info("Vehicle is ready to be set into offboard mode")
-        
+
             if self.get_clock().now().nanoseconds - self.px4_watchdog > 1e9:
                 self.px4_alive_flag = False
                 self.get_logger().warn("Vehicle is missing ERROR PX4 not found")
@@ -200,13 +196,13 @@ class DroneHandlerPX4(Node):
     def vehicle_status_callback(self, msg):
         if (msg.nav_state != self.nav_state):
             self.get_logger().info(f"NAV_STATUS: {self.state_decoder[msg.nav_state]} {msg.nav_state}")
-        
+
         if (msg.arming_state != self.arm_state):
             self.get_logger().info(f"ARM STATUS: {msg.arming_state}")
 
         if (msg.failsafe != self.failsafe):
             self.get_logger().info(f"FAILSAFE: {msg.failsafe}")
-        
+
         if (msg.pre_flight_checks_pass != self.flightCheck):
             if (msg.pre_flight_checks_pass):
                 self.get_logger().info(f"Drone can be armed")
@@ -236,7 +232,7 @@ class DroneHandlerPX4(Node):
 
         self.px4_alive_flag = True
         self.px4_watchdog = self.get_clock().now().nanoseconds
-    
+
     def velocity_control_callback(self, msg):
         if self.flight_mode_flag:
             self.get_logger().info(f"i receive x:{msg.vx} y:{msg.vy} z:{msg.vz} yaw:{msg.yaw}")
@@ -245,7 +241,7 @@ class DroneHandlerPX4(Node):
             sin_yaw = np.sin(self.trueYaw)
             velocity_world_x = (-msg.vx * cos_yaw - real_vy * sin_yaw)
             velocity_world_y = (-msg.vx * sin_yaw + real_vy * cos_yaw)
-            
+
             velocity_world_z = msg.vz
             yaw_rate = msg.yaw
 
@@ -255,7 +251,7 @@ class DroneHandlerPX4(Node):
         orientation_q = msg.q
 
         #trueYaw is the drones current yaw value
-        self.trueYaw = -(np.arctan2(2.0*(orientation_q[3]*orientation_q[0] + orientation_q[1]*orientation_q[2]), 
+        self.trueYaw = -(np.arctan2(2.0*(orientation_q[3]*orientation_q[0] + orientation_q[1]*orientation_q[2]),
                                   1.0 - 2.0*(orientation_q[0]*orientation_q[0] + orientation_q[1]*orientation_q[1])))
 
     def battery_callback(self, msg):
@@ -281,7 +277,7 @@ class DroneHandlerPX4(Node):
         msg.from_external = True
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         self.vehicle_command_publisher.publish(msg)
-    
+
     def publish_position_setpoint(self, x: float, y: float, z: float, yaw = "ORIGINAL"):
         """Publish the trajectory setpoint in the NED frame"""
         if yaw == "ORIGINAL":
@@ -313,9 +309,26 @@ class DroneHandlerPX4(Node):
     def telemetry_callback(self):
         msg = Telemetry()
         if self.battery_info.number_of_cells == 0:
-            self.get_logger().info(f"waiting for battery status")
+            if self.error == 0:
+                self.error = 1
+                self.get_logger().info(f"Battery topic is dead telemtry will not be send")
+            # msg.battery_percentage = 0.0
+            # msg.battery_voltage = 0.0
+            # msg.battery_current = 0.0
+            # # GPS
+            # msg.global_lat = self.global_position.lat
+            # msg.global_lon = self.global_position.lon
+            # msg.global_alt = self.global_position.alt
+            # msg.flight_mode = self.state_decoder[self.nav_state]
+            # msg.speed = math.sqrt(self.local_position.vx**2 + self.local_position.vy**2)
+            # msg.lat = self.global_position.lat
+            # msg.lon = self.global_position.lon
+            # msg.alt = self.global_position.alt
+
+            self.telemetry_publisher.publish(msg)
         else:
-            msg.battery_percentage = int((self.battery_info.voltage / float(self.battery_info.number_of_cells * 4.2)) * 100) 
+            self.error = 0
+            msg.battery_percentage = int((self.battery_info.voltage / float(self.battery_info.number_of_cells * 4.2)) * 100)
             msg.battery_voltage = self.battery_info.voltage
             msg.battery_current = self.battery_info.current
             # GPS
@@ -353,18 +366,18 @@ class DroneHandlerPX4(Node):
 
         response = SetMode.Response()
         return response
-    
+
     def toggle_velocity_control(self, request, response):
         self.change_flight_mode_flag()
         response.result = self.flight_mode_flag
 
         return response
-    
+
     #declare actions callback
     def arm_callback(self, goal_handle):
         self.get_logger().info(f'-- Arm action registered --')
         feedback_msg = Arm.Feedback()
-        
+
         while self.flightCheck==False:
             if self.dev_mode:
                 self.get_logger().info("DEV MODE is enabled. Skipping armable check.")
@@ -389,7 +402,7 @@ class DroneHandlerPX4(Node):
         result.result = 1
 
         return result
-    
+
     def takeoff_callback(self, goal_handle):
         feedback_msg = Takeoff.Feedback()
 
@@ -407,13 +420,13 @@ class DroneHandlerPX4(Node):
             time.sleep(1)
 
         self.get_logger().info("Reached target altitude")
-        
+
         goal_handle.succeed()
         result = Takeoff.Result()
         result.result = 1
 
         return result
-    
+
     def goto_global_action(self, goal_handle):
         self.get_logger().info(f'-- Goto global action registered. Destination in global frame: --')
 
@@ -431,7 +444,7 @@ class DroneHandlerPX4(Node):
 
         feedback_msg = GotoGlobal.Feedback()
         feedback_msg.distance = self.get_distance_global(self.global_position, request_position)
-        
+
         # Select acceptance radius based on vehicle type
         acceptance_radius = self._goto_global_acceptance_m_fw if self._is_fixed_wing else self._goto_global_acceptance_m_mc
         self.get_logger().info(f"Vehicle mode: {'FIXED_WING' if self._is_fixed_wing else 'MULTICOPTER'}, Acceptance radius: {acceptance_radius}m")
@@ -451,7 +464,7 @@ class DroneHandlerPX4(Node):
             time.sleep(1)
 
         self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, param1=1.0, param2=6.0)
-        self.publish_position_setpoint(self.local_position.x, 
+        self.publish_position_setpoint(self.local_position.x,
                                        self.local_position.y,
                                        -request_position.alt)
         goal_handle.succeed()
@@ -459,13 +472,13 @@ class DroneHandlerPX4(Node):
         result.result = 1
 
         return result
-    
+
     def get_distance_global(self, aLocation1: GlobalPosition, aLocation2: GlobalPosition):
         coord1 = (aLocation1.lat, aLocation1.lon)
         coord2 = (aLocation2.lat, aLocation2.lon)
 
         return hv.haversine(coord1, coord2)*1000 # because we want it in metres
-    
+
     ## ACTION CALLBACKS
     def goto_relative_action(self, goal_handle):
         self.get_logger().info(f'-- Goto relative action registered. Destination in local frame: --')
@@ -504,13 +517,13 @@ class DroneHandlerPX4(Node):
         result.result=1
 
         return result
-    
+
     def calculate_remaining_distance_rel(self, destination: LocalPosition):
         dnorth = destination.x - self.local_position.x
         deast = destination.y - self.local_position.y
         ddown = destination.z - self.local_position.z
         return math.sqrt(dnorth*dnorth + deast*deast + ddown*ddown)
-    
+
 
     def yaw_callback(self, goal_handle):
         self.get_logger().info(f'-- Set yaw action registered. --')
@@ -528,10 +541,10 @@ class DroneHandlerPX4(Node):
             setted_yaw = -setted_yaw
             cw = -cw
         yaw_deg = requested_yaw / 3.141592 * 180
-        
+
         self.get_logger().info(f'd')
         # self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_CONDITION_YAW, param1 = yaw_deg, param3 = float(cw), param4 = 0.0)
-        
+
         if not self.flight_mode_flag:
             prev_flight_mode_flag = self.flight_mode_flag
             self.change_flight_mode_flag()
@@ -560,7 +573,7 @@ class DroneHandlerPX4(Node):
             self.change_flight_mode_flag()
 
         # self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, param1=1.0, param2=6.0)
-        # self.publish_position_setpoint(self.local_position.x, 
+        # self.publish_position_setpoint(self.local_position.x,
         #                                self.local_position.y,
         #                                self.local_position.z)
 
@@ -570,12 +583,12 @@ class DroneHandlerPX4(Node):
         result.result = 1
 
         return result
-    
+
     def calc_yaw(self, yaw: float, actual_yaw: float)->float:
         if not self.__relative:
             return yaw
         return yaw+actual_yaw
-    
+
     def calc_remaning_yaw(self, yaw: float, actual_yaw: float, cw)->float:
         if cw > 0:
             if actual_yaw < 0:
@@ -584,7 +597,7 @@ class DroneHandlerPX4(Node):
         if actual_yaw < 0:
             actual_yaw = 2*math.pi - actual_yaw
         return abs(-yaw+actual_yaw)
-    
+
     def set_servo(self, servo_id: int, pwm: float):
         # mapping PWM 0–1000 -> -1 : 1
         pwm = max(0.0, min(pwm, 1000.0))
@@ -627,7 +640,7 @@ class DroneHandlerPX4(Node):
             self._enable_direct_actuator()
             self.set_servo(4, pwm3)
             self.set_servo(5, pwm4)
-            time.sleep(1/Hz)  
+            time.sleep(1/Hz)
     def calib_servo_callback(self, request, response):
         self.get_logger().info(
             f"-- Calib tilts service called: angle_4={request.angle_4}, angle_5={request.angle_5} --"
@@ -662,7 +675,7 @@ class DroneHandlerPX4(Node):
 
 def main():
     rclpy.init()
-    
+
     drone = DroneHandlerPX4()
 
     # rclpy.spin(drone)
