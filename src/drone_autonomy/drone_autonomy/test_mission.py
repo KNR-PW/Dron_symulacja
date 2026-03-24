@@ -1,10 +1,13 @@
 import rclpy
 import time
 from drone_comunication import DroneController
+from drone_hardware import LoggerControl
 
 def main(args=None):
     rclpy.init(args=args)
     mission = DroneController()
+    logger = LoggerControl()
+    logger.start()
     mission.arm()
     mission.takeoff(5.0)
     mission._set_mode("FIXED_WING")
@@ -18,6 +21,7 @@ def main(args=None):
     mission.land()
     # mission.rtl()
     mission.destroy_node()
+    logger.stop()
     rclpy.shutdown()
 
 
