@@ -28,6 +28,7 @@ class TopicLogger(Node):
 
             else:
                 break
+            
 
         self.topic_log_file = open(topic_file_name, "w")
 
