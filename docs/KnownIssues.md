@@ -1,3 +1,7 @@
+<<<<<<< HEAD
+
+
+=======
 # 📋 Lista znanych problemów z symulacją
 
 Poniżej znajduje się lista znanych problemów oraz ich rozwiązań.
@@ -14,3 +18,4 @@ Zabij wszystkie procesy Gazebo:
 
 ```bash
 sudo pkill -f "gz sim"
+>>>>>>> origin/dev
