@@ -48,7 +48,8 @@ class ImagesRecorder(Node):
         self.get_logger().info(f'Recording images to directory: {self.save_directory}')
 
     def listener_callback(self, data):
-        self.current_frame = self.br.imgmsg_to_cv2(data)
+        # Convert to OpenCV BGR format to preserve expected colors in saved files.
+        self.current_frame = self.br.imgmsg_to_cv2(data, desired_encoding='bgr8')
 
     def save_frame(self):
         if hasattr(self, 'current_frame'):
