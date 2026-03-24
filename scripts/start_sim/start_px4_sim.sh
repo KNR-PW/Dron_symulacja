@@ -92,7 +92,7 @@ cat > "$CONFIG_FILE" << EOF
       parent = child3
       order = 0
       profile = default
-      command = bash -c "echo '--- Panel 3: drone_handler_px4 ---' && echo 'Czekam 5s na MicroXRCE...' && sleep 5 && docker exec -it knr_drone_px4 bash -c '$SOURCE_WS && ros2 run drone_hardware drone_handler_px4'; echo 'Zakończone. Wchodzę do dockera...'; docker exec -it knr_drone_px4 bash -c '$SOURCE_WS && exec bash'"
+      command = bash -c "echo '--- Panel 3: drone_handler_px4 ---' && echo 'Czekam 5s na MicroXRCE...' && sleep 5 && docker exec -it knr_drone_px4 bash -c 'for pid in \$(pgrep -f \"ros2 run drone_hardware drone_handler_px4\" || true); do [ \"\$pid\" != \"\$\$\" ] && kill -9 \"\$pid\" 2>/dev/null || true; done; sleep 1; $SOURCE_WS && exec ros2 run drone_hardware drone_handler_px4'; echo 'Zakończone. Wchodzę do dockera...'; docker exec -it knr_drone_px4 bash -c '$SOURCE_WS && exec bash'"
     [[[terminal_shell]]]
       type = Terminal
       parent = child3

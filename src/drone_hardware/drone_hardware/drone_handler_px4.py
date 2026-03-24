@@ -405,17 +405,20 @@ class DroneHandlerPX4(Node):
 
     def takeoff_callback(self, goal_handle):
         feedback_msg = Takeoff.Feedback()
+        target_altitude_m = float(goal_handle.request.altitude)
+        target_down = -target_altitude_m
 
-        self.publish_position_setpoint(self.local_position.x, self.local_position.y, -goal_handle.request.altitude)
+        self.publish_position_setpoint(self.local_position.x, self.local_position.y, target_down)
 
-        while self.global_position.alt <= goal_handle.request.altitude:
-            self.publish_position_setpoint(self.local_position.x, self.local_position.y, -goal_handle.request.altitude)
+        # Minimal fix: compare against local NED altitude instead of global altitude.
+        while -self.local_position.z < target_altitude_m:
+            self.publish_position_setpoint(self.local_position.x, self.local_position.y, target_down)
             if goal_handle.is_cancel_requested:
                 goal_handle.canceled()
                 self.get_logger().info('Goal canceled')
                 return Takeoff.Result()
 
-            feedback_msg.altitude = self.global_position.alt
+            feedback_msg.altitude = -self.local_position.z
             self.get_logger().info(f"Altitude: {feedback_msg.altitude}")
             time.sleep(1)
 
