@@ -49,3 +49,6 @@ saved_video/
 *.AppImage
 
 .venv/
+
+# ignore topic_logs content
+topic_logs/
