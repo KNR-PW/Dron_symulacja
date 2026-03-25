@@ -16,12 +16,13 @@ class TopicLogger(Node):
         self.filter = IgnoredTopics()
 
         directory = "/root/ros_ws/src/drone_hardware/drone_hardware/topic_logs/"
+        os.makedirs(directory, exist_ok=True)
         i = 1
 
         while(True):
 
-            file_name = "topic_log_" + str(i) + ".csv"
-            topic_file_name = directory + file_name
+            file_name = f"topic_log_{i}.csv"
+            topic_file_name = os.path.join(directory, file_name)
 
             if os.path.isfile(topic_file_name):
                 i += 1
