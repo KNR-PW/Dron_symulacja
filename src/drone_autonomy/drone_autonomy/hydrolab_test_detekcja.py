@@ -10,15 +10,13 @@ import threading
 import time
 import os
 
-
 SAVE_DIR = "/root/ros_ws/detections"
 os.makedirs(SAVE_DIR, exist_ok=True)
-
 
 class PoolDetector(Node):
     def __init__(self):
         super().__init__('pool_detector_node')
-        self.declare_parameter('camera_topic', 'camera')
+        self.declare_parameter('camera_topic', '/oak/rgb/image_raw')
         camera_topic = self.get_parameter('camera_topic').get_parameter_value().string_value
 
         self.subscription = self.create_subscription(
@@ -33,7 +31,7 @@ class PoolDetector(Node):
         self.save_counter = 0
 
     def camera_callback(self, msg):
-        self.frame = self.br.imgmsg_to_cv2(msg, desired_encoding='passthrough')
+        self.frame = self.br.imgmsg_to_cv2(msg, desired_encoding='bgr8')
         if self.detecting:
             self.detect_pool()
 
@@ -42,7 +40,7 @@ class PoolDetector(Node):
             return
 
         hsv = cv2.cvtColor(self.frame, cv2.COLOR_BGR2HSV) 
-        lower_blue = np.array([90, 50, 50]) #trzeba będzie wymyśleć co innego pewnie, bo w rzeczywistości to nie bedzie niebieskie
+        lower_blue = np.array([90, 50, 50])
         upper_blue = np.array([130, 255, 255])
         mask = cv2.inRange(hsv, lower_blue, upper_blue)
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -68,30 +66,22 @@ class PoolDetector(Node):
         self.detecting = False
         self.get_logger().info("Scan complete.")
 
-
 def main(args=None):
     rclpy.init(args=args)
-
     mission = DroneController()
     detector = PoolDetector()
-
     executor = MultiThreadedExecutor()
     executor.add_node(mission)
     executor.add_node(detector)
-
     def mission_thread():
         mission.arm()
         mission.takeoff(10.0)
-
         mission.send_goto_relative(5,0,-5)
         time.sleep(2)
         detector.scan(3.0)
-
         mission.rtl()
-
     t = threading.Thread(target=mission_thread, daemon=True)
     t.start()
-
     try:
         executor.spin()
     except KeyboardInterrupt:
@@ -101,7 +91,6 @@ def main(args=None):
         mission.destroy_node()
         detector.destroy_node()
         rclpy.shutdown()
-
 
 if __name__ == '__main__':
     main()
