@@ -254,6 +254,16 @@ class DroneHandlerPX4(Node):
         self.trueYaw = -(np.arctan2(2.0*(orientation_q[3]*orientation_q[0] + orientation_q[1]*orientation_q[2]),
                                   1.0 - 2.0*(orientation_q[0]*orientation_q[0] + orientation_q[1]*orientation_q[1])))
 
+        # Roll & Pitch from quaternion (w, x, y, z)
+        w, x, y, z = orientation_q
+        sinr_cosp = 2.0 * (w * x + y * z)
+        cosr_cosp = 1.0 - 2.0 * (x * x + y * y)
+        self.trueRoll = np.arctan2(sinr_cosp, cosr_cosp)
+
+        sinp = 2.0 * (w * y - z * x)
+        sinp = np.clip(sinp, -1.0, 1.0)
+        self.truePitch = np.arcsin(sinp)
+
     def battery_callback(self, msg):
         self.battery_info.voltage = msg.voltage_v
         self.battery_info.current = msg.current_a
@@ -325,6 +335,9 @@ class DroneHandlerPX4(Node):
             # msg.lon = self.global_position.lon
             # msg.alt = self.global_position.alt
 
+            msg.roll = getattr(self, 'trueRoll', 0.0)
+            msg.pitch = getattr(self, 'truePitch', 0.0)
+            msg.yaw = getattr(self, 'trueYaw', 0.0)
             self.telemetry_publisher.publish(msg)
         else:
             self.error = 0
@@ -340,6 +353,10 @@ class DroneHandlerPX4(Node):
             msg.lat = self.global_position.lat
             msg.lon = self.global_position.lon
             msg.alt = self.global_position.alt
+
+            msg.roll = getattr(self, 'trueRoll', 0.0)
+            msg.pitch = getattr(self, 'truePitch', 0.0)
+            msg.yaw = getattr(self, 'trueYaw', 0.0)
 
             self.telemetry_publisher.publish(msg)
 
