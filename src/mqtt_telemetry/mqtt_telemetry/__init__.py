@@ -4,6 +4,8 @@ import yaml
 import json
 import paho.mqtt.client as mqtt
 import ssl
+import subprocess
+import sys
 
 from rosidl_runtime_py.utilities import get_message
 
@@ -92,6 +94,25 @@ class MqttBridge(Node):
             raise
 
         self.mqtt_client.loop_start()
+
+        self.missions = self.config["missions"]
+
+        self.mqtt_client.subscribe("drone/mission/start")
+
+        def on_message(client, userdata, msg):
+            self.get_logger().info(f"Received message")
+            try:
+                payload = msg.payload.decode("utf-8")
+                data = json.loads(payload)
+
+                mission_idx = data["mission"]
+
+                subprocess.run([sys.executable, self.missions[mission_idx]["mission_script"]])
+            except Exception as e:
+                self.get_logger().error(f"Error processing message: {e}")
+
+        self.mqtt_client.on_message = on_message
+        self.get_logger().info(f"Received message")
 
         # -----------------------------
         # SUBSCRIBE TO ROS TOPICS
