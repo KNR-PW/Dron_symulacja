@@ -14,10 +14,10 @@ Defined inside IgnoredTopics class in topic_logger.py. topics_to_ignore variable
 
 Example: 
 
-'''python
+```python
 {"/fmu/out/vehicle_global_position" : 1,
  "/fmu/in/arming_check_reply_v1":     0,}
-'''
+```
 
 in this case, messages from first topic will be untracked, while those from second one - tracked
 
@@ -30,5 +30,3 @@ in this case, messages from first topic will be untracked, while those from seco
 5. finds all active topics, discards ones listed in IgnoredTopics and subscribes to the rest (if topic not listed - treats as tracked)
 6. logs messages formatted as: time; topic; message
 7. stop() funtion closes log file, destroys node and kills thread on which it run
-
-wyznaczyć błąd geometryczny pozycjonowania dynamicznego końcówki robota poruszającej się z v=2m/s, jeżeli sygnał sterujący doznaje opóźnienia dt = 2ms
