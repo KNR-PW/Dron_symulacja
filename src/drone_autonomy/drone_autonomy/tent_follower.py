@@ -35,6 +35,8 @@ class TentFollower(DroneController):
         self.declare_parameter('kp_xy', 1.0)
         self.declare_parameter('kp_yaw', 0.5)
         self.declare_parameter('kp_alt', 0.5)
+        self.declare_parameter('kp_forward', 0.15)
+        self.declare_parameter('kp_hover', 5.0)
         self.declare_parameter('max_vel', 1.5)
         self.declare_parameter('max_yaw_rate', 0.5)
         self.declare_parameter('max_vz', 1.5)
@@ -48,6 +50,8 @@ class TentFollower(DroneController):
         self.kp_xy = self.get_parameter('kp_xy').value
         self.kp_yaw = self.get_parameter('kp_yaw').value
         self.kp_alt = self.get_parameter('kp_alt').value
+        self.kp_forward = self.get_parameter('kp_forward').value
+        self.kp_hover = self.get_parameter('kp_hover').value
         self.max_vel = self.get_parameter('max_vel').value
         self.max_yaw_rate = self.get_parameter('max_yaw_rate').value
         self.max_vz = self.get_parameter('max_vz').value
@@ -91,6 +95,19 @@ class TentFollower(DroneController):
         self.hovering = False
         self.velocity_mode_active = False
 
+        # --- Zmienne Gimbala ---
+        self.gimbal_pwm = 500.0  # domyślnie 30 stopni do przodu-do dołu
+        self.kp_gimbal = 100.0   # Przywrócone 100 wg kroku 672, gdzie "działało prawie dobrze"
+        
+        # --- Wygładzanie prędkości (EMA) ---
+        self.smooth_vx = 0.0
+        self.smooth_vy = 0.0
+        self.smooth_yaw = 0.0
+        self.ema_alpha = 0.3  # 0.0=bardzo gładko, 1.0=brak filtrowania
+        
+        from drone_interfaces.srv import SetServo
+        self.servo_client = self.create_client(SetServo, '/knr_hardware/set_servo')
+
         self.get_logger().info(
             f"TentFollower init: alt={self.target_alt}m, kp_xy={self.kp_xy}, "
             f"kp_yaw={self.kp_yaw}, max_vel={self.max_vel}m/s, "
@@ -101,14 +118,34 @@ class TentFollower(DroneController):
     #  Callbacki
     # ═══════════════════════════════════════════════════════════
 
-    def _detection_cb(self, msg: TentDetection):
-        """Callback detekcji namiotu z yolo_detector."""
+    def _detection_cb(self, msg):
+        now = self.get_clock().now().nanoseconds / 1e9
+        self.last_detection_time = now
+
         if msg.detected:
+            self.tent_detected = True
             bb = msg.bounding_box  # [x, y, w, h]
             self.tent_cx = bb[0] + bb[2] / 2.0
             self.tent_cy = bb[1] + bb[3] / 2.0
-            self.tent_detected = True
-            self.last_detection_time = time.time()
+            
+            # --- KONTROLA GIMBALA (Tylko na nowej klatce!) ---
+            ey_px = self.tent_cy - (self.img_h / 2.0)
+            ey_norm = ey_px / (self.img_h / 2.0)
+            
+            # Tryb zatrzasku poosiągnięciu maxa (żeby nie uciekał z powrotem do trybu Yaw):
+            if self.gimbal_pwm >= 1020.0:
+                # Jeśli dron dojechał już kamerą pod siebie, zablokuj ją dołem.
+                self.gimbal_pwm = 1023.0
+            else:
+                # W przeciwnym razie pracujemy normalnie (skrypt z kroku 672, który działał dobrze)
+                self.gimbal_pwm += self.kp_gimbal * ey_norm
+                self.gimbal_pwm = max(500.0, min(1023.0, self.gimbal_pwm))
+                
+            self.set_camera_pitch(self.gimbal_pwm)
+            
+            # Wznawiamy timer
+            if self.control_timer.is_canceled():
+                self.control_timer.reset()
         else:
             self.tent_detected = False
 
@@ -146,56 +183,85 @@ class TentFollower(DroneController):
                     f"Namiot utracony — hover (alt={self.altitude:.1f}m, "
                     f"target={self.target_alt:.1f}m)")
                 self.hovering = True
+                
             self.send_vectors(0.0, 0.0, vz, 0.0)
             return
 
         self.hovering = False
 
-        # --- Obliczenie błędu w pikselach ---
+        # 1. Obliczenie uchybu na obrazie (z ostatniej klatki)
         half_w = self.img_w / 2.0
         half_h = self.img_h / 2.0
 
-        # Błąd: dodatni ex = namiot po prawej, dodatni ey = namiot poniżej centrum
         ex_px = self.tent_cx - half_w
         ey_px = self.tent_cy - half_h
 
-        # Normalizacja do [-1, 1]
         ex_norm = ex_px / half_w
         ey_norm = ey_px / half_h
 
-        # --- Deadzone → hover z altitude hold ---
-        if abs(ex_norm) < self.deadzone and abs(ey_norm) < self.deadzone:
-            self.send_vectors(0.0, 0.0, vz, 0.0)
-            if not self.hovering:
-                self.get_logger().info("Namiot wycentrowany — hover nad celem")
-                self.hovering = True
-            return
+        # Gimbal jest teraz aktualizowany WŁĄCZNIE w _detection_cb, by uniknąć over-shootów!
+        # Mamy tylko dostęp do jego aktualnego kąta.em (Forward) 
+        gimbal_angle_deg = 30.0 + ((self.gimbal_pwm - 500.0) / 523.0) * 60.0 # od 30 do 90 stopni dół
+        theta_v = 90.0 - gimbal_angle_deg # kąt do promienia od pionu (straight down = 0)
+        
+        # dist_x > 0 oznacza, ze cel leży z przodu
+        dist_x = self.altitude * math.tan(math.radians(theta_v))
 
-        # --- Regulator P: wektory prędkości w body frame ---
-        # ŻELAZNA LOGIKA Z LOGÓW:
-        # Rozwiązaliśmy skrzyżowanie osi (X lotu to teraz faktyczne Y obrazu, tak jak powinno być).
-        # Skoro teraz dron idealnie "ucieka" zamiast "gonić" to zwroty fizyczne PX4 / kamery są zanegowane. 
-        # Odwracamy oba wektory o 180 stopni (zmiana znaków na minus i plus):
-        vx_target = -self.kp_xy * ey_norm
-        vy_target =  self.kp_xy * ex_norm
+        # 3. Lot drona (Pościg vs Precyzyjny hover)
+        kp_forward_val = self.kp_forward  # Parametryzowane
+        kp_hover_val = self.kp_hover      # Parametryzowane
+        
+        # Kiedy gimbal schodzi pionowo w dół (> 800 PWM),
+        # płynnie przestajemy obracać drona (yaw) i zaczynamy używać sterowania bocznego (vy)
+        hover_blend = clamp((self.gimbal_pwm - 800.0) / 200.0, 0.0, 1.0)
+        
+        # Pościg z "marchewki" gimbala
+        # Dodajemy dynamiczny mnożnik (boost): im bardziej patrzy w przód (blend zbliża się do 0),
+        # tym mocniej szarżujemy (np. x3). Jak patrzy prosto w dół (blend=1), boost znika.
+        approach_boost = 1.0 + (1.0 - hover_blend) * 2.0 
+        vx_target = kp_forward_val * dist_x * approach_boost
+        
+        # Gdy kamera prosto w dół (blend=1), obraz jest odwrócony vs body:
+        #   ey > 0 (dół obrazu) = namiot ZA dronem → vx < 0
+        vx_target += hover_blend * (-kp_hover_val * ey_norm)
+        
+        # Sterowanie boczne (tylko hover)
+        vy_target = hover_blend * (kp_hover_val * ex_norm)
+        
+        # Yaw tylko w fazie pościgu (zgodnie z życzeniem wyłączane, gdy kamera patrzy pionowo w dół, blend=1)
+        # Przywrócony ORYGINALNY znak (z plusem)! W PX4 oś Z idzie w dół (FRD),
+        # więc dodatnie Yaw oznacza obrót w PRAWO. Wcześniejszy minus zepsuł pościg.
+        yaw_rate_target = (1.0 - hover_blend) * self.kp_yaw * ex_norm
 
         vx = clamp(vx_target, -self.max_vel, self.max_vel)
         vy = clamp(vy_target, -self.max_vel, self.max_vel)
+        yaw_rate = clamp(yaw_rate_target, -self.max_yaw_rate, self.max_yaw_rate)
 
-        # --- Sterowanie yaw ---
-        yaw_rate = clamp(
-            self.kp_yaw * ex_norm,
-            -self.max_yaw_rate,
-            self.max_yaw_rate
-        )
+        # Osiągnięcie celu
+        if abs(ex_norm) < self.deadzone and abs(ey_norm) < self.deadzone and self.gimbal_pwm > 1000.0:
+            if not self.hovering:
+                self.get_logger().info("Namiot wycentrowany — stabilny hover!")
+                self.hovering = True
+            vx = 0.0
+            vy = 0.0
+            yaw_rate = 0.0
+        else:
+            self.hovering = False
 
-        self.send_vectors(vx, vy, vz, yaw_rate)
+        # --- EMA wygładzanie (eliminuje szarpanie przy wolnym YOLO) ---
+        a = self.ema_alpha
+        self.smooth_vx = a * vx + (1.0 - a) * self.smooth_vx
+        self.smooth_vy = a * vy + (1.0 - a) * self.smooth_vy
+        self.smooth_yaw = a * yaw_rate + (1.0 - a) * self.smooth_yaw
+
+        self.send_vectors(self.smooth_vx, self.smooth_vy, vz, self.smooth_yaw)
         self.get_logger().info(
-            f"CTRL: ex={ex_norm:+.2f} ey={ey_norm:+.2f} → "
-            f"vx={vx:+.2f} vy={vy:+.2f} vz={vz:+.2f} yaw_r={yaw_rate:+.2f} "
-            f"alt={self.altitude:.1f}m",
+            f"CTRL V1: ex={ex_norm:+.2f} ey={ey_norm:+.2f} -> "
+            f"pwm={self.gimbal_pwm:.0f} dx={dist_x:.1f} bl={hover_blend:.1f} | "
+            f"OUT: vx={self.smooth_vx:+.2f} vy={self.smooth_vy:+.2f} yr={self.smooth_yaw:+.2f} alt={self.altitude:.1f}m",
             throttle_duration_sec=1.0
         )
+
 
     # ═══════════════════════════════════════════════════════════
     #  Sekwencja misji
@@ -247,6 +313,34 @@ class TentFollower(DroneController):
         except Exception:
             pass  # kontekst ROS już zamknięty (Ctrl+C)
 
+    def _gimbal_worker(self):
+        """Pojedynczy wątek w tle wykonujący komendy gz topic, zabezpieczający przed zalaniem OS."""
+        import subprocess
+        import time
+        while True:
+            if abs(self.target_gimbal_pwm - self.last_sent_gimbal_pwm) > 1.0:
+                pwm = self.target_gimbal_pwm
+                self.last_sent_gimbal_pwm = pwm
+                rad = max(0.0, min(1.05, (pwm - 500.0) / 523.0 * 1.05))
+                cmd = [
+                    "gz", "topic", 
+                    "-t", "/model/knr_tiltrotor_0/servo_7", 
+                    "-m", "gz.msgs.Double", 
+                    "-p", f"data: {rad}"
+                ]
+                try:
+                    res = subprocess.run(cmd, capture_output=True, text=True)
+                    if res.returncode != 0:
+                         self.get_logger().error(f"[Gimbal Worker] Błąd GZ: {res.stderr.strip()}")
+                    else:
+                         self.get_logger().info(f"[Gimbal Worker] Wysłano GZ Topic rad={rad:.2f} (pwm={pwm:.0f})")
+                except Exception as e:
+                     self.get_logger().error(f"[Gimbal Worker] Wyjątek BASH: {e}")
+            time.sleep(0.1)  # Sztywne 10Hz na sprzętówkę!
+
+    def set_camera_pitch(self, pwm):
+        # Aktualizujemy cel, a worker przechwyci to w swoim tempie (chroni system)
+        self.target_gimbal_pwm = pwm
 
 def main(args=None):
     rclpy.init(args=args)
