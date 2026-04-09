@@ -1,53 +1,65 @@
-## 1. Uruchamianie (Kolejność ma znaczenie)
+## 1. Uruchomienie
+0. Uruchom swiat testowy np. `aruco_plain`
+1. Podleć dronem (np. przez gui_panel) w rejon docelowy.
+2. **Wyłącz panel GUI** (uniknięcie konfliktów komend sterowania).
+3. detekcja - YOLO OpenVino, most Gazebo → ROS, rqt
 
-Najpierw uruchom detekcję (mostek GZ + YOLO):
-`ros2 launch drone_bringup tent_detect.launch.py`
 
-**Tylko detekcja YOLO (Fizyczny dron Jetson Nano)**
-`ros2 run drone_detector yolo_detector_jetson`
+   `ros2 launch drone_bringup tent_detect.launch.py`
 
----
 
-## 3. Jak działa Detektor (Tent Detector)
-
-Silnik detekcji bazuje na modelu **YOLOv8** i przemyślanej hierarchii klas:
-
-1.  **YoloDetectorBase**: Wspólna logika (ROS 2, Ultralytics, monitorowanie FPS).
-2.  **Symulacja (yolo_detector.py)**: Działa na PC, obsługuje standardowe wagi `.pt`.
-3.  **Jetson (yolo_detector_jetson.py)**: Zoptymalizowany pod **TensorRT (.engine)** i półprecyzję (FP16).
-
-**Przepływ danych:**
-Obraz z kamery → Skalowanie (320px dla szybkości) → Inference YOLO → Filtracja klas (namiot/UGV) → Publikacja `TentDetection` (Bounding Box + Scoring) na temat `/tent_detections`.
+   *(aby uruchomić detekcję na ultralytics zamiast OpenVINO, w pliku `tent_detect.launch.py` w węźle detektora podmień wartości `executable` i `name` z `"yolo_detector_OpenVino"` na `"yolo_detector_ultralitycs"`)*
+   
+4. śledzenie:
+   `ros2 launch drone_bringup tent_tracker.launch.py`
 
 ---
 
-Następnie wybierz i uruchom wersję autonomii (Follower + GUI):
+## 2. Działanie (3 stany trackera)
 
-*   **Wersja V1 (Namiot stacjonarny):** 
-    `ros2 launch drone_bringup tent_follower_v1.launch.py`
-    *Prosty regulator P, uśrednione sterowanie.*
+- w tle działa niezależny regulator stałej wysokości. Sterowanie wzdłuż osi Z:
+  `vz = -kp_alt * (target_alt - aktualna_wysokosc)`
+- log telemetryczny zapisywany jest do pliku `~/Dron_symulacja/tent_tracker_log.csv`.
 
-*   **Wersja V2 (Pościg UGV / Dynamiczny):**
-    `ros2 launch drone_bringup tent_follower_v2.launch.py`
-    *Filtr Kalmana, predykcja 3D, precyzyjne sterowanie gimbalem.*
+**Stan 1: CZUWANIE**
+Oczekiwanie na detekcję YOLO. Gimbal wychylony w przód. Brak komend ruchu z trackera.
 
+**Stan 2: LOT W PRZÓD**
+Lot w kierunku wektora celu. Sterowanie w oparciu o pozycję ekranową namiotu:
+- **Gimbal:** Kompenscja przemieszczenia obiektu po osi domykanej głowicy.
+
+  `nowy_gimbal = stary_gimbal + (uchyb_y_kamery * kp_gimbal)`
+- **Prędkość postępowa (vx):** Stopniowa redukcja prędkości wraz z pochylaniem układu gimbala (automatyczne hamowanie na końcu).
+
+  `vx = kp_vx * (1.0 - (aktualny_kat_gimbala / max_wychylenie_gimbala))`
+- **Odchylenie kierunkowe (yaw):** Wyrównywanie osi podłużnej do środka obrazu.
+
+  `yaw = kp_yaw * uchyb_x_kamery`
+
+Przejście następuje po osiągnięciu pełnego skrajnego odchylenia głowicy do podłoża.
+
+**Stan 3: ZAWIS**
+Pozycjonowanie centralnie nad celem. Zablokowany przegub kamery. Prędkość kątowa usztywniona (`yaw = 0`).
+
+- (przód-tył osi x statku): 
+
+`vx = -kp_vy * uchyb_y_kamery`
+-(lewo-prawo osi y statku):
+
+ `vy = kp_vy * uchyb_x_kamery`
+
+Filtr układu dynamicznego (EMA) do wygładzania sterowania:
+`ostateczna_predkosc_lotu = (wskaznik_wagi * swiezo_wyliczona_predkosc) + ((1 - wskaznik_wagi) * stara_predkosc)`
 
 ---
 
-## 2. regulator podarzania za namiotem
+## 3. Parametry
 
-### `tent_follower_prosty.py` (Zrzut nad obszarem statycznym)
-- **Typ celu:** Statyczne lub bardzo wolne obiekty (gniazda, namioty).
-- **Sterowanie:** Utrzymuje sztywną wysokość (Altitude Hold). Dron odkręca celownik po osi Yaw i "leci do przodu".
-- **Zgubiony cel:** Dron zawisa w miejscu (Hover). Czeka do 5 sekund na powrót celu w ramy kamery.
-- **Kamera:** Sztywny 1-osiowy sterownik (Pitch) wymuszający ruch na serwie w dół w miarę dolatywania nad dany obszar.
-- **Zasilanie obrazowe:** Odbiera z YOLO małe obrabiane dane z topicu `/tent_detections` (Własna, najlżejsza struktura dla CPU).
-
----
-
-### `tent_follower_v2.py`
-- **Typ celu:** Uciekające, nieprzewidywalne obiekty lądowe (UGV, inne maszyny).
-- **Sterowanie:** Matematyka 3D. Ekstraktuje pozycje z żyroskopu oraz akcelerometru a z pomocą trygonometrii mapuje wyliczoną wirtualną odległość terenową w metrach i wysyła stany do niezależnego kontrolera P-I-D.
-- **Zgubiony cel:** Wykorzystuje zaawansowany moduł przewidywania trajektorii (**Filtr Kalmana EKF_CTRV**). Jeśli cel chowa się np. pod wiatą, dron przewiduje pozycję wektora wychodzącego.
-- **Narzędzia analityczne:** Rejestruje wektory prawdziwej i estymowanej lokalizacji celu z systemu *Gazebo Ground Truth* a potem wykreśla na ekran w czasie rzeczywistym uchyby rzędu RMSE i MAE - idealne rozwiązanie do strojenia fizyki algorytmu sterowania na 100%.
-- **Zasilanie obrazowe:** Analizuje globalne ramki ROS (`Detection2DArray`). Pozwala to na sortowanie np. 15 obiektów obecnych na scenie naraz i skryptowanie by celował w `id_class: 0` ignorując resztę, z pełnym zachowaniem poprawności integracji z modułami Aruco.
+- `target_alt` – Referencyjna wysokość lotu do wymuszenia (m).
+- `kp_alt` – Wzmocnienie uchybu osi Z (redukcja błędu wysokości).
+- `kp_gimbal` – Wzmocnienie błędu dla predykcji kąta pochylenia mechanizmu kamery.
+- `kp_vx` – Wzmocnienie zadanej prędkości postępowej w Stanie 2.
+- `kp_yaw` – Wzmocnienie naprowadzania korekty odchylenia w Stanie 2 (oś Z).
+- `kp_vy` – Wzmocnienie osi dojazdowej (zarówno osi x i y) w trakcie planarnego mikro-ślizgu nad celem (Stan 3 ZAWIS).
+- `ema_alpha` – Współczynnik dla filtru EMA (przedział m.in `0.0 - 1.0`). Mniejsza waga to dużo łagodniejsze przebiegi momentów 
+- `lost_timeout` – Limit czasu (s) gubienia obwiedni detekcji przez YOLO, po osiągnięciu przedawnienia przechodzi do Stanu 1 (CZUWANIE).

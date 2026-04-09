@@ -31,6 +31,7 @@ setup(
             'field_test_of_velocity=drone_autonomy.field_test_of_velocity:main',
             'tent_follower=drone_autonomy.tent_follower:main',
             'tent_follower_v2=drone_autonomy.tent_follower_v2:main',
+            'tent_tracker=drone_autonomy.tent_tracker:main',
         ],
     },
 )

@@ -43,6 +43,7 @@ class YoloDetectorBase(Node):
 
         # --- FPS counter ---
         self._frames = 0
+        self._detected_frames = 0
         self._t0 = time.monotonic()
 
         self.get_logger().info(f"{node_name} ready  |  input_size={self.input_size}")
@@ -77,14 +78,22 @@ class YoloDetectorBase(Node):
 
         # --- podglad debug (tylko gdy ktos subskrybuje) ---
         if self.img_pub.get_subscription_count() > 0:
-            vis = results[0].plot() if results else frame
-            self.img_pub.publish(self.br.cv2_to_imgmsg(vis, encoding="bgr8"))
+            if det.detected:
+                import cv2
+                x, y, w, h = float(det.bounding_box[0]), float(det.bounding_box[1]), float(det.bounding_box[2]), float(det.bounding_box[3])
+                cv2.rectangle(frame, (int(x), int(y)), (int(x+w), int(y+h)), (0, 255, 0), 2)
+                cv2.putText(frame, f"{det.confidence:.2f}", (int(x), int(y)-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+            self.img_pub.publish(self.br.cv2_to_imgmsg(frame, encoding="bgr8"))
 
         # --- FPS ---
         self._frames += 1
+        if det.detected:
+            self._detected_frames += 1
+
         dt = time.monotonic() - self._t0
         if dt >= 2.0:
             fps = self._frames / dt
-            self.get_logger().info(f"FPS: {fps:.1f}  ({1000/fps:.0f} ms/frame)")
+            self.get_logger().info(f"FPS: {fps:.1f}  ({1000/fps:.0f} ms/frame) | Detekcje namiotu: {self._detected_frames}/{self._frames}")
             self._frames = 0
+            self._detected_frames = 0
             self._t0 = time.monotonic()

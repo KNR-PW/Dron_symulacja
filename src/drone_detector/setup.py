@@ -42,6 +42,7 @@ setup(
             "simple_obstacle_avoidance=drone_detector.simple_obstacle_avoidance:main",
             "yolo_detector=drone_detector.yolo_detector:main",
             "yolo_detector_jetson=drone_detector.yolo_detector_jetson:main",
+            "yolo_detector_onnx=drone_detector.yolo_detector_onnx:main",
         ],
     },
 )

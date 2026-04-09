@@ -13,7 +13,7 @@ def generate_launch_description():
     # ─── Argumenty ────────────────────────────────────────
     model_path_arg = DeclareLaunchArgument(
         "model_path",
-        default_value="/root/Dron_symulacja/yolo/best.pt",
+        default_value="/root/Dron_symulacja/yolo/best_openvino_model",
         description="Sciezka do modelu YOLO",
     )
     confidence_arg = DeclareLaunchArgument(
@@ -35,8 +35,8 @@ def generate_launch_description():
     # ─── 2. YOLO detektor ────────────────────────────────
     yolo_detector = Node(
         package="drone_detector",
-        executable="yolo_detector",
-        name="yolo_detector",
+        executable="yolo_detector_OpenVino",
+        name="yolo_detector_OpenVino",
         parameters=[
             {
                 "camera_topic": "/rgb_camera/image",
@@ -46,14 +46,7 @@ def generate_launch_description():
         ],
     )
 
-    # ─── 3. GUI Panel ────────────────────────────────────
-    gui_panel = Node(
-        package="drone_gui",
-        executable="gui_panel",
-        name="gui_panel",
-    )
-
-    # ─── 4. Podgląd detekcji (rqt) ────────────────────────
+    # ─── 3. Podgląd detekcji (rqt) ────────────────────────
     rqt_image_view = ExecuteProcess(
         cmd=["ros2", "run", "rqt_image_view", "rqt_image_view", "/tent_detections/image"],
         output="screen",
@@ -65,7 +58,6 @@ def generate_launch_description():
             confidence_arg,
             gz_bridge,
             yolo_detector,
-            gui_panel,
             rqt_image_view,
         ]
     )
