@@ -139,7 +139,7 @@ class WebotsArduVehicleRos():
                                              target=self._handle_image_stream,
                                              args=[self.camera, camera_stream_port])
                 self._camera_thread.start()
-  
+
         # self.camera_2 = self.robot.getDevice("camera_2")
         # self.camera_2.enable(1000//camera_fps) # takes frame period in ms
 
@@ -171,7 +171,7 @@ class WebotsArduVehicleRos():
                 self.lidar.enable(1000//lidar_fps)
                 self.lidar.enablePointCloud()
                 print(f"Lidar {lidar_name} enabled")
-                
+
                 self._lidar_thread = Thread(daemon=True,
                                              target=self._handle_lidar_stream,
                                              args=[self.lidar, lidar_fps])
@@ -368,7 +368,7 @@ class WebotsArduVehicleRos():
                     # print(len(img.tobytes()))
                     # data = header + img.tobytes()
                     # conn.sendall(data)
-                    self.camera_publisher.publish(self.br.cv2_to_imgmsg(img))
+                    self.camera_publisher.publish(self.br.cv2_to_imgmsg(img, "bgr8"))
                     # delay at sample rate
                     while self.robot.getTime() - start_time < cam_sample_period/1000:
                         time.sleep(0.001)
@@ -380,7 +380,7 @@ class WebotsArduVehicleRos():
             finally:
                 # conn.close()
                 print(f"Camera client disconnected (I{self._instance})")
-    
+
     # def _handle_image_stream_2(self, camera: Union[Camera, RangeFinder], port: int):
     #     time.sleep(2)
     #     """Stream grayscale images over TCP
@@ -462,7 +462,7 @@ class WebotsArduVehicleRos():
         """Stream lidar point cloud to ROS topic"""
         print("Starting lidar stream thread")
         time.sleep(2)
-        
+
         # Debug info o lidarze
         print(f"Lidar horizontal resolution: {lidar.getHorizontalResolution()}")
         print(f"Lidar number of layers: {lidar.getNumberOfLayers()}")
@@ -470,26 +470,26 @@ class WebotsArduVehicleRos():
         print(f"Lidar max range: {lidar.getMaxRange()}")
         print(f"Lidar FOV: {lidar.getFov()}")
         print(f"Lidar vertical FOV: {lidar.getVerticalFov()}")
-        
+
         # Wartości stałe dla PointCloud2
         fields = [
             PointField(name='x', offset=0, datatype=PointField.FLOAT32, count=1),
             PointField(name='y', offset=4, datatype=PointField.FLOAT32, count=1),
             PointField(name='z', offset=8, datatype=PointField.FLOAT32, count=1),
         ]
-        
+
         frame_count = 0
         while self._webots_connected:
             start_time = self.robot.getTime()
-            
+
             # Pobieramy chmurę punktów jako listę obiektów LidarPoint
             point_cloud = lidar.getPointCloud()
-            
+
             if point_cloud:
                 # Filtrujemy tylko punkty nieprawidłowe (inf/nan) i powyżej 6° nad horyzontem
                 # Lidar wysyła surowe dane - bez filtrowania bliskich punktów
                 points_list = []
-                
+
                 # tan(6°) ≈ 0.1051 - próg dla filtrowania górnej półkuli
                 tan_6_deg = 0.1051
 
@@ -498,29 +498,29 @@ class WebotsArduVehicleRos():
                     if (np.isinf(p.x) or np.isinf(p.y) or np.isinf(p.z) or
                         np.isnan(p.x) or np.isnan(p.y) or np.isnan(p.z)):
                         continue
-                    
+
                     # Odfiltruj punkty powyżej 6° nad horyzontem
                     # Warunek: z > tan(6°) * sqrt(x² + y²)
                     dist_horizontal = np.sqrt(p.x*p.x + p.y*p.y)
                     if p.z > tan_6_deg * dist_horizontal:
                         continue
-                    
+
                     # Dodaj punkt (surowe dane bez filtrowania odległości)
                     points_list.append([p.x, p.y, p.z])
-                
+
                 # Debug co 50 klatek
                 frame_count += 1
                 if frame_count % 50 == 0:
                     print(f"Lidar: {len(point_cloud)} raw points, {len(points_list)} valid points")
-                
+
                 if len(points_list) > 0:
                     np_points = np.array(points_list, dtype=np.float32)
                     ros_data = np_points.tobytes()
-                    
+
                     msg = PointCloud2()
                     msg.header.stamp = self.node.get_clock().now().to_msg()
                     msg.header.frame_id = "lidar_link"
-                    
+
                     msg.height = 1
                     msg.width = len(np_points)
                     msg.fields = fields
@@ -529,7 +529,7 @@ class WebotsArduVehicleRos():
                     msg.row_step = msg.point_step * msg.width
                     msg.is_dense = True
                     msg.data = ros_data
-                    
+
                     self.lidar_publisher.publish(msg)
 
             # Czekamy do następnej klatki

@@ -46,6 +46,7 @@ RUN apt update && apt install -y \
 
 RUN pip install \
     empy==3.3.4 \
+    # numpy==1.26.4 \
     lark==1.2.2 \
     MAVProxy==1.8.71 \
     dronekit \
@@ -56,7 +57,7 @@ RUN pip install \
     paho-mqtt \
     requests
 
-RUN pip install -U ultralytics
+RUN pip install -U ultralytics "numpy==1.23"
 
 # Fix dronekit
 RUN sed -i 's/collections.MutableMapping/collections.abc.MutableMapping/g' /usr/local/lib/python3.10/dist-packages/dronekit/__init__.py

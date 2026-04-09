@@ -56,7 +56,7 @@ class ArdupilotCameraHandler(Node):
         msg.header.frame_id = 'camera_frame'
         msg.height = cam_height
         msg.width = cam_width
-        msg.encoding = 'mono8'
+        msg.encoding = 'bgr8'
         msg.is_bigendian = False
         msg.step = cam_width
         msg.data = img_array.tobytes()
