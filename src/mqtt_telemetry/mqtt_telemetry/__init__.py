@@ -6,6 +6,7 @@ import paho.mqtt.client as mqtt
 import ssl
 import subprocess
 import sys
+import threading
 
 from rosidl_runtime_py.utilities import get_message
 
@@ -96,23 +97,13 @@ class MqttBridge(Node):
         self.mqtt_client.loop_start()
 
         self.missions = self.config["missions"]
+        self.mission_thread = None
+        self._mission_lock = threading.Lock()
 
         self.mqtt_client.subscribe("drone/mission/start")
 
-        def on_message(client, userdata, msg):
-            self.get_logger().info(f"Received message")
-            try:
-                payload = msg.payload.decode("utf-8")
-                data = json.loads(payload)
-
-                mission_idx = data["mission"]
-
-                subprocess.run([sys.executable, self.missions[mission_idx]["mission_script"]])
-            except Exception as e:
-                self.get_logger().error(f"Error processing message: {e}")
-
-        self.mqtt_client.on_message = on_message
-        self.get_logger().info(f"Received message")
+        self.mqtt_client.on_message = self.on_message
+        self.get_logger().info(f"Received message on mqtt")
 
         # -----------------------------
         # SUBSCRIBE TO ROS TOPICS
@@ -149,6 +140,39 @@ class MqttBridge(Node):
             self.subscribers.append(sub)
 
 
+    def on_message(self, client, userdata, msg):
+        self.get_logger().info(f"Received message on mqtt")
+        try:
+            with self._mission_lock:
+                if self.mission_thread is not None and self.mission_thread.is_alive():
+                    self.get_logger().warn("Mission already running, ignoring new start command.")
+                    client.publish("drone/mission/status", json.dumps({"status": "busy", "message": "Mission already running"}))
+                    return
+
+                payload = msg.payload.decode("utf-8")
+                data = json.loads(payload)
+
+                mission_idx = data["mission"]
+                if not isinstance(mission_idx, int) or  mission_idx < 0 or mission_idx >= len(self.missions):
+                    self.get_logger().error(f"Invalid mission index: {mission_idx}")
+                    client.publish("drone/mission/status", json.dumps({"status": "error", "message": "Invalid mission index"}))
+                    return
+                
+                mission_path = self.missions[mission_idx]["mission_script"]
+
+                self.mission_thread = threading.Thread(target=self.run_mission_and_notify,
+                                                        args=(mission_path, data["mission"]))
+                self.mission_thread.start()
+            
+        except Exception as e:
+            self.get_logger().error(f"Error processing message: {e}")
+
+    def run_mission_and_notify(self, mission_path, mission_idx):
+        self.get_logger().info(f"Starting mission: {mission_path}")
+        self.mqtt_client.publish("drone/mission/status", json.dumps({"status": "starting", "mission": mission_idx}))
+        subprocess.run([sys.executable, mission_path])
+        self.get_logger().info(f"Mission {mission_path} finished.")
+        self.mqtt_client.publish("drone/mission/status", json.dumps({"status": "finished", "mission": mission_idx}))
 
     # ----------------------------------------
     # HELPER: DETECT MESSAGE TYPE AUTOMATICALLY
