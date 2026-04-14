@@ -1,0 +1,209 @@
+#VRML_SIM R2025a utf8
+
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackground.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/floors/protos/Floor.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/appearances/protos/Grass.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/factory/pipes/protos/PipeSection.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/factory/manhole/protos/SquareManhole.proto"
+IMPORTABLE EXTERNPROTO "../protos/Iris.proto"
+IMPORTABLE EXTERNPROTO "../protos/ArucoMarker.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/factory/containers/protos/PlasticCrate.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/humans/pedestrian/protos/Pedestrian.proto"
+
+WorldInfo {
+  title "Hydro_world"
+  basicTimeStep 2
+  FPS 20
+}
+Viewpoint {
+  orientation 0.32326261623133135 -0.39127509135492217 -0.8616293192739394 4.611446385344467
+  position -8.39048 -20.7176 18.7881
+  follow "Iris"
+  followSmoothness 0.01
+}
+TexturedBackground {
+}
+TexturedBackgroundLight {
+}
+Floor {
+  size 1000 1000
+  appearance Grass {
+  }
+}
+
+SquareManhole {
+  translation -6.5 -6.5 0
+  name "drone takeoff(1)"
+  size 0.5 0.5 0.1
+}
+DEF Iris Iris {
+  translation -6.487827768237703 -6.526208998693831 0.10496319054102521
+  rotation 1.96082e-06 1.96082e-06 1 1.5708
+  controller "ardupilot_sitl_controller"
+  controllerArgs [
+    "--motors"
+    "m1_motor, m2_motor, m3_motor, m4_motor"
+    "--camera"
+    "camera"
+    "--camera-port"
+    "5599"
+  ]
+  extensionSlot [
+    DEF camera Camera {
+      translation 0.05 0 -0.05
+      rotation 0 1 0 1.57
+      width 640
+      height 480
+    }
+  ]
+}
+
+Solid {
+  translation -10 0 0
+  name "basen_1"
+  children [
+    Shape {
+      appearance Appearance {
+        material Material {
+          diffuseColor 1 0 0
+        }
+      }
+      geometry Cylinder {
+        height 0.2
+        radius 0.55
+      }
+    }
+    Pose {
+      translation 0 0 0.01
+      children [
+        Shape {
+          appearance Appearance {
+            material Material {
+              diffuseColor 0.4 0.85 1
+            }
+          }
+          geometry Cylinder {
+            height 0.2
+            radius 0.5
+          }
+        }
+      ]
+    }
+  ]
+}
+Solid {
+  translation 3 3 0
+  name "basen_2"
+  children [
+    Shape {
+      appearance Appearance {
+        material Material {
+          diffuseColor 0 0.8 0
+        }
+      }
+      geometry Cylinder {
+        height 0.2
+        radius 0.55
+      }
+    }
+    Pose {
+      translation 0 0 0.01
+      children [
+        Shape {
+          appearance Appearance {
+            material Material {
+              diffuseColor 0.4 0.85 1
+            }
+          }
+          geometry Cylinder {
+            height 0.2
+            radius 0.5
+          }
+        }
+      ]
+    }
+  ]
+}
+Solid {
+  translation -7 13 0
+  name "basen_3"
+  children [
+    Shape {
+      appearance Appearance {
+        material Material {
+          diffuseColor 0 0 0.5
+        }
+      }
+      geometry Cylinder {
+        height 0.2
+        radius 0.55
+      }
+    }
+    Pose {
+      translation 0 0 0.01
+      children [
+        Shape {
+          appearance Appearance {
+            material Material {
+              diffuseColor 0.4 0.85 1
+            }
+          }
+          geometry Cylinder {
+            height 0.2
+            radius 0.5
+          }
+        }
+      ]
+    }
+  ]
+}
+Solid {
+  translation 7 15 0
+  name "basen_4"
+  children [
+    Shape {
+      appearance Appearance {
+        material Material {
+          diffuseColor 1 1 0
+        }
+      }
+      geometry Cylinder {
+        height 0.2
+        radius 0.55
+      }
+    }
+    Pose {
+      translation 0 0 0.01
+      children [
+        Shape {
+          appearance Appearance {
+            material Material {
+              diffuseColor 0.4 0.85 1
+            }
+          }
+          geometry Cylinder {
+            height 0.2
+            radius 0.5
+          }
+        }
+      ]
+    }
+  ]
+}
+Pose {
+  translation 1 1 0
+  children [
+    Shape {
+      appearance Appearance {
+        material Material {
+          diffuseColor 1 0.4 0.1
+          shininess 1
+        }
+      }
+      geometry Sphere {
+        radius 0.15
+      }
+    }
+  ]
+}
