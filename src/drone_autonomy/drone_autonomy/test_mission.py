@@ -2,6 +2,7 @@ import rclpy
 import time
 import math
 from drone_comunication import DroneController
+from drone_hardware import LoggerControl
 
 # Zmienne misji
 base_lat = 47.398136
@@ -20,6 +21,8 @@ dlon = meters / (111320 * math.cos(math.radians(base_lat)))
 def main(args=None):
     rclpy.init(args=args)
     mission = DroneController()
+    logger = LoggerControl()
+    logger.start()
     mission.arm()
     mission.takeoff(20.0)   # 50 feet = 15.24 meters, so we can use 20 meters for a safe takeoff margin
     time.sleep(5) # Wait for the drone to stabilize after takeoff
@@ -39,6 +42,7 @@ def main(args=None):
     mission.send_goto_global(base_lat + 3*dlat, base_lon, 30.0)  # W4 (+10m)
     mission.land()
     mission.destroy_node()
+    logger.stop()
     rclpy.shutdown()
 
 
