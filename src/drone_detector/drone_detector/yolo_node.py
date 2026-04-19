@@ -16,7 +16,8 @@ class YoloDetector(Node):
         self.declare_parameter('yolo_model', 'false')
 
         ## DECLARE YOLO CLASS POLES
-        model_path = self.get_parameter('fc_ip').get_parameter_value().string_value
+        # model_path = self.get_parameter('model_path').get_parameter_value().string_value
+        model_path = "yolo_models/yolo11n.pt"
         self.model = YOLO(model_path, task="detect")
         self.conf_threshold = 0.8
 
@@ -40,8 +41,8 @@ class YoloDetector(Node):
             for box in results[0].boxes:
                 cls_id = int(box.cls)
                 conf = float(box.conf)
-                if self.target_class_ids and cls_id not in self.target_class_ids:
-                    continue
+                # if self.target_class_ids and cls_id not in self.target_class_ids:
+                #     continue
                 if conf < self.conf_threshold:
                     continue
 
