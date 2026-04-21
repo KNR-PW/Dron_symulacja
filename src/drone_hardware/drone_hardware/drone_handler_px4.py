@@ -408,7 +408,7 @@ class DroneHandlerPX4(Node):
 
         self.publish_position_setpoint(self.local_position.x, self.local_position.y, -goal_handle.request.altitude)
 
-        while self.global_position.alt <= goal_handle.request.altitude:
+        while self.global_position.alt <= goal_handle.request.altitude - 0.3:
             self.publish_position_setpoint(self.local_position.x, self.local_position.y, -goal_handle.request.altitude)
             if goal_handle.is_cancel_requested:
                 goal_handle.canceled()

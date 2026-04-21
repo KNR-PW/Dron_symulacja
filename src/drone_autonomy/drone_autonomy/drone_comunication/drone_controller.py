@@ -321,7 +321,6 @@ class DroneController(Node):
 
     def _on_action_result(self, result_future):
         status = result_future.result().status
-        print(status)
         self._busy = False
 
     def get_gps(self):
