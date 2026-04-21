@@ -1,0 +1,1 @@
+./dockerise_cmd.sh "source ~/ros_ws/install/setup.bash && python3 ~/ros_ws/src/drone_hardware/drone_hardware/topic_logger.py"
