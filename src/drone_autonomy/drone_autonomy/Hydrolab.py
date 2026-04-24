@@ -11,46 +11,8 @@ import time
 import os
 
 
-SAVE_DIR = "/root/ros_ws/detections" 
+SAVE_DIR = "/root/ros_ws/detections"
 os.makedirs(SAVE_DIR, exist_ok=True)
-
-
-def scale_intrinsics(K, original_size, new_size):
-    """Scale camera intrinsic matrix K from original_size to new_size.
-    """
-    orig_w, orig_h = original_size
-    new_w, new_h = new_size
-
-    scale_x = new_w / orig_w
-    scale_y = new_h / orig_h
-
-    K_scaled = K.copy()
-    K_scaled[0, 0] *= scale_x  # fx
-    K_scaled[0, 2] *= scale_x  # cx
-    K_scaled[1, 1] *= scale_y  # fy
-    K_scaled[1, 2] *= scale_y  # cy
-
-    return K_scaled
-
-
-def image_to_ground(point, K, height):
-    u, v = point
-    fx = K[0, 0]
-    fy = K[1, 1]
-    cx = K[0, 2]
-    cy = K[1, 2]
-
-# Direction vector in camera coordinates    
-    x = (u - cx) / fx
-    y = (v - cy) / fy
-    z = 1.0
-# Scale by known height to intersect Z=0 plane
-    scale = height / z
-    # Real-world coordinates relative to camera frame
-    X = x * scale
-    Y = y * scale
-
-    return X, Y
 
 
 class PoolDetector(Node):
@@ -76,20 +38,9 @@ class PoolDetector(Node):
         self.frame_lock = threading.Lock()
         self._detecting = threading.Event()
 
-        self.photo_taken = False
+        self.pool_seen = False
         self.mission = mission
         self.save_counter = 0
-
-        # Camera calibration for webots
-        self.calibration_img_shape = (640, 480)  
-        self.camera_intrinsics = np.array(
-            [
-                [772.74,   0.0,  320.0], #basicowo w webotsie jest fx=fy=320/tan(FOV/2)
-                [  0.0,  772.74, 240.0],
-                [  0.0,    0.0,    1.0],
-            ]
-        )
-        self.pending_goto = None
 
     def camera_callback(self, msg):
         frame = self.br.imgmsg_to_cv2(msg, desired_encoding='passthrough')
@@ -99,11 +50,11 @@ class PoolDetector(Node):
         if self._detecting.is_set():
             boxes = self.detect_pool()
             if boxes:
-                self.handle_detections(boxes)
+                self.pool_seen = True
 
     def detect_pool(self) -> list:
         with self.frame_lock:
-            if self.frame is None or self.photo_taken:
+            if self.frame is None:
                 return []
             frame = self.frame.copy()
 
@@ -119,61 +70,134 @@ class PoolDetector(Node):
             if area > self.min_area:
                 x, y, w, h = cv2.boundingRect(cnt)
                 self.get_logger().info(f"Pool detected! | x: {x}, y: {y}, w: {w}, h: {h}")
-                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
                 boxes.append((x, y, w, h))
-
-        # save detections frame 
-        if boxes:
-            with self.frame_lock:
-                self.frame = frame
 
         return boxes
 
-    def handle_detections(self, boxes: list):
-        biggest = max(boxes, key=lambda b: b[2] * b[3])
-        bx, by, bw, bh = biggest
-
-        with self.frame_lock:
-            frame_h, frame_w = self.frame.shape[:2]
-            frame_copy = self.frame.copy()
-
-        frame_cx = frame_w // 2
-        frame_cy = frame_h // 2
-        offset_x = (bx + bw // 2) - frame_cx
-        offset_y = (by + bh // 2) - frame_cy
-        self.get_logger().info(f"Offset from center: dx={offset_x}, dy={offset_y}")
-
-        if not self.photo_taken:
-            filename = os.path.join(self.save_dir, f"detection_{self.save_counter:04d}.jpg")
-            cv2.imwrite(filename, frame_copy)
-            self.get_logger().info(f"Saved: {filename}")
-            self.save_counter += 1
-            self.photo_taken = True
-            self._detecting.clear()
-
-        if abs(offset_x) > 20 or abs(offset_y) > 20:
-            scaled_intrinsics = scale_intrinsics(
-                self.camera_intrinsics,
-                self.calibration_img_shape,          # (640, 480) — (w, h)
-                (frame_w, frame_h),                  # current frame (w, h)
-            )
-            alt = self.mission.alt
-            X_rel, Y_rel = image_to_ground(
-                (frame_cx + offset_x, frame_cy + offset_y),
-                scaled_intrinsics,
-                alt,
-            )
-            self.pending_goto = (-Y_rel, X_rel, 0.0)
-
     def scan(self, duration: float = 3.0) -> bool:
-        """Scan for a pool for `duration` seconds.
-        """
         self.get_logger().info(f"Scanning for {duration}s...")
+        self.pool_seen = False
         self._detecting.set()
         time.sleep(duration)
         self._detecting.clear()
-        self.get_logger().info("Scan complete.")
-        return self.photo_taken
+        self.get_logger().info(f"Scan complete. Pool seen: {self.pool_seen}")
+        return self.pool_seen
+
+    def get_live_offset(self):
+        """Zwraca (offset_x_px, offset_y_px, frame, boxes) z aktualnej klatki.
+        """
+        with self.frame_lock:
+            if self.frame is None:
+                return None
+            frame = self.frame.copy()
+
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        mask = cv2.inRange(hsv,
+                           np.array([90, 50, 50]),
+                           np.array([130, 255, 255]))
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL,
+                                       cv2.CHAIN_APPROX_SIMPLE)
+        boxes = [cv2.boundingRect(c) for c in contours
+                 if cv2.contourArea(c) > self.min_area]
+        if not boxes:
+            return None
+
+        bx, by, bw, bh = max(boxes, key=lambda b: b[2] * b[3])
+        fh, fw = frame.shape[:2]
+        offset_x = (bx + bw // 2) - fw // 2
+        offset_y = (by + bh // 2) - fh // 2
+        return offset_x, offset_y, frame, boxes
+
+    def save_annotated(self, frame, boxes, tag: str = ""):
+        """Zapisuje klatke z narysowanymi bboxami"""
+        annotated = frame.copy()
+        for (x, y, w, h) in boxes:
+            cv2.rectangle(annotated, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        suffix = f"_{tag}" if tag else ""
+        fname = os.path.join(
+            self.save_dir,
+            f"detection_{self.save_counter:04d}{suffix}.jpg"
+        )
+        cv2.imwrite(fname, annotated)
+        self.save_counter += 1
+        self.get_logger().info(f"Saved: {fname}")
+        return fname
+
+
+def center_over_pool(mission: DroneController,
+                     detector: PoolDetector,
+                     tag: str = "") -> bool:
+    """Centruje drona nad basenem.
+    Po wycentrowaniu robi zdjecie."""
+
+    # parametry velocity servoing
+    Kp               = 0.004
+    MAX_CORR         = 0.5
+    CENTER_THRESH    = 50
+    STABLE_NEEDED    = 10
+    EMA              = 0.3
+    APPROACH_TIMEOUT = 30.0
+
+    mission.toggle_control()
+    mission.send_vectors(0.0, 0.0, 0.0)
+    time.sleep(2.0)
+
+    sm_vx = sm_vy = 0.0
+    stable_count = 0
+    deadline = time.time() + APPROACH_TIMEOUT
+    centered = False
+
+    while time.time() < deadline:
+        det = detector.get_live_offset()
+
+        if det is None:
+            mission.send_vectors(0.0, 0.0, 0.0)
+            sm_vx = sm_vy = 0.0
+            stable_count = 0
+            time.sleep(0.05)
+            continue
+
+        offset_x, offset_y, frame, boxes = det
+        mission.get_logger().info(
+            f"[{tag}] Approach offset: dx={offset_x:+d} dy={offset_y:+d} | stable={stable_count}",
+            throttle_duration_sec=0.5
+        )
+
+        if abs(offset_x) < CENTER_THRESH and abs(offset_y) < CENTER_THRESH:
+            stable_count += 1
+            sm_vx = (1 - EMA) * sm_vx
+            sm_vy = (1 - EMA) * sm_vy
+            mission.send_vectors(sm_vx, sm_vy, 0.0)
+
+            if stable_count >= STABLE_NEEDED:
+                mission.send_vectors(0.0, 0.0, 0.0)
+                time.sleep(1.5)
+                mission.get_logger().info(f"[{tag}] Hovering - saving photo.")
+                detector.save_annotated(frame, boxes, tag=tag)
+                centered = True
+                break
+        else:
+            stable_count = 0
+            vx_raw = max(-MAX_CORR, min(MAX_CORR, -Kp * offset_y))
+            vy_raw = max(-MAX_CORR, min(MAX_CORR,  Kp * offset_x))
+            sm_vx = EMA * vx_raw + (1 - EMA) * sm_vx
+            sm_vy = EMA * vy_raw + (1 - EMA) * sm_vy
+            mission.get_logger().info(
+                f"[{tag}] img_offset=({offset_x:+d},{offset_y:+d}) | "
+                f"send vx={sm_vx:+.3f} vy={sm_vy:+.3f}",
+                throttle_duration_sec=0.5
+            )
+            mission.send_vectors(sm_vx, sm_vy, 0.0)
+
+        time.sleep(0.05)
+
+    if not centered:
+        mission.get_logger().warn(f"[{tag}] Approach timeout.")
+
+    mission.send_vectors(0.0, 0.0, 0.0)
+    time.sleep(0.5)
+    mission.toggle_control()
+    return centered
 
 
 def main(args=None):
@@ -184,35 +208,52 @@ def main(args=None):
 
     detector_executor = MultiThreadedExecutor()
     detector_executor.add_node(mission)
-    detector_executor.add_node(detector)  
+    detector_executor.add_node(detector)
 
     def mission_thread():
         mission.arm()
         mission.takeoff(10.0)
 
         waypoints = [
-            (-2.0, -8.0, 0.0),
-            ( 0.0,  8.0, 0.0),
-            ( 2.0, -8.0, 0.0),
-            ( 0.0,  8.0, 0.0),
+            ( -6.5, -6.5, 0.0),
+            ( 13.0,  -4.0, 0.0),
+            ( -10.0,-10.0, 0.0),
+            (  14.0, 1.0, 0.0), 
         ]
 
-        for wp in waypoints:
+        total = len(waypoints)
+
+        for idx, wp in enumerate(waypoints, start=1):
+            is_last = (idx == total)
+            mission.get_logger().info(f" Pool {idx}/{total} -> waypoint {wp}")
+
             mission.send_goto_relative(*wp)
             time.sleep(5.0)
 
             found = detector.scan(3.0)
-            if found:
-                mission.get_logger().info("Pool confirmed.")
-                if detector.pending_goto is not None:
-                    mission.get_logger().info("Repositioning over pool center...")
-                    mission.send_goto_relative(*detector.pending_goto)
-                    detector.pending_goto = None
-                mission.get_logger().info("Descending 5 m over pool...")
-                mission.send_goto_relative(0.0, 0.0, 5.0)  
-                time.sleep(5.0)
-                break
+            if not found:
+                mission.get_logger().warn(f"Pool {idx}: not detected.")
+                continue
 
+            mission.get_logger().info(f"Pool {idx}: detected.")
+            center_over_pool(mission, detector, tag=f"pool{idx}")
+            if is_last:
+                mission.get_logger().info("Last pool.")
+                mission.send_goto_relative(0.0, 0.0, 7.0)
+                time.sleep(5.0)
+
+                mission.get_logger().info("Hover na 3m...")
+                time.sleep(3.0)
+                det = detector.get_live_offset()
+                if det is not None:
+                    _, _, frame, boxes = det
+                    detector.save_annotated(frame, boxes, tag=f"pool{idx}_close")
+
+                mission.get_logger().info(" alt 10m.")
+                mission.send_goto_relative(0.0, 0.0, -7.0)
+                time.sleep(5.0)
+
+        mission.get_logger().info("RTL.")
         mission.rtl()
 
     t = threading.Thread(target=mission_thread, daemon=True)
