@@ -49,7 +49,16 @@ class ImagesRecorder(Node):
 
     def listener_callback(self, data):
         # Convert to OpenCV BGR format to preserve expected colors in saved files.
-        self.current_frame = self.br.imgmsg_to_cv2(data, desired_encoding='bgr8')
+        #self.current_frame = self.br.imgmsg_to_cv2(data, desired_encoding='bgr8')
+        #self.current_frame = self.br.imgmsg_to_cv2(data, desired_encoding='passthrough')
+
+        #print("Encoding:", data.encoding)
+
+        img = self.br.imgmsg_to_cv2(data, desired_encoding='passthrough')
+
+        if data.encoding == "8UC3":
+            # najczęściej Webots daje RGB w tej formie
+            self.current_frame = img
 
     def save_frame(self):
         if hasattr(self, 'current_frame'):

@@ -144,6 +144,7 @@ class WebotsArduVehicle():
         for m in self._motors:
             m.setPosition(float('inf'))
             m.setVelocity(0)
+            self.get_logger().info(f"{m}")
 
         # start ArduPilot SITL communication thread
         self._sitl_thread = Thread(daemon=True, target=self._handle_sitl, args=[sitl_address, 9002+10*instance])

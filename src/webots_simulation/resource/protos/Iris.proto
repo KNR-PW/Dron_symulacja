@@ -92,7 +92,7 @@ PROTO Iris [
       }
       Propeller {
         shaftAxis 0 0 1
-        centerOfThrust 00.130000 0.220000 0.023000
+        centerOfThrust 0.130000 0.220000 0.023000
         thrustConstants -0.0012 0
         torqueConstants 5.0e-04 0
         device RotationalMotor {
