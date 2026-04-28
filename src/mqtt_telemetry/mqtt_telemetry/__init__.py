@@ -16,6 +16,7 @@ def ros_msg_to_dict(msg):
     bez użycia rosidl_runtime_py.convert.message_to_ordered_dict
     (dla zgodności z różnymi wersjami ROS).
     """
+
     def _convert(val):
         # Zagnieżdżona wiadomość ROS
         if hasattr(val, "get_fields_and_field_types"):
@@ -100,10 +101,18 @@ class MqttBridge(Node):
         self.mission_thread = None
         self._mission_lock = threading.Lock()
 
+        self.telemetry_topic = "/knr_hardware/telemetry"
+        self.alt_threshold = 0.5
+
+        self.drone_is_landed = True
+        self.landing_event = threading.Event()
+
+        self.telemetry_sub = None
+        self.telemetry_timer = self.create_timer(2.0, self.try_subscribe_telemetry)
+
         self.mqtt_client.subscribe("drone/mission/start")
 
         self.mqtt_client.on_message = self.on_message
-        self.get_logger().info(f"Received message on mqtt")
 
         # -----------------------------
         # SUBSCRIBE TO ROS TOPICS
@@ -139,6 +148,41 @@ class MqttBridge(Node):
             )
             self.subscribers.append(sub)
 
+    def try_subscribe_telemetry(self):
+        msg_type = self.get_message_type(self.telemetry_topic)
+        if msg_type is not None:
+            self.telemetry_sub = self.create_subscription(
+                msg_type, self.telemetry_topic, self.telemetry_callback, 10
+            )
+            self.get_logger().info(
+                f"Successfully subscribed to {self.telemetry_topic} for landing detection."
+            )
+            self.telemetry_timer.cancel()
+
+    def telemetry_callback(self, msg):
+        try:
+            current_alt = float(msg.alt)
+        except AttributeError:
+            self.get_logger().warn(
+                f"Message on {self.telemetry_topic} does not have an 'alt' field!",
+                once=True,
+            )
+            return
+
+        is_landed = current_alt < self.alt_threshold
+
+        if is_landed and not self.drone_is_landed:
+            self.drone_is_landed = True
+            self.get_logger().info(
+                f"Drone landing detected! (alt: {current_alt:.2f}m < {self.alt_threshold}m)"
+            )
+            self.landing_event.set()
+        elif not is_landed and self.drone_is_landed:
+            self.drone_is_landed = False
+            self.get_logger().info(
+                f"Drone takeoff detected! (alt: {current_alt:.2f}m >= {self.alt_threshold}m)"
+            )
+            self.landing_event.clear()
 
     def on_message(self, client, userdata, msg):
         self.get_logger().info(f"Received message on mqtt")
@@ -171,8 +215,21 @@ class MqttBridge(Node):
         self.get_logger().info(f"Starting mission: {mission_path}")
         self.mqtt_client.publish("drone/mission/status", json.dumps({"status": "starting", "mission": mission_idx}))
         subprocess.run([sys.executable, mission_path])
-        self.get_logger().info(f"Mission {mission_path} finished.")
-        self.mqtt_client.publish("drone/mission/status", json.dumps({"status": "finished", "mission": mission_idx}))
+        self.get_logger().info(f"Mission script {mission_path} execution finished.")
+
+        if not self.drone_is_landed:
+            self.get_logger().info(
+                "Drone is still in the air. Waiting for it to physically land..."
+            )
+            self.landing_event.wait()
+
+        self.get_logger().info(
+            f"Mission {mission_path} fully finished (drone on the ground)."
+        )
+        self.mqtt_client.publish(
+            "drone/mission/status",
+            json.dumps({"status": "finished", "mission": mission_idx}),
+        )
 
     # ----------------------------------------
     # HELPER: DETECT MESSAGE TYPE AUTOMATICALLY
