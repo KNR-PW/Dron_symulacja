@@ -4,6 +4,9 @@ import yaml
 import json
 import paho.mqtt.client as mqtt
 import ssl
+import subprocess
+import sys
+import threading
 
 from rosidl_runtime_py.utilities import get_message
 
@@ -13,6 +16,7 @@ def ros_msg_to_dict(msg):
     bez użycia rosidl_runtime_py.convert.message_to_ordered_dict
     (dla zgodności z różnymi wersjami ROS).
     """
+
     def _convert(val):
         # Zagnieżdżona wiadomość ROS
         if hasattr(val, "get_fields_and_field_types"):
@@ -93,6 +97,23 @@ class MqttBridge(Node):
 
         self.mqtt_client.loop_start()
 
+        self.missions = self.config["missions"]
+        self.mission_thread = None
+        self._mission_lock = threading.Lock()
+
+        self.telemetry_topic = "/knr_hardware/telemetry"
+        self.alt_threshold = 0.5
+
+        self.drone_is_landed = True
+        self.landing_event = threading.Event()
+
+        self.telemetry_sub = None
+        self.telemetry_timer = self.create_timer(2.0, self.try_subscribe_telemetry)
+
+        self.mqtt_client.subscribe("drone/mission/start")
+
+        self.mqtt_client.on_message = self.on_message
+
         # -----------------------------
         # SUBSCRIBE TO ROS TOPICS
         # -----------------------------
@@ -127,7 +148,88 @@ class MqttBridge(Node):
             )
             self.subscribers.append(sub)
 
+    def try_subscribe_telemetry(self):
+        msg_type = self.get_message_type(self.telemetry_topic)
+        if msg_type is not None:
+            self.telemetry_sub = self.create_subscription(
+                msg_type, self.telemetry_topic, self.telemetry_callback, 10
+            )
+            self.get_logger().info(
+                f"Successfully subscribed to {self.telemetry_topic} for landing detection."
+            )
+            self.telemetry_timer.cancel()
 
+    def telemetry_callback(self, msg):
+        try:
+            current_alt = float(msg.alt)
+        except AttributeError:
+            self.get_logger().warn(
+                f"Message on {self.telemetry_topic} does not have an 'alt' field!",
+                once=True,
+            )
+            return
+
+        is_landed = current_alt < self.alt_threshold
+
+        if is_landed and not self.drone_is_landed:
+            self.drone_is_landed = True
+            self.get_logger().info(
+                f"Drone landing detected! (alt: {current_alt:.2f}m < {self.alt_threshold}m)"
+            )
+            self.landing_event.set()
+        elif not is_landed and self.drone_is_landed:
+            self.drone_is_landed = False
+            self.get_logger().info(
+                f"Drone takeoff detected! (alt: {current_alt:.2f}m >= {self.alt_threshold}m)"
+            )
+            self.landing_event.clear()
+
+    def on_message(self, client, userdata, msg):
+        self.get_logger().info(f"Received message on mqtt")
+        try:
+            with self._mission_lock:
+                if self.mission_thread is not None and self.mission_thread.is_alive():
+                    self.get_logger().warn("Mission already running, ignoring new start command.")
+                    client.publish("drone/mission/status", json.dumps({"status": "busy", "message": "Mission already running"}))
+                    return
+
+                payload = msg.payload.decode("utf-8")
+                data = json.loads(payload)
+
+                mission_idx = data["mission"]
+                if not isinstance(mission_idx, int) or  mission_idx < 0 or mission_idx >= len(self.missions):
+                    self.get_logger().error(f"Invalid mission index: {mission_idx}")
+                    client.publish("drone/mission/status", json.dumps({"status": "error", "message": "Invalid mission index"}))
+                    return
+                
+                mission_path = self.missions[mission_idx]["mission_script"]
+
+                self.mission_thread = threading.Thread(target=self.run_mission_and_notify,
+                                                        args=(mission_path, data["mission"]))
+                self.mission_thread.start()
+            
+        except Exception as e:
+            self.get_logger().error(f"Error processing message: {e}")
+
+    def run_mission_and_notify(self, mission_path, mission_idx):
+        self.get_logger().info(f"Starting mission: {mission_path}")
+        self.mqtt_client.publish("drone/mission/status", json.dumps({"status": "starting", "mission": mission_idx}))
+        subprocess.run([sys.executable, mission_path])
+        self.get_logger().info(f"Mission script {mission_path} execution finished.")
+
+        if not self.drone_is_landed:
+            self.get_logger().info(
+                "Drone is still in the air. Waiting for it to physically land..."
+            )
+            self.landing_event.wait()
+
+        self.get_logger().info(
+            f"Mission {mission_path} fully finished (drone on the ground)."
+        )
+        self.mqtt_client.publish(
+            "drone/mission/status",
+            json.dumps({"status": "finished", "mission": mission_idx}),
+        )
 
     # ----------------------------------------
     # HELPER: DETECT MESSAGE TYPE AUTOMATICALLY

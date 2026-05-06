@@ -34,4 +34,7 @@ topics:
     ros_type: "std_msgs/msg/String"
     mqtt_topic: "drone/image"
 
+missions:
+  - mission_script: "test_mission.py"
+
 # ODPALANIE ros2 run mqtt_telemetry mqtt_bridge
