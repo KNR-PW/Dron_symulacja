@@ -1,3 +1,7 @@
+import collections
+import collections.abc
+collections.MutableMapping = collections.abc.MutableMapping  # dronekit 2.9.2 + Python 3.10 shim
+
 import rclpy
 from dronekit import connect, VehicleMode, LocationLocal, LocationGlobalRelative
 from pymavlink import mavutil

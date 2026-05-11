@@ -26,6 +26,7 @@ setup(
             "images_recorder=drone_camera.images_recorder:main",
             "video_recorder=drone_camera.video_recorder:main",
             "mission_make_photo_server = drone_camera.mission_make_photo_server:main",
+            "oak_publisher=drone_camera.oak_publisher:main",
         ],
     },
 )
