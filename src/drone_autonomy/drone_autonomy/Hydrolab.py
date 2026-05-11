@@ -11,7 +11,7 @@ import time
 import os
 
 
-SAVE_DIR = "/root/ros_ws/detections"
+SAVE_DIR = os.path.join(os.getcwd(), "detections")
 os.makedirs(SAVE_DIR, exist_ok=True)
 
 
@@ -19,7 +19,7 @@ class PoolDetector(Node):
     def __init__(self, mission: DroneController):
         super().__init__('pool_detector_node')
         self.declare_parameter('camera_topic', 'camera')
-        self.declare_parameter('min_pool_area_px', 500)
+        self.declare_parameter('min_pool_area_px', 300)
         self.declare_parameter('save_dir', SAVE_DIR)
 
         camera_topic = self.get_parameter('camera_topic').get_parameter_value().string_value
@@ -42,70 +42,90 @@ class PoolDetector(Node):
         self.mission = mission
         self.save_counter = 0
 
+        self._scan_lock = threading.Lock()
+        self._scan_hits = []  
+
     def camera_callback(self, msg):
         frame = self.br.imgmsg_to_cv2(msg, desired_encoding='passthrough')
         with self.frame_lock:
             self.frame = frame
 
         if self._detecting.is_set():
-            boxes = self.detect_pool()
-            if boxes:
+            pools = self.detect_pool(frame, self.min_area)
+            if pools:
+                best = max(pools, key=lambda p: p[3])
+                with self._scan_lock:
+                    self._scan_hits.append(best)
                 self.pool_seen = True
 
-    def detect_pool(self) -> list:
-        with self.frame_lock:
-            if self.frame is None:
-                return []
-            frame = self.frame.copy()
-
-        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    def detect_pool(self, image: np.ndarray, min_area: int = 300,
+                    min_boundary: float = 0.7) -> list:
+        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
         lower_blue = np.array([90, 50, 50])
         upper_blue = np.array([130, 255, 255])
         mask = cv2.inRange(hsv, lower_blue, upper_blue)
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-        boxes = []
+        pools = []
         for cnt in contours:
             area = cv2.contourArea(cnt)
-            if area > self.min_area:
-                x, y, w, h = cv2.boundingRect(cnt)
-                self.get_logger().info(f"Pool detected! | x: {x}, y: {y}, w: {w}, h: {h}")
-                boxes.append((x, y, w, h))
+            if area < min_area:
+                continue
+            perimeter = cv2.arcLength(cnt, True)
+            if perimeter == 0:
+                continue
+            det = 4 * np.pi * area / (perimeter * perimeter)
+            if det < min_boundary:
+                continue
+            (cx, cy), radius = cv2.minEnclosingCircle(cnt)
+            cx, cy, radius = int(cx), int(cy), int(radius)
+            pools.append((cx, cy, radius, float(det)))
 
-        return boxes
+        return pools
 
-    def scan(self, duration: float = 3.0) -> bool:
-        self.get_logger().info(f"Scanning for {duration}s...")
+    def scan(self, duration: float = 6.0, min_hits: int = 5) -> bool:
+        """Zbiera detekcje przez 6 sekund i decyduje czy basen został wykryty"""
+        self.get_logger().info(f"Scanning for {duration}s (min_hits={min_hits})...")
         self.pool_seen = False
+        with self._scan_lock:
+            self._scan_hits = []
         self._detecting.set()
         time.sleep(duration)
         self._detecting.clear()
-        self.get_logger().info(f"Scan complete. Pool seen: {self.pool_seen}")
-        return self.pool_seen
+
+        with self._scan_lock:
+            hits = list(self._scan_hits)
+
+        if len(hits) < min_hits:
+            self.get_logger().info(
+                f"Scan complete.{len(hits)} < {min_hits} — odrzucone."
+            )
+            self.pool_seen = False
+            return False
+
+        avg_conf = sum(h[3] for h in hits) / len(hits)
+        self.get_logger().info(
+            f"Scan complete., avg_conf={avg_conf:.2f},"
+        )
+        return True
 
     def get_live_offset(self):
         """Zwraca (offset_x_px, offset_y_px, frame, boxes) z aktualnej klatki.
-        """
+        Wybiera detekcję o najwyzszej pewnosci."""
         with self.frame_lock:
             if self.frame is None:
                 return None
             frame = self.frame.copy()
 
-        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-        mask = cv2.inRange(hsv,
-                           np.array([90, 50, 50]),
-                           np.array([130, 255, 255]))
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL,
-                                       cv2.CHAIN_APPROX_SIMPLE)
-        boxes = [cv2.boundingRect(c) for c in contours
-                 if cv2.contourArea(c) > self.min_area]
-        if not boxes:
+        circles = self.detect_pool(frame, self.min_area)
+        if not circles:
             return None
 
-        bx, by, bw, bh = max(boxes, key=lambda b: b[2] * b[3])
+        cx, cy, radius, conf = max(circles, key=lambda c: c[3])
         fh, fw = frame.shape[:2]
-        offset_x = (bx + bw // 2) - fw // 2
-        offset_y = (by + bh // 2) - fh // 2
+        offset_x = cx - fw // 2
+        offset_y = cy - fh // 2
+        boxes = [(cx - radius, cy - radius, 2 * radius, 2 * radius)]
         return offset_x, offset_y, frame, boxes
 
     def save_annotated(self, frame, boxes, tag: str = ""):
@@ -131,10 +151,10 @@ def center_over_pool(mission: DroneController,
     Po wycentrowaniu robi zdjecie."""
 
     # parametry velocity servoing
-    Kp               = 0.004
+    Kp               = 0.05
     MAX_CORR         = 0.5
-    CENTER_THRESH    = 50
-    STABLE_NEEDED    = 10
+    CENTER_THRESH    = 60
+    STABLE    = 5
     EMA              = 0.3
     APPROACH_TIMEOUT = 30.0
 
@@ -169,9 +189,9 @@ def center_over_pool(mission: DroneController,
             sm_vy = (1 - EMA) * sm_vy
             mission.send_vectors(sm_vx, sm_vy, 0.0)
 
-            if stable_count >= STABLE_NEEDED:
+            if stable_count >= STABLE:
                 mission.send_vectors(0.0, 0.0, 0.0)
-                time.sleep(1.5)
+                time.sleep(2.0)
                 mission.get_logger().info(f"[{tag}] Hovering - saving photo.")
                 detector.save_annotated(frame, boxes, tag=tag)
                 centered = True
@@ -189,7 +209,7 @@ def center_over_pool(mission: DroneController,
             )
             mission.send_vectors(sm_vx, sm_vy, 0.0)
 
-        time.sleep(0.05)
+        time.sleep(0.5)
 
     if not centered:
         mission.get_logger().warn(f"[{tag}] Approach timeout.")
@@ -218,7 +238,7 @@ def main(args=None):
             ( -6.5, -6.5, 0.0),
             ( 13.0,  -4.0, 0.0),
             ( -10.0,-10.0, 0.0),
-            (  14.0, 1.0, 0.0), 
+            (  14.0, -1.0, 0.0), 
         ]
 
         total = len(waypoints)
@@ -230,7 +250,7 @@ def main(args=None):
             mission.send_goto_relative(*wp)
             time.sleep(5.0)
 
-            found = detector.scan(3.0)
+            found = detector.scan(5.0)
             if not found:
                 mission.get_logger().warn(f"Pool {idx}: not detected.")
                 continue
@@ -240,10 +260,10 @@ def main(args=None):
             if is_last:
                 mission.get_logger().info("Last pool.")
                 mission.send_goto_relative(0.0, 0.0, 7.0)
-                time.sleep(5.0)
+                time.sleep(3.0)
 
                 mission.get_logger().info("Hover na 3m...")
-                time.sleep(3.0)
+                time.sleep(2.0)
                 det = detector.get_live_offset()
                 if det is not None:
                     _, _, frame, boxes = det
@@ -251,7 +271,7 @@ def main(args=None):
 
                 mission.get_logger().info(" alt 10m.")
                 mission.send_goto_relative(0.0, 0.0, -7.0)
-                time.sleep(5.0)
+                time.sleep(2.0)
 
         mission.get_logger().info("RTL.")
         mission.rtl()
