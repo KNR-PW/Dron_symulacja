@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drone Mission Control</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Drone Mission Control</h1>
+            <div class="flight-status">
+                <span id="flight-status-indicator" class="indicator" title="WebSocket Status"></span>
+                Telemetry
+            </div>
+        </header>
+
+        <div class="dashboard">
+            <!-- ========================= DRONE STATUS ======================== -->
+            <section class="status-panel panel">
+                <h2>Drone Status</h2>
+                <table>
+                    <tr><th>Height</th>          <td id="altitude">0.0</td></tr>
+                    <tr><th>Speed</th>           <td id="speed">0.0</td></tr>
+                    <tr><th>Battery percent</th> <td id="battery_percent">100%</td></tr>
+                    <tr><th>Battery voltage</th> <td id="battery_voltage">0V</td></tr>
+                    <tr><th>GPS GLOBAL</th>      <td id="gps_global">0.0,0.0</td></tr>
+                    <tr><th>GPS RELATIVE</th>    <td id="gps_relative">0.0,0.0</td></tr>
+                    <tr><th>Mission time</th>    <td id="mission_time">00:00:00</td></tr>
+                    <tr><th>Flight mode</th>     <td id="flight_mode">INIT</td></tr>
+                    <tr><th>Water temperature</th> <td id="water_temp">--</td></tr>
+                    <tr><th>Last update</th>     <td id="last_update">-</td></tr>
+                </table>
+            </section>
+
+            <!-- ========================= LIVE VIDEO STREAM =================== -->
+            <div class="camera-view-container panel">
+                <h3>Kamera</h3>
+                <div style="display: flex; flex-direction: column; align-items: center;">
+                    <div class="option" style="margin-bottom: 10px;">
+                        <button id="start" onclick="start()" style="margin-left: 10px;">Start</button>
+                        <button id="stop" style="display: none; margin-left: 10px;" onclick="stop()">Stop</button>
+                    </div>
+                    <audio id="audio" autoplay="true" style="display:none;"></audio>
+                    <video id="video" autoplay="true" playsinline="true"></video>
+                    
+                    <div id="webrtc-stats" style="margin-top: 10px; font-size: 0.9em; color: #555;">
+                        Ping: <strong id="ping">-</strong> ms | FPS: <strong id="fps">-</strong> | Loss: <strong id="loss">-</strong>
+                    </div>
+                </div>
+            </div>
+        </div> <!-- /dashboard -->
+
+        <!-- ========================= MISSION LOG ======================== -->
+        <section class="log-panel panel">
+            <h2>Mission Log <span id="log-counter" style="font-size: 0.8em; color: #7f8c8d; margin-left: 10px;">(0)</span></h2>
+            <div class="log-controls">
+                <button id="clear-gallery">Clear gallery</button>
+                <button id="clear-log">Clear</button>
+            </div>
+            <div class="log-container" id="mission-log"></div>
+        </section>
+    </div> <!-- /container -->
+
+    <div id="error-display" class="error-display hidden"></div>
+
+    <script src="client.js"></script>
+    <script>
+    const paramMap = {
+        altitude: 'altitude',
+        speed: 'speed',
+        battery_percent: 'battery_percent',
+        battery_voltage: 'battery_voltage',
+        gps_global: 'gps_global',
+        gps_relative: 'gps_relative',
+        mission_time: 'mission_time',
+        flight_mode: 'flight_mode',
+        water_temp: 'water_temp',
+        last_update: 'last_update',
+    };
+
+    function setIndicator(state) {
+        var el = document.getElementById('flight-status-indicator');
+        if (!el) return;
+        el.style.background = state === 'online' ? '#27ae60' : '#e74c3c';
+        el.style.borderColor = state === 'online' ? '#1e8449' : '#c0392b';
+    }
+
+    function connectWebSocket() {
+        var protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        var wsUrl = protocol + '//' + window.location.host + '/ws';
+        var ws = new WebSocket(wsUrl);
+
+        ws.onopen = function() {
+            setIndicator('online');
+        };
+
+        ws.onmessage = function(event) {
+            var data = JSON.parse(event.data);
+            for (var key in paramMap) {
+                var el = document.getElementById(paramMap[key]);
+                if (el && data[key] !== undefined) {
+                    el.textContent = data[key];
+                }
+            }
+        };
+
+        ws.onclose = function() {
+            setIndicator('offline');
+            console.log("WebSocket closed, reconnecting in 2s...");
+            setTimeout(connectWebSocket, 2000);
+        };
+
+        ws.onerror = function(err) {
+            console.error("WebSocket error:", err);
+            ws.close();
+        };
+    }
+
+    // Start real-time telemetry
+    connectWebSocket();
+    </script>
+</body>
+</html>
