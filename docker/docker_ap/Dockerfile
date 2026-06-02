@@ -13,8 +13,8 @@ RUN apt-get update && apt-get install -y locales \
 ENV LANG=en_US.UTF-8
 
 # Install necessary dependencies
-RUN apt-get update 
-RUN apt-get install -y curl 
+RUN apt-get update
+RUN apt-get install -y curl
 RUN apt-get install -y software-properties-common
 
 # Add the ROS 2 apt repository
@@ -31,23 +31,22 @@ RUN apt install -y python3-colcon-common-extensions
 RUN echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
 
 # Install requirements
-RUN apt update && apt install -y \ 
-    git \ 
-    sudo \ 
-    python3-pip \ 
-    python3-dev \ 
-    python3-matplotlib \ 
-    python3-lxml \ 
-    python3-pil \ 
-    python3-setuptools \ 
-    python3-future \ 
+RUN apt update && apt install -y \
+    git \
+    sudo \
+    python3-pip \
+    python3-dev \
+    python3-matplotlib \
+    python3-lxml \
+    python3-pil \
+    python3-setuptools \
+    python3-future \
     ros-humble-webots-ros2-driver \
     ros-humble-tf-transformations
 
 RUN pip install \
     empy==3.3.4 \
     # numpy==1.26.4 \
-    numpy==1.23 \
     lark==1.2.2 \
     MAVProxy==1.8.71 \
     dronekit \
@@ -57,6 +56,8 @@ RUN pip install \
     tabulate \
     paho-mqtt \
     requests
+
+RUN pip install -U ultralytics "numpy==1.23"
 
 # Fix dronekit
 RUN sed -i 's/collections.MutableMapping/collections.abc.MutableMapping/g' /usr/local/lib/python3.10/dist-packages/dronekit/__init__.py

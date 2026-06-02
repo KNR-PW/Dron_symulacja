@@ -1,0 +1,6 @@
+# naprawa ardupilota
+* PID w symulacji
+* Images_recorder
+
+* czemu wysyła 4 w drone controlerze?
+* drone handler px4 altitude zmiejszyć wymagany błąd do ok 0.1

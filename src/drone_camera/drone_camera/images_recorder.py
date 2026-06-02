@@ -1,7 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
-from cv_bridge import CvBridge
+from cv_bridge import CvBridge, CvBridgeError
 import cv2
 import os
 from rcl_interfaces.msg import ParameterDescriptor, ParameterType
@@ -48,7 +48,11 @@ class ImagesRecorder(Node):
         self.get_logger().info(f'Recording images to directory: {self.save_directory}')
 
     def listener_callback(self, data):
-        self.current_frame = self.br.imgmsg_to_cv2(data)
+        # Convert to OpenCV BGR format to preserve expected colors in saved files.
+        try:
+            self.current_frame = self.br.imgmsg_to_cv2(data, "bgr8")
+        except CvBridgeError as e:
+            print(e)
 
     def save_frame(self):
         if hasattr(self, 'current_frame'):
@@ -59,7 +63,7 @@ class ImagesRecorder(Node):
             # self.get_logger().info(f'Saved frame: {filepath}')
         else:
             self.get_logger().warn('No frame to save yet')
-            
+
 def main(args=None):
     rclpy.init(args=args)
 

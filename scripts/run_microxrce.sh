@@ -1,1 +1,1 @@
-docker exec -it knr_drone_px4 bash -c "source /opt/ros/jazzy/setup.bash && cd ~/ros_ws && colcon build && source install/setup.bash && MicroXRCEAgent udp4 -p 8888"
+docker exec -it knr_drone_px4 bash -c "source /opt/ros/jazzy/setup.bash && cd ~/Dron_symulacja && colcon build --packages-skip px4 && source install/setup.bash && MicroXRCEAgent udp4 -p 8888"

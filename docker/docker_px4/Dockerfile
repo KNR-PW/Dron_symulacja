@@ -20,15 +20,15 @@ RUN apt-get update -y && apt-get upgrade -y --fix-missing
 RUN apt-get install -y ros-jazzy-desktop
 RUN echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc
 
-RUN apt-get update && apt-get install -y \ 
-    git \ 
-    sudo \ 
-    python3-pip \ 
-    python3-dev \ 
-    python3-matplotlib \ 
-    python3-lxml \ 
-    python3-pil \ 
-    python3-setuptools \ 
+RUN apt-get update && apt-get install -y \
+    git \
+    sudo \
+    python3-pip \
+    python3-dev \
+    python3-matplotlib \
+    python3-lxml \
+    python3-pil \
+    python3-setuptools \
     python3-future
 
 #px4 config
@@ -48,7 +48,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 
-# pobranie potrzebnych bibliotek 
+# pobranie potrzebnych bibliotek
 
 RUN pip3 install \
     dronekit \
@@ -64,6 +64,8 @@ RUN sed -i '45 s/imp/importlib/1' /usr/lib/python3/dist-packages/past/builtins/m
 # pobieranie ros_gz_bridge
 
 RUN apt-get update && apt-get install -y ros-jazzy-ros-gz-bridge
+
+RUN pip3 install -U ultralytics "numpy<2" --break-system-packages
 
 USER root
 WORKDIR /root
