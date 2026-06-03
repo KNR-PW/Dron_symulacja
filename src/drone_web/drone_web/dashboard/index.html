@@ -52,6 +52,44 @@
             </div>
         </div> <!-- /dashboard -->
 
+        <section class="panel">
+            <h2>Pool gallery</h2>
+            <div id="pool-gallery" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">
+                <div class="pool-tile" data-pool="1">
+                    <div class="pool-label">Basen 1 (250 m)</div>
+                    <img id="pool-img-1" alt="Basen 1" style="width:100%;background:#eee;min-height:120px;">
+                    <div class="pool-tag" id="pool-tag-1">-</div>
+                </div>
+                <div class="pool-tile" data-pool="2">
+                    <div class="pool-label">Basen 2 (500 m)</div>
+                    <img id="pool-img-2" alt="Basen 2" style="width:100%;background:#eee;min-height:120px;">
+                    <div class="pool-tag" id="pool-tag-2">-</div>
+                </div>
+                <div class="pool-tile" data-pool="3">
+                    <div class="pool-label">Basen 3 (750 m)</div>
+                    <img id="pool-img-3" alt="Basen 3" style="width:100%;background:#eee;min-height:120px;">
+                    <div class="pool-tag" id="pool-tag-3">-</div>
+                </div>
+                <div class="pool-tile" data-pool="4">
+                    <div class="pool-label">Basen 4 (swój)</div>
+                    <img id="pool-img-4" alt="Basen 4" style="width:100%;background:#eee;min-height:120px;">
+                    <div class="pool-tag" id="pool-tag-4">-</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Water measurements</h2>
+            <table id="measurements-table" style="width:100%;">
+                <thead>
+                    <tr><th>Pool</th><th>pH</th><th>Conductivity (µS/cm)</th><th>Temperature (°C)</th><th>Volume (ml)</th></tr>
+                </thead>
+                <tbody id="measurements-body">
+                    <tr id="meas-row-4"><td>4</td><td class="ph">-</td><td class="ec">-</td><td class="temp">-</td><td class="ml">-</td></tr>
+                </tbody>
+            </table>
+        </section>
+
         <!-- ========================= MISSION LOG ======================== -->
         <section class="log-panel panel">
             <h2>Mission Log <span id="log-counter" style="font-size: 0.8em; color: #7f8c8d; margin-left: 10px;">(0)</span></h2>
@@ -98,6 +136,14 @@
 
         ws.onmessage = function(event) {
             var data = JSON.parse(event.data);
+            if (data.type === 'photo') {
+                handlePhoto(data);
+                return;
+            }
+            if (data.type === 'measurement') {
+                handleMeasurement(data);
+                return;
+            }
             for (var key in paramMap) {
                 var el = document.getElementById(paramMap[key]);
                 if (el && data[key] !== undefined) {
@@ -105,6 +151,36 @@
                 }
             }
         };
+
+        function handlePhoto(data) {
+            var img = document.getElementById('pool-img-' + data.pool_id);
+            var tag = document.getElementById('pool-tag-' + data.pool_id);
+            if (img && data.url) {
+                img.src = data.url + '?t=' + Date.now();
+            }
+            if (tag) {
+                tag.textContent = data.tag || '';
+            }
+        }
+
+        function ensureMeasRow(poolId) {
+            var existing = document.getElementById('meas-row-' + poolId);
+            if (existing) return existing;
+            var body = document.getElementById('measurements-body');
+            var tr = document.createElement('tr');
+            tr.id = 'meas-row-' + poolId;
+            tr.innerHTML = '<td>' + poolId + '</td><td class="ph">-</td><td class="ec">-</td><td class="temp">-</td><td class="ml">-</td>';
+            body.appendChild(tr);
+            return tr;
+        }
+
+        function handleMeasurement(data) {
+            var row = ensureMeasRow(data.pool_id);
+            if (data.ph !== undefined && data.ph !== null) row.querySelector('.ph').textContent = data.ph;
+            if (data.conductivity !== undefined && data.conductivity !== null) row.querySelector('.ec').textContent = data.conductivity;
+            if (data.temperature !== undefined && data.temperature !== null) row.querySelector('.temp').textContent = data.temperature;
+            if (data.ml !== undefined && data.ml !== null) row.querySelector('.ml').textContent = data.ml;
+        }
 
         ws.onclose = function() {
             setIndicator('offline');

@@ -8,8 +8,10 @@ Node `drone_handler_px4` z service'iem `preflight_calibration_control_service` u
 
 - Wysyła wiadomości `PreflightCalibrationControl` na topic `/fmu/in/preflight_calibration_control`
 - Obsługuje dwa działania:
-  - **action=1** - START kalibracji serwomechanizmu
-  - **action=0** - STOP kalibracji
+  - **action=0** - STOP kalibracji.
+  - **action=1** - START kalibracji serwomechanizmu.
+  - **action=2** - ZAPISANIE danych do parametersów.
+  - **action=3** - WCZYTANIE danych z parametersów.
 
 ### Wymagania
 
@@ -50,7 +52,7 @@ def main(args=None):
         print("TestClient created - service is ready!")
         
         print("Sending calibration START (action=1)...")
-        mission.start_calib(1)  # Valid actions: 0=STOP, 1=START
+        mission.start_calib(1)  # Valid actions: 0=STOP, 1=START, 2=READ, 3=WRITE
         
         print("Waiting for response...")
         time.sleep(2)

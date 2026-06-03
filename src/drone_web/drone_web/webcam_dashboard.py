@@ -25,12 +25,15 @@ from drone_interfaces.msg import Telemetry
 from sensor_msgs.msg import Image
 
 DASHBOARD_DIR = os.path.join(os.path.dirname(__file__), "dashboard")
+MISSION_DATA_DIR = os.path.join(DASHBOARD_DIR, "mission_data")
+os.makedirs(MISSION_DATA_DIR, exist_ok=True)
 
 pcs = set()
 websockets = set()
 status_lock = threading.Lock()
 ros_node = None
 camera_topic = '/oak/rgb/image_raw'
+main_loop = None
 
 _static_cache = {}
 
@@ -48,6 +51,9 @@ status_data = {
     "water_temp": "--",
     "last_update": "-",
 }
+
+mission_photos = {}
+latest_measurements = {}
 
 _no_signal_cached = None
 
@@ -192,13 +198,32 @@ async def websocket_handler(request):
     return ws
 
 
+async def _broadcast_ws(payload: dict):
+    if not websockets:
+        return
+    data = json.dumps(payload)
+    for ws in list(websockets):
+        try:
+            await ws.send_str(data)
+        except Exception:
+            websockets.discard(ws)
+
+
+def broadcast_from_thread(payload: dict):
+    if main_loop is None:
+        return
+    asyncio.run_coroutine_threadsafe(_broadcast_ws(payload), main_loop)
+
+
 async def telemetry_broadcast_task(app):
     global _last_telemetry_json
     try:
         while True:
             if websockets:
                 with status_lock:
-                    data = json.dumps(status_data)
+                    snapshot = dict(status_data)
+                snapshot["type"] = "telemetry"
+                data = json.dumps(snapshot)
                 if data != _last_telemetry_json:
                     _last_telemetry_json = data
                     for ws in list(websockets):
@@ -209,6 +234,74 @@ async def telemetry_broadcast_task(app):
             await asyncio.sleep(0.1)
     except asyncio.CancelledError:
         pass
+
+
+async def upload_photo(request: web.Request) -> web.Response:
+    reader = await request.multipart()
+    pool_id = None
+    tag = ""
+    saved_path = None
+    saved_name = None
+    while True:
+        field = await reader.next()
+        if field is None:
+            break
+        if field.name == "pool_id":
+            pool_id = (await field.text()).strip()
+        elif field.name == "tag":
+            tag = (await field.text()).strip()
+        elif field.name == "image":
+            ts = int(time.time() * 1000)
+            ext = os.path.splitext(field.filename or "img.jpg")[1] or ".jpg"
+            saved_name = f"pool{pool_id or 'x'}_{ts}{ext}"
+            saved_path = os.path.join(MISSION_DATA_DIR, saved_name)
+            with open(saved_path, "wb") as f:
+                while True:
+                    chunk = await field.read_chunk()
+                    if not chunk:
+                        break
+                    f.write(chunk)
+    if pool_id is None or saved_path is None:
+        return web.json_response({"ok": False, "error": "pool_id and image required"}, status=400)
+    url = f"/mission_data/{saved_name}"
+    with status_lock:
+        mission_photos[str(pool_id)] = {"url": url, "tag": tag, "ts": time.time()}
+    await _broadcast_ws({"type": "photo", "pool_id": str(pool_id), "url": url, "tag": tag})
+    return web.json_response({"ok": True, "url": url})
+
+
+async def upload_measurement(request: web.Request) -> web.Response:
+    try:
+        payload = await request.json()
+    except Exception:
+        return web.json_response({"ok": False, "error": "invalid json"}, status=400)
+    pool_id = str(payload.get("pool_id", ""))
+    if not pool_id:
+        return web.json_response({"ok": False, "error": "pool_id required"}, status=400)
+    record = {
+        "pool_id": pool_id,
+        "ph": payload.get("ph"),
+        "conductivity": payload.get("conductivity"),
+        "temperature": payload.get("temperature"),
+        "ml": payload.get("ml"),
+        "ts": time.time(),
+    }
+    with status_lock:
+        latest_measurements[pool_id] = record
+        if record["temperature"] is not None:
+            status_data["water_temp"] = f"{record['temperature']} °C"
+    await _broadcast_ws({"type": "measurement", **record})
+    return web.json_response({"ok": True})
+
+
+async def mission_data(request: web.Request) -> web.Response:
+    name = request.match_info["name"]
+    if "/" in name or "\\" in name or name.startswith("."):
+        return web.Response(status=400, text="bad name")
+    path = os.path.join(MISSION_DATA_DIR, name)
+    if not os.path.isfile(path):
+        return web.Response(status=404)
+    return web.FileResponse(path)
 
 
 async def offer(request: web.Request) -> web.Response:
@@ -251,6 +344,8 @@ async def offer(request: web.Request) -> web.Response:
 
 
 async def on_startup(app: web.Application):
+    global main_loop
+    main_loop = asyncio.get_running_loop()
     app['telemetry_task'] = asyncio.create_task(telemetry_broadcast_task(app))
 
 
@@ -293,6 +388,9 @@ def main(args=None):
     app.router.add_get("/client.js", javascript)
     app.router.add_post("/offer", offer)
     app.router.add_get("/ws", websocket_handler)
+    app.router.add_post("/api/photo", upload_photo)
+    app.router.add_post("/api/measurement", upload_measurement)
+    app.router.add_get("/mission_data/{name}", mission_data)
     web.run_app(app, host=parsed.host, port=parsed.port)
 
 

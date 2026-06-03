@@ -29,6 +29,7 @@ setup(
             'coverage_node=drone_autonomy.coverage_node:main',
             'PID_test_mission=drone_autonomy.PID_test_mission:main',
             'field_test_of_velocity=drone_autonomy.field_test_of_velocity:main',
+            'hydrolab_full_mission=drone_autonomy.testyHydrolab.hydrolab_full_mission:main',
         ],
     },
 )
