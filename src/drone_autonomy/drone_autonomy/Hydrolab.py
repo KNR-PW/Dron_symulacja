@@ -151,7 +151,7 @@ def center_over_pool(mission: DroneController,
     Po wycentrowaniu robi zdjecie."""
 
     # parametry velocity servoing
-    Kp               = 0.05
+    Kp               = 0.03
     MAX_CORR         = 0.5
     CENTER_THRESH    = 60
     STABLE    = 5

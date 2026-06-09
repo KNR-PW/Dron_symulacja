@@ -50,8 +50,9 @@ class DroneController(Node):
             self._wait_for_service(self._speed_client, NAMESPACE_HARDWARE+'set_speed')
         self._photo_client = self.create_client(MakePhoto, '/mission_make_photo')
 
-        timeout_time = Duration(seconds = 5,nanoseconds = 0)
-        self.is_motor_available = self._wait_for_service(self._dc_motor_control, NAMESPACE_HARDWARE+'dc_motor_control', timeout = timeout_time)
+        self.is_motor_available = self._dc_motor_control.wait_for_service(timeout_sec=5.0)
+        if not self.is_motor_available:
+            self.get_logger().warn(f"Service {NAMESPACE_HARDWARE+'dc_motor_control'} not available")
         # self._wait_for_service(self._start_video_client, 'turn_on_video')
         # self._wait_for_service(self._stop_video_client, 'turn_off_video')
 
