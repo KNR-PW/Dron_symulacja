@@ -32,6 +32,12 @@ class PoolDetector(Node):
             camera_topic,
             self.camera_callback,
             10)
+        
+        self.pool_detect_image = self.create_publisher(
+            Image,
+            "/pool_detect_image",
+            10
+        )
 
         self.br = CvBridge()
         self.frame = None
@@ -44,6 +50,11 @@ class PoolDetector(Node):
 
         self._scan_lock = threading.Lock()
         self._scan_hits = []  
+
+    def send_pool(self):
+        msg = Image()
+        msg.data = self.br.cv2_to_imgmsg(self.frame)
+        self.pool_detect_image.publish(msg)
 
     def camera_callback(self, msg):
         frame = self.br.imgmsg_to_cv2(msg, desired_encoding='passthrough')
@@ -250,11 +261,13 @@ def main(args=None):
             mission.send_goto_relative(*wp)
             time.sleep(5.0)
 
+            detector.send_pool()
             found = detector.scan(5.0)
             if not found:
                 mission.get_logger().warn(f"Pool {idx}: not detected.")
                 continue
-
+            
+            
             mission.get_logger().info(f"Pool {idx}: detected.")
             center_over_pool(mission, detector, tag=f"pool{idx}")
             if is_last:

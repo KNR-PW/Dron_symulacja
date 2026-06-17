@@ -1,0 +1,56 @@
+#VRML_SIM R2025a utf8
+
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackground.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/floors/protos/Floor.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/appearances/protos/Grass.proto"
+IMPORTABLE EXTERNPROTO "../protos/Iris.proto"
+IMPORTABLE EXTERNPROTO "../protos/Dummy.proto"
+
+WorldInfo {
+  title "Swarm Simulation"
+  basicTimeStep 2
+  FPS 20
+}
+Viewpoint {
+  orientation 0.32326261623133135 -0.39127509135492217 -0.8616293192739394 4.611446385344467
+  position -8.39048 -20.7176 18.7881
+  follow "Iris"
+  followSmoothness 0.01
+}
+TexturedBackground {
+}
+TexturedBackgroundLight {
+}
+Floor {
+  size 1000 1000
+  appearance Grass {
+  }
+}
+# Dummy wisi w miejscu.
+DEF Dummy Dummy {
+  translation 10 10 10
+  name "dummy_target"
+}
+
+DEF Iris Iris {
+  translation 0 0 0.1
+  rotation 1.96082e-06 1.96082e-06 1 1.5708
+  controller "ardupilot_sitl_controller"
+  controllerArgs [
+    "--motors"
+    "m1_motor, m2_motor, m3_motor, m4_motor"
+    "--camera"
+    "camera"
+    "--camera-port"
+    "5599"
+  ]
+  extensionSlot [
+    DEF camera Camera {
+      translation 0.05 0 -0.05
+      rotation 0 1 0 1.57
+      width 640
+      height 480
+    }
+  ]
+}

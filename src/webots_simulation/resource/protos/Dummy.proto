@@ -1,0 +1,78 @@
+# VRML_SIM R2022b utf8
+# Dummy - brak sterowania, fizyki i usunięte bounding boxy 
+PROTO Dummy [
+  field  SFVec3f     translation     0 0 1
+  field  SFRotation  rotation        0 0 1 0
+  field  SFString    name            "dummy"
+]
+{
+  Solid {
+    translation IS translation
+    rotation IS rotation
+    name IS name
+    children [
+      DEF DUMMY_MESH Shape {
+        appearance PBRAppearance {
+          baseColor 0.05 0.05 0.05
+          roughness 1.000000
+          metalness 0.2
+        }
+        geometry Mesh {
+          url "meshes/iris.dae"
+        }
+        castShadows FALSE
+      }
+
+      DEF PROP1 Pose {
+        translation 0.130000 -0.220000 0.023000
+        children [
+          Shape {
+            appearance DEF PROP_BLUE PBRAppearance {
+              baseColor 0 0 0.75
+              metalness 0.3
+            }
+            geometry DEF CCW_PROP Mesh {
+              url [
+                "meshes/iris_prop_ccw.dae"
+              ]
+            }
+          }
+        ]
+      }
+      DEF PROP2 Pose {
+        translation -0.130000 0.200000 0.023000
+        children [
+          Shape {
+            appearance DEF PROP_BLACK PBRAppearance {
+              baseColor 0 0 0
+              metalness 0.3
+            }
+            geometry USE CCW_PROP
+          }
+        ]
+      }
+      DEF PROP3 Pose {
+        translation 0.130000 0.220000 0.023000
+        children [
+          Shape {
+            appearance USE PROP_BLUE
+            geometry DEF CW_PROP Mesh {
+              url [
+                "meshes/iris_prop_cw.dae"
+              ]
+            }
+          }
+        ]
+      }
+      DEF PROP4 Pose {
+        translation -0.130000 -0.200000 0.023000
+        children [
+          Shape {
+            appearance USE PROP_BLACK
+            geometry USE CW_PROP
+          }
+        ]
+      }
+    ]
+  }
+}
