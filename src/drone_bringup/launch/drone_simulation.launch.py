@@ -30,7 +30,7 @@ def generate_launch_description():
             package='ros2_aruco',
             executable='aruco_node',
         )
-    
+
     mission_make_photo_server = Node(
         package='drone_camera',
         executable='images_recorder',
@@ -75,7 +75,7 @@ def generate_launch_description():
                 "camera_topic": 'camera',}
            ]
         )
-    
+
     web_inspekcja = Node(
            package='drone_web',
            executable='ros_report_website',

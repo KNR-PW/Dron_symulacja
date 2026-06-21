@@ -13,8 +13,8 @@ RUN apt-get update && apt-get install -y locales \
 ENV LANG=en_US.UTF-8
 
 # Install necessary dependencies
-RUN apt-get update 
-RUN apt-get install -y curl 
+RUN apt-get update
+RUN apt-get install -y curl
 RUN apt-get install -y software-properties-common
 
 # Add the ROS 2 apt repository
@@ -31,23 +31,22 @@ RUN apt install -y python3-colcon-common-extensions
 RUN echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
 
 # Install requirements
-RUN apt update && apt install -y \ 
-    git \ 
-    sudo \ 
-    python3-pip \ 
-    python3-dev \ 
-    python3-matplotlib \ 
-    python3-lxml \ 
-    python3-pil \ 
-    python3-setuptools \ 
-    python3-future \ 
+RUN apt update && apt install -y \
+    git \
+    sudo \
+    python3-pip \
+    python3-dev \
+    python3-matplotlib \
+    python3-lxml \
+    python3-pil \
+    python3-setuptools \
+    python3-future \
     ros-humble-webots-ros2-driver \
     ros-humble-tf-transformations
 
 RUN pip install \
     empy==3.3.4 \
     # numpy==1.26.4 \
-    numpy==1.23 \
     lark==1.2.2 \
     MAVProxy==1.8.71 \
     dronekit \
@@ -57,7 +56,7 @@ RUN pip install \
     tabulate \
     paho-mqtt \
     requests
-
+RUN pip install -U ultralytics "numpy==1.23"
 # Fix dronekit
 RUN sed -i 's/collections.MutableMapping/collections.abc.MutableMapping/g' /usr/local/lib/python3.10/dist-packages/dronekit/__init__.py
 
@@ -82,5 +81,34 @@ RUN git clone --recurse-submodules --depth=1 https://github.com/ArduPilot/ardupi
     git config --global --add safe.directory /tools/ardupilot
 
 USER root
+RUN apt-get update
+RUN apt-get install curl lsb-release gnupg -y
+RUN curl https://packages.osrfoundation.org/gazebo.gpg --output /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg
+RUN echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] https://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/gazebo-stable.list > /dev/null
+RUN apt-get update && apt-get install gz-harmonic -y
+
+RUN apt update && apt install python3-rosdep -y
+RUN rosdep init
+RUN rosdep update
+RUN apt install libgz-sim8-dev rapidjson-dev -y
+RUN apt install libopencv-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-gl -y
+RUN bash -c 'wget https://raw.githubusercontent.com/osrf/osrf-rosdep/master/gz/00-gazebo.list -O /etc/ros/rosdep/sources.list.d/00-gazebo.list'
+RUN rosdep update
+RUN rosdep resolve gz-harmonic
+RUN export GZ_VERSION=harmonic
+RUN bash -c 'wget https://raw.githubusercontent.com/osrf/osrf-rosdep/master/gz/00-gazebo.list -O /etc/ros/rosdep/sources.list.d/00-gazebo.list'
+RUN rosdep update
+RUN rosdep resolve gz-harmonic
+WORKDIR /tools
+RUN git clone https://github.com/ArduPilot/ardupilot_gazebo && cd ardupilot_gazebo && mkdir build && cd build
+WORKDIR /tools/ardupilot_gazebo/build
+RUN cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo
+RUN make -j4
+
+RUN echo 'export GZ_SIM_SYSTEM_PLUGIN_PATH=/tools/ardupilot_gazebo/build:${GZ_SIM_SYSTEM_PLUGIN_PATH}' >> ~/.bashrc
+RUN echo 'export GZ_SIM_RESOURCE_PATH=/tools/ardupilot_gazebo/models:/tools/ardupilot_gazebo/worlds:${GZ_SIM_RESOURCE_PATH}' >> ~/.bashrc
+
 WORKDIR /root
+
+
 CMD ["/bin/bash"]

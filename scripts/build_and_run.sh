@@ -5,4 +5,4 @@ elif docker ps --filter "status=running" --format '{{.Names}}' | grep -Fxq "knr_
     ./dockerise_cmd.sh "cd ~/ros_ws && colcon build && source install/setup.bash && ros2 run drone_hardware drone_handler_px4"
 else
     echo "you should start the docker container"
-fi  
+fi
