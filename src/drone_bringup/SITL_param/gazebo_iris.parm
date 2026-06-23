@@ -1,0 +1,5 @@
+FRAME_CLASS      1          # Multirotor
+FRAME_TYPE       1          # X class
+
+BATT_MONITOR     4          # Analog Voltage and Current (model Gazebo nie symuluje baterii,
+                            # wlaczamy monitor, by SITL raportowal napiecie/procenty)

@@ -1,1 +1,1 @@
-docker exec -it knr_drone bash -c "git config --global --add safe.directory /tools/ardupilot && /tools/ardupilot/Tools/autotest/sim_vehicle.py -v ArduCopter -w -f gazebo-iris --model JSON"
+docker exec -it knr_drone bash -c "git config --global --add safe.directory /tools/ardupilot && /tools/ardupilot/Tools/autotest/sim_vehicle.py -v ArduCopter -w -f gazebo-iris --model JSON --add-param-file=/root/ros_ws/src/drone_bringup/SITL_param/gazebo_iris.parm"
