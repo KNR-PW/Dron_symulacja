@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<sdf version="1.6">
+  <model name="tent">
+    <static>true</static>
+    <link name="base_link">
+      <visual name="visual">
+        <geometry>
+           <mesh>
+            <uri>mesh/tent.dae</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <ambient>0.2 0.8 0.2 1.0</ambient>
+          <diffuse>0.2 0.8 0.2 1.0</diffuse>
+          <specular>0.1 0.1 0.1 1.0</specular>
+          <pbr>
+            <metal>
+              <albedo_map>mesh/tent.png</albedo_map>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <collision name="collision">
+        <pose>0 0 1.5 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>3.0 3.0 3.0</size>
+          </box>
+        </geometry>
+      </collision>
+    </link>
+  </model>
+</sdf>

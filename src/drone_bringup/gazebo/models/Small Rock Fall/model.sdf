@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<sdf version="1.6">
+  <model name="small_rock_fall">
+    <static>true</static>
+    <link name="base_link">
+      <collision name="collision">
+        <geometry>
+          <mesh>
+            <uri>meshes/FallingRock06.dae</uri>
+            <scale>0.75 0.75 0.75</scale>
+          </mesh>
+        </geometry>
+      </collision>
+      <visual name="visual">
+        <geometry>
+          <mesh>
+            <uri>meshes/FallingRock06.dae</uri>
+            <scale>0.75 0.75 0.75</scale>
+          </mesh>
+        </geometry>
+        <material>
+          <ambient>0.36 0.34 0.33 1.0</ambient>
+          <diffuse>0.43 0.41 0.40 1.0</diffuse>
+          <specular>0.07 0.07 0.07 1.0</specular>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>
+
