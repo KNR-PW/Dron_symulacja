@@ -202,13 +202,13 @@
     <include>
       <name>tent_target</name>
       <pose>30 0 0.55 0 0 0</pose>
-      <uri>model://tent_purple</uri>
+      <uri>model://tent_green</uri>
       <static>true</static>
     </include>
 
     <model name="drone_spawn_platform">
       <static>true</static>
-      <pose>0 0 40 0 0 0</pose>
+      <pose>-20 0 30 0 0 0</pose>
       <link name="link">
         <collision name="collision">
           <geometry>
@@ -221,7 +221,7 @@
     </model>
       <include>
       <uri>model://iris_with_gimbal</uri>
-      <pose degrees="true">0 0 0.195 0 0 90</pose>
+      <pose degrees="true">-20 0 30.25 0 0 0</pose>
     </include>
 </world>
 </sdf>
