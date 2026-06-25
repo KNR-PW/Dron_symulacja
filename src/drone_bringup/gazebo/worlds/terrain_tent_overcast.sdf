@@ -1,0 +1,420 @@
+<?xml version='1.0' encoding='utf-8'?>
+<sdf version="1.9">
+  <world name="terrain_tent_overcast">
+    <physics type="ode">
+      <max_step_size>0.004</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>250</real_time_update_rate>
+    </physics>
+    <gravity>0 0 -9.8</gravity>
+    <magnetic_field>6e-06 2.3e-05 -4.2e-05</magnetic_field>
+    <atmosphere type="adiabatic" />
+    <scene>
+      <grid>false</grid>
+      <!-- Slightly darker ambient + sky-like background for more realistic camera frames -->
+      <ambient>0.28 0.31 0.36 1</ambient>
+      <background>0.62 0.67 0.74 1</background>
+      <shadows>true</shadows>
+      <sky>
+        <clouds>
+          <speed>18</speed>
+        </clouds>
+      </sky>
+    </scene>
+
+    <gui fullscreen='0'>
+      <plugin name='3D View' filename='GzScene3D'>
+        <gz-gui>
+          <title>3D View</title>
+          <property type='bool' key='showTitleBar'>false</property>
+          <property type='string' key='state'>docked</property>
+        </gz-gui>
+        <engine>ogre2</engine>
+        <scene>scene</scene>
+        <ambient_light>0.4 0.4 0.4</ambient_light>
+        <background_color>0.8 0.8 0.8</background_color>
+        <camera_pose>-6 0 6 0 0.5 0</camera_pose>
+      </plugin>
+      <plugin name='World control' filename='WorldControl'>
+        <gz-gui>
+          <title>World control</title>
+          <property type='bool' key='showTitleBar'>false</property>
+          <property type='string' key='state'>docked</property>
+          <property type='double' key='height'>72</property>
+          <property type='double' key='width'>121</property>
+          <property type='double' key='z'>1</property>
+          <property type='string' key='anchor'>bottom</property>
+        </gz-gui>
+        <play_pause>true</play_pause>
+        <step>true</step>
+        <start_paused>true</start_paused>
+        <use_event>true</use_event>
+      </plugin>
+      <plugin name='World stats' filename='WorldStats'>
+        <gz-gui>
+          <title>World stats</title>
+          <property type='bool' key='showTitleBar'>false</property>
+          <property type='string' key='state'>docked</property>
+          <property type='double' key='height'>110</property>
+          <property type='double' key='width'>290</property>
+          <property type='double' key='z'>1</property>
+          <property type='string' key='anchor'>bottom_left</property>
+        </gz-gui>
+        <sim_time>true</sim_time>
+        <real_time>true</real_time>
+        <real_time_factor>true</real_time_factor>
+        <iterations>true</iterations>
+      </plugin>
+      <plugin name='Entity tree' filename='EntityTree'>
+        <gz-gui>
+          <property key='state' type='string'>docked</property>
+          <property key='showTitleBar' type='bool'>true</property>
+          <property key='width' type='double'>300</property>
+          <property key='height' type='double'>420</property>
+          <property key='anchor' type='string'>right</property>
+        </gz-gui>
+      </plugin>
+      <plugin name='Transform control' filename='TransformControl'>
+        <gz-gui>
+          <title>Transform control</title>
+          <property key='state' type='string'>docked</property>
+          <property key='showTitleBar' type='bool'>true</property>
+          <property key='width' type='double'>300</property>
+          <property key='height' type='double'>120</property>
+          <property key='anchor' type='string'>right</property>
+        </gz-gui>
+      </plugin>
+      <plugin name='Component inspector' filename='ComponentInspector'>
+        <gz-gui>
+          <title>Component inspector</title>
+          <property key='state' type='string'>docked</property>
+          <property key='showTitleBar' type='bool'>true</property>
+          <property key='width' type='double'>300</property>
+          <property key='height' type='double'>260</property>
+          <property key='anchor' type='string'>right</property>
+        </gz-gui>
+      </plugin>
+      <plugin name='Drone Camera' filename='ImageDisplay'>
+        <gz-gui>
+          <property key='state' type='string'>floating</property>
+          <property key='width' type='double'>400</property>
+          <property key='height' type='double'>300</property>
+          <property key='y' type='double'>0</property>
+          <property key='x' type='double'>0</property>
+          <property key='showTitleBar' type='bool'>true</property>
+        </gz-gui>
+        <topic>/rgb_camera/image</topic>
+      </plugin>
+    </gui>
+
+    <light name="sunUTC" type="directional">
+      <pose>0 0 500 0 -0 0</pose>
+      <cast_shadows>true</cast_shadows>
+      <intensity>0.62</intensity>
+      <!-- Lower sun angle gives longer, more informative shadows for detection -->
+      <direction>0.02 0.02 -0.98</direction>
+      <diffuse>0.74 0.78 0.84 1</diffuse>
+      <specular>0.12 0.14 0.16 1</specular>
+      <attenuation>
+        <range>2000</range>
+        <linear>0</linear>
+        <constant>1</constant>
+        <quadratic>0</quadratic>
+      </attenuation>
+    </light>
+
+    <spherical_coordinates>
+      <surface_model>EARTH_WGS84</surface_model>
+      <world_frame_orientation>ENU</world_frame_orientation>
+      <latitude_deg>47.397971057728974</latitude_deg>
+      <longitude_deg>8.546163739800146</longitude_deg>
+      <elevation>0</elevation>
+    </spherical_coordinates>
+
+    <!-- Terrain -->
+    <include>
+      <name>city_terrain_1</name>
+      <pose>0 0 0 0 0 0</pose>
+      <uri>model://city_terrain_overcast</uri>
+    </include>
+
+    <!-- Ocean at water level -->
+    <include>
+      <name>ocean_2</name>
+      <pose>40 -20 -2 0 0 0</pose>
+      <uri>model://ocean</uri>
+    </include>
+
+    <!--
+      Dataset anchor:
+      If terrain / ground level changes, update ONLY this pose (especially Z).
+      All target and clutter objects are placed relative to this anchor.
+    -->
+    <frame name="dataset_anchor">
+      <pose>15.19 -197.69 2.29 0 0 0</pose>
+    </frame>
+
+    <!-- Single target tent -->
+    <include>
+      <name>tent_target</name>
+      <pose relative_to="dataset_anchor">0 0 0 0 0 0.55</pose>
+      <uri>model://tent</uri>
+      <static>true</static>
+    </include>
+
+   
+
+    <!-- Mixed trees (new + existing) -->
+    <include>
+      <name>tree_1_a</name>
+      <pose relative_to="dataset_anchor">24.0 18.0 0 0 0 0.20</pose>
+      <uri>model://tree_1</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>tree_2_a</name>
+      <pose relative_to="dataset_anchor">-30.0 20.0 0 0 0 0.90</pose>
+      <uri>model://tree_2</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>tree_3_a</name>
+      <pose relative_to="dataset_anchor">34.0 -12.0 0 0 0 1.10</pose>
+      <uri>model://tree_3</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>tree_4_a</name>
+      <pose relative_to="dataset_anchor">-38.0 -24.0 0 0 0 0.70</pose>
+      <uri>model://tree_4</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>tree_5_a</name>
+      <pose relative_to="dataset_anchor">10.0 -34.0 0 0 0 2.10</pose>
+      <uri>model://tree_5</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>tree_6_a</name>
+      <pose relative_to="dataset_anchor">-6.0 38.0 0 0 0 2.60</pose>
+      <uri>model://tree_6</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>tree_7_a</name>
+      <pose relative_to="dataset_anchor">42.0 8.0 0 0 0 1.40</pose>
+      <uri>model://tree_7</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>palm_tree_a</name>
+      <pose relative_to="dataset_anchor">-26.0 -34.0 0 0 0 0.50</pose>
+      <uri>model://palm_tree</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>oak_tree_a</name>
+      <pose relative_to="dataset_anchor">30.0 30.0 0 0 0 1.30</pose>
+      <uri>model://Oak tree</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>pine_tree_a</name>
+      <pose relative_to="dataset_anchor">-34.0 30.0 0 0 0 2.20</pose>
+      <uri>model://Pine Tree</uri>
+      <static>true</static>
+    </include>
+
+    <!-- Extra oak forest further away from target -->
+    <include>
+      <name>oak_forest_1</name>
+      <pose relative_to="dataset_anchor">58.0 46.0 0 0 0 0.20</pose>
+      <uri>model://Oak tree</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>oak_forest_2</name>
+      <pose relative_to="dataset_anchor">64.0 38.0 0 0 0 1.00</pose>
+      <uri>model://Oak tree</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>oak_forest_3</name>
+      <pose relative_to="dataset_anchor">72.0 50.0 0 0 0 2.30</pose>
+      <uri>model://Oak tree</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>oak_forest_4</name>
+      <pose relative_to="dataset_anchor">54.0 60.0 0 0 0 2.70</pose>
+      <uri>model://Oak tree</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>oak_forest_5</name>
+      <pose relative_to="dataset_anchor">80.0 42.0 0 0 0 1.60</pose>
+      <uri>model://Oak tree</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>oak_forest_6</name>
+      <pose relative_to="dataset_anchor">67.0 64.0 0 0 0 0.70</pose>
+      <uri>model://Oak tree</uri>
+      <static>true</static>
+    </include>
+
+    <!-- Bush ring near target -->
+    <include>
+      <name>bush_1_a</name>
+      <pose relative_to="dataset_anchor">-9.0 5.0 0 0 0 2.30</pose>
+      <uri>model://bush_1</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>bush_2_a</name>
+      <pose relative_to="dataset_anchor">6.0 -10.0 0 0 0 1.50</pose>
+      <uri>model://bush_2</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>bush_3_a</name>
+      <pose relative_to="dataset_anchor">-12.0 -8.0 0 0 0 0.90</pose>
+      <uri>model://bush_3</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>bush_4_a</name>
+      <pose relative_to="dataset_anchor">14.0 -14.0 0 0 0 2.70</pose>
+      <uri>model://bush_4</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>bush_5_a</name>
+      <pose relative_to="dataset_anchor">-16.0 12.0 0 0 0 1.80</pose>
+      <uri>model://bush_5</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>bush_1_b</name>
+      <pose relative_to="dataset_anchor">-5.5 -4.0 0 0 0 2.10</pose>
+      <uri>model://bush_1</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>bush_2_b</name>
+      <pose relative_to="dataset_anchor">0.8 9.0 0 0 0 1.20</pose>
+      <uri>model://bush_2</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>bush_3_b</name>
+      <pose relative_to="dataset_anchor">10.5 0.5 0 0 0 0.80</pose>
+      <uri>model://bush_3</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>bush_4_b</name>
+      <pose relative_to="dataset_anchor">-10.8 1.0 0 0 0 2.60</pose>
+      <uri>model://bush_4</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>bush_5_b</name>
+      <pose relative_to="dataset_anchor">2.5 12.0 0 0 0 1.50</pose>
+      <uri>model://bush_5</uri>
+      <static>true</static>
+    </include>
+
+    <!-- Rock clutter (hard negatives / occlusions) -->
+    <include>
+      <name>falling_rock_1</name>
+      <pose relative_to="dataset_anchor">5.0 9.0 0.05 0 0 0.70</pose>
+      <uri>model://Falling Rock 2</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>falling_rock_2</name>
+      <pose relative_to="dataset_anchor">-8.0 -6.0 0.05 0 0 1.60</pose>
+      <uri>model://Falling Rock 2</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>falling_rock_3</name>
+      <pose relative_to="dataset_anchor">14.0 10.0 0.05 0 0 0.30</pose>
+      <uri>model://Falling Rock 2</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>falling_rock_4</name>
+      <pose relative_to="dataset_anchor">-14.0 -12.0 0.05 0 0 2.40</pose>
+      <uri>model://Falling Rock 2</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>small_rock_1</name>
+      <pose relative_to="dataset_anchor">2.0 -7.0 0.05 0 0 0.20</pose>
+      <uri>model://Small Rock Fall</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>small_rock_2</name>
+      <pose relative_to="dataset_anchor">-3.5 5.5 0.05 0 0 2.00</pose>
+      <uri>model://Small Rock Fall</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>small_rock_3</name>
+      <pose relative_to="dataset_anchor">11.5 1.8 0.05 0 0 0.50</pose>
+      <uri>model://Small Rock Fall</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>small_rock_4</name>
+      <pose relative_to="dataset_anchor">-13.0 15.0 0.05 0 0 1.10</pose>
+      <uri>model://Small Rock Fall</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>small_rock_5</name>
+      <pose relative_to="dataset_anchor">7.5 13.0 0.05 0 0 0.60</pose>
+      <uri>model://Small Rock Fall</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>small_rock_6</name>
+      <pose relative_to="dataset_anchor">-6.0 11.0 0.05 0 0 2.20</pose>
+      <uri>model://Small Rock Fall</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>small_rock_7</name>
+      <pose relative_to="dataset_anchor">15.0 -4.5 0.05 0 0 1.40</pose>
+      <uri>model://Small Rock Fall</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>small_rock_8</name>
+      <pose relative_to="dataset_anchor">-17.0 2.0 0.05 0 0 2.80</pose>
+      <uri>model://Small Rock Fall</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>small_rock_9</name>
+      <pose relative_to="dataset_anchor">0.0 -15.0 0.05 0 0 0.90</pose>
+      <uri>model://Small Rock Fall</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>small_rock_10</name>
+      <pose relative_to="dataset_anchor">18.0 16.0 0.05 0 0 1.90</pose>
+      <uri>model://Small Rock Fall</uri>
+      <static>true</static>
+    </include>
+
+      <include>
+      <uri>model://iris_with_gimbal</uri>
+      <pose degrees="true">0 0 0.195 0 0 90</pose>
+    </include>
+</world>
+</sdf>

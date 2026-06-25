@@ -1,0 +1,22 @@
+material Fence/WoodBoarding
+{
+  receive_shadows on
+
+  technique
+  {
+    pass
+    {
+			ambient 0.8 0.8 0.8 1.0
+			diffuse 0.5 0.5 0.5 1.0
+			specular 0.2 0.2 0.2 1.0 12.5
+
+      texture_unit
+      {
+        scale 1 1
+        texture woodboarding4.jpg
+        filtering anisotropic
+        max_anisotropy 16
+      }
+    }
+  }
+}

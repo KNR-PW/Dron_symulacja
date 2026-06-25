@@ -517,7 +517,13 @@ class DroneHandler(Node):
                 msg.global_lon = 0.0
                 msg.global_alt = 0.0
 
-            # 
+            # Orientacja w radianach (potrzebna m.in. dla tent_tracker)
+            att = self.vehicle.attitude
+            msg.roll = float(att.roll) if att and att.roll is not None else 0.0
+            msg.pitch = float(att.pitch) if att and att.pitch is not None else 0.0
+            msg.yaw = float(att.yaw) if att and att.yaw is not None else 0.0
+
+            #
             #if self._counter > 0:
             #    msg.battery_voltage = 11.5
             self.telemetry_publisher.publish(msg)

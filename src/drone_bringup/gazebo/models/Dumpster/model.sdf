@@ -1,0 +1,30 @@
+<?xml version="1.0" ?>
+<sdf version="1.5">
+  <model name="Dumpster">
+    <link name="link">
+      <collision name="collision">
+        <geometry>
+          <mesh>
+            <scale>1.5 1.5 1.5</scale>
+            <uri>model://Dumpster/meshes/dumpster.dae</uri>
+          </mesh>
+        </geometry>
+      </collision>
+      <visual name="visual">
+        <geometry>
+          <mesh>
+            <scale>1.5 1.5 1.5</scale>
+            <uri>model://Dumpster/meshes/dumpster.dae</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <script>
+            <uri>model://Dumpster/materials/scripts</uri>
+            <uri>model://Dumpster/materials/textures</uri>
+            <name>Dumpster/Diffuse</name>
+          </script>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>

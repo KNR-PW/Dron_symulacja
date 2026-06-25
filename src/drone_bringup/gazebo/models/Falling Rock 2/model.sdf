@@ -1,0 +1,40 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <model name="falling_rock2">
+    <link name="base_link">
+      <inertial>
+        <pose>-0.014732 -0.014451 0.003710 0 0 0</pose>
+        <mass>646.508</mass>
+        <inertia>
+          <ixx>49.62</ixx>
+          <ixy>4.08</ixy>
+          <ixz>-0.324</ixz>
+          <iyy>46.472</iyy>
+          <iyz>-3.926</iyz>
+          <izz>51.062</izz>
+        </inertia>
+      </inertial>
+      <collision name="collision">
+        <geometry>
+          <mesh>
+            <uri>meshes/FallingRock02_Collider.dae</uri>
+          </mesh>
+        </geometry>
+      </collision>
+
+      <visual name="visual">
+        <geometry>
+          <mesh>
+            <uri>meshes/FallingRock02.dae</uri>
+          </mesh>
+        </geometry>
+        <!-- Keep material local-only to avoid unresolved model:// URIs -->
+        <material>
+          <ambient>0.38 0.35 0.33 1.0</ambient>
+          <diffuse>0.45 0.42 0.40 1.0</diffuse>
+          <specular>0.08 0.08 0.08 1.0</specular>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>

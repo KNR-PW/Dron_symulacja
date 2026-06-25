@@ -14,3 +14,7 @@ float32 speed
 float64 global_lat
 float64 global_lon
 float32 global_alt
+
+float32 roll
+float32 pitch
+float32 yaw

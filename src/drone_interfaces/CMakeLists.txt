@@ -19,6 +19,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/MiddleOfAruco.msg"
   "msg/VelocityVectors.msg"
   "msg/Telemetry.msg"
+  "msg/TentDetection.msg"
   "srv/MakePhoto.srv"
   "srv/Dropper.srv"
   "srv/GetAttitude.srv"

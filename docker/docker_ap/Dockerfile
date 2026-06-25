@@ -77,7 +77,7 @@ USER ardupilot
 RUN git clone --recurse-submodules --depth=1 https://github.com/ArduPilot/ardupilot.git && \
     cd ardupilot && \
     ./Tools/environment_install/install-prereqs-ubuntu.sh -y && \
-    . ~/.profile \
+    . ~/.profile && \
     git config --global --add safe.directory /tools/ardupilot
 
 USER root

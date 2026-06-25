@@ -1,10 +1,8 @@
 from launch import LaunchDescription
 from launch_ros.actions import Node
-from launch.actions import TimerAction, ExecuteProcess
+from launch.actions import TimerAction, ExecuteProcess, DeclareLaunchArgument
 from launch.actions import SetEnvironmentVariable
-
-
-
+from launch.substitutions import LaunchConfiguration
 
 
 def generate_launch_description():
@@ -31,19 +29,32 @@ def generate_launch_description():
             ]
         )
 
+    # Swiat wybierany argumentem, np.:  ros2 launch ... world:=terrain_tent_sunset.sdf
+    world_arg = DeclareLaunchArgument(
+            'world',
+            default_value='aruco_plain.sdf',
+            description='Plik swiata Gazebo (.sdf) z GZ_SIM_RESOURCE_PATH'
+        )
+
     gazeboo = ExecuteProcess(
             cmd=[
-                'gz', 'sim', '-v4', '-r', 'iris_runway.sdf'
+                'gz', 'sim', '-v4', '-r', LaunchConfiguration('world')
             ]
         )
     return LaunchDescription([
+        world_arg,
         SetEnvironmentVariable(
           'GZ_SIM_SYSTEM_PLUGIN_PATH',
           '/tools/ardupilot_gazebo/build:${GZ_SIM_SYSTEM_PLUGIN_PATH}'
         ),
         SetEnvironmentVariable(
             'GZ_SIM_RESOURCE_PATH',
-            '/tools/ardupilot_gazebo/models:/tools/ardupilot_gazebo/worlds:${GZ_SIM_RESOURCE_PATH}'
+            # Najpierw swiaty/modele z projektu (montowane przez src/) - maja
+            # priorytet i pozwalaja nadpisywac wbudowane. Potem wbudowane w obraz.
+            '/root/ros_ws/src/drone_bringup/gazebo/models:'
+            '/root/ros_ws/src/drone_bringup/gazebo/worlds:'
+            '/tools/ardupilot_gazebo/models:/tools/ardupilot_gazebo/worlds:'
+            '${GZ_SIM_RESOURCE_PATH}'
         ),
         gazeboo,
         drone_handler_node_action

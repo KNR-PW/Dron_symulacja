@@ -1,0 +1,57 @@
+<?xml version="1.0" ?>
+<sdf version="1.9">
+  <model name="city_terrain_overcast">
+    <static>true</static>
+    <link name="link">
+      <pose>0 0 -5 0 0 0</pose>
+
+      <collision name="collision">
+        <geometry>
+          <heightmap>
+            <uri>model://city_terrain_overcast/materials/textures/city_terrain.jpg</uri>
+            <size>500 500 75</size>
+            <pos>40 -20 -5</pos>
+          </heightmap>
+        </geometry>
+      </collision>
+
+      <visual name="visual">
+        <geometry>
+          <heightmap>
+            <use_terrain_paging>false</use_terrain_paging>
+
+            <texture>
+              <diffuse>model://ocean/materials/textures/soil_sand_0045_01.jpg</diffuse>
+              <normal>model://city_terrain_overcast/materials/textures/flat_normal.png</normal>
+              <size>14</size>
+            </texture>
+            <blend>
+              <min_height>0</min_height>
+              <fade_dist>2.0</fade_dist>
+            </blend>
+
+            <texture>
+              <diffuse>model://ocean/materials/textures/soil_sand_0045_01.jpg</diffuse>
+              <normal>model://city_terrain_overcast/materials/textures/flat_normal.png</normal>
+              <size>10</size>
+            </texture>
+            <blend>
+              <min_height>3.0</min_height>
+              <fade_dist>7</fade_dist>
+            </blend>
+
+            <texture>
+              <diffuse>model://ocean/materials/textures/soil_sand_0045_01.jpg</diffuse>
+              <normal>model://city_terrain_overcast/materials/textures/flat_normal.png</normal>
+              <size>7</size>
+            </texture>
+
+            <uri>model://city_terrain_overcast/materials/textures/city_terrain.jpg</uri>
+            <size>500 500 75</size>
+            <pos>40 -20 -5</pos>
+          </heightmap>
+        </geometry>
+      </visual>
+    </link>
+  </model>
+</sdf>

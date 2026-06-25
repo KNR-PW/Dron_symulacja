@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<sdf version="1.6">
+  <model name="tent_white">
+    <static>true</static>
+    <link name="base_link">
+      <visual name="visual">
+        <geometry>
+          <mesh>
+            <uri>model://tent/mesh/tent.dae</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <ambient>0.82 0.82 0.80 1.0</ambient>
+          <diffuse>0.92 0.92 0.90 1.0</diffuse>
+          <specular>0.15 0.15 0.15 1.0</specular>
+        </material>
+      </visual>
+      <collision name="collision">
+        <pose>0 0 1.5 0 0 0</pose>
+        <geometry><box><size>3.0 3.0 3.0</size></box></geometry>
+      </collision>
+    </link>
+  </model>
+</sdf>
