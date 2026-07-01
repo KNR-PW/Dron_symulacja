@@ -4,7 +4,9 @@
 %         FASTRTPS profil UDP ustawiony (inaczej cisza na DDS).
 
 % --- wymus UDP transport (inaczej subscribery/actions moga nie dostawac danych) ---
-setenv('FASTRTPS_DEFAULT_PROFILES_FILE', '/home/hozaz/fastdds_udp.xml');
+home = getenv('HOME');
+if isempty(home), home = fullfile('/home', getenv('USER')); end
+setenv('FASTRTPS_DEFAULT_PROFILES_FILE', fullfile(home, 'fastdds_udp.xml'));
 setenv('ROS_DOMAIN_ID', '0');
 
 % --- kontroler ---
