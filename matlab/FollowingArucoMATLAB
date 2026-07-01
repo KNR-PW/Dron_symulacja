@@ -1,0 +1,47 @@
+% --- wymus UDP transport (inaczej subscribery/actions moga nie dostawac danych) ---
+setenv('ROS_DOMAIN_ID', '0');
+
+% --- kontroler ---
+d = DroneControllerMATLAB();
+d.arm();
+d.takeoff(5);
+% czekaj az wzniesie sie do ~5m, potem:
+d.goto_relative(1.0,2.0,0);
+
+% Following 
+sN = -1; axN = 1;
+sE = -1; axE = 2;
+Kp = 0.7; tol = 0.10; maxIter = 60;
+
+hFig = figure('Name','Following live');
+hImg = imshow(zeros(intr.ImageSize(1),intr.ImageSize(2),3,'uint8'));
+title('following - zamknij okno by stop');
+
+for i = 1:maxIter
+    if ~isvalid(hFig), fprintf("okno zamkniete, stop\n"); break; end
+    msg = receive(imgSub,5); img = rosReadImage(msg);
+    [ids,locs,poses] = readArucoMarker(img, dict, intr, markerSize);
+
+    if isempty(ids)
+        title('MARKER ZGUBIONY'); drawnow;
+        fprintf("marker zgubiony na iter %d\n", i); break;
+    end
+
+    t = poses(1).Translation;
+    north = sN * t(axN);
+    east  = sE * t(axE);
+    err = hypot(north, east);
+
+    c = locs(:,:,1); poly = reshape(c',1,[]);
+    img = insertShape(img,"polygon",poly,"Color","green","LineWidth",3);
+    img = insertText(img, c(1,:), sprintf("N=%.2f E=%.2f err=%.2f",north,east,err), ...
+        "BoxColor","yellow","FontSize",18);
+    set(hImg,'CData',img); drawnow limitrate;
+
+    fprintf("iter %d: N=%.2f E=%.2f err=%.2f\n", i, north, east, err);
+
+    if err < tol, fprintf("WYCENTROWANO\n"); break; end
+
+    d.goto_relative(Kp*north, Kp*east, 0);
+    pause(1.0);
+end
