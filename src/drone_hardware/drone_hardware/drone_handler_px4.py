@@ -489,7 +489,7 @@ class DroneHandlerPX4(Node):
         feedback_msg.distance = self.calculate_remaining_distance_rel(destination)
         self.get_logger().info(f"Distance remaining: {feedback_msg.distance} m")
 
-        while feedback_msg.distance>0.5:
+        while feedback_msg.distance>0.1:
             if goal_handle.is_cancel_requested:
                 goal_handle.canceled()
                 self.get_logger().info('Goal goto rel canceled')
