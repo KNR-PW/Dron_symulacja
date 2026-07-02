@@ -1,47 +1,76 @@
-% --- wymus UDP transport (inaczej subscribery/actions moga nie dostawac danych) ---
+% test_mission.m
+setenv('FASTRTPS_DEFAULT_PROFILES_FILE', '/home/hozaz/fastdds_udp.xml');
 setenv('ROS_DOMAIN_ID', '0');
 
-% --- kontroler ---
+% --- kontroler NAJPIERW (tworzy d.Node) ---
 d = DroneControllerMATLAB();
+
+% --- kamera na node kontrolera ---
+imgSub = ros2subscriber(d.Node, "/rgb_camera/image", "sensor_msgs/Image", "Reliability","reliable");
+W=1920; H=1080; hfov=1.5708;
+fx=(W/2)/tan(hfov/2); fy=fx; cx=W/2; cy=H/2;
+intr = cameraIntrinsics([fx fy],[cx cy],[H W]);
+dict = "DICT_4X4_50";
+markerSize = 0.5;
+
+% --- start ---
 d.arm();
 d.takeoff(5);
-% czekaj az wzniesie sie do ~5m, potem:
 d.goto_relative(1.0,2.0,0);
 
-% Following 
-sN = -1; axN = 1;
-sE = -1; axE = 2;
-Kp = 0.7; tol = 0.10; maxIter = 60;
+% --- parametry ---
+sN=-1; axN=1; sE=-1; axE=2;
+Kp=0.7; tol=0.10; maxIter=60;
+descentStep=0.5; centerTol=0.15; landAlt=1.00;
 
 hFig = figure('Name','Following live');
-hImg = imshow(zeros(intr.ImageSize(1),intr.ImageSize(2),3,'uint8'));
+hImg = imshow(zeros(H,W,3,'uint8'));
 title('following - zamknij okno by stop');
 
-for i = 1:maxIter
-    if ~isvalid(hFig), fprintf("okno zamkniete, stop\n"); break; end
-    msg = receive(imgSub,5); img = rosReadImage(msg);
-    [ids,locs,poses] = readArucoMarker(img, dict, intr, markerSize);
+% --- petla lądowania (centruj + schodz) ---
+landing = false;
+while ~landing
+    % centrowanie
+    for k = 1:maxIter
+        if ~isvalid(hFig), fprintf("okno zamkniete\n"); return; end
+        msg=receive(imgSub,5); img=rosReadImage(msg);
+        try
+            [ids,locs,poses]=readArucoMarker(img,dict,intr,markerSize);
+        catch
+            ids=[]; locs=[]; poses=[];
+        end
+        if isempty(ids)
+            title('MARKER ZGUBIONY'); drawnow;
+            fprintf("marker zgubiony/niepelny\n"); return;
+        end
+        if isempty(ids)
+            title('MARKER ZGUBIONY'); drawnow;
+            fprintf("marker zgubiony\n"); return;
+        end
+        t=poses(1).Translation;
+        north=sN*t(axN); east=sE*t(axE);
+        err=hypot(north,east);
 
-    if isempty(ids)
-        title('MARKER ZGUBIONY'); drawnow;
-        fprintf("marker zgubiony na iter %d\n", i); break;
+        c=locs(:,:,1); poly=reshape(c',1,[]);
+        img=insertShape(img,"polygon",poly,"Color","green","LineWidth",3);
+        img=insertText(img,c(1,:),sprintf("N=%.2f E=%.2f err=%.2f alt=%.2f",north,east,err,t(3)),...
+            "BoxColor","yellow","FontSize",18);
+        set(hImg,'CData',img); drawnow limitrate;
+        fprintf("center k=%d: N=%.2f E=%.2f err=%.2f alt=%.2f\n",k,north,east,err,t(3));
+
+        if err<centerTol, break; end
+        d.goto_relative(Kp*north, Kp*east, 0);
+        pause(1.0);
     end
 
-    t = poses(1).Translation;
-    north = sN * t(axN);
-    east  = sE * t(axE);
-    err = hypot(north, east);
-
-    c = locs(:,:,1); poly = reshape(c',1,[]);
-    img = insertShape(img,"polygon",poly,"Color","green","LineWidth",3);
-    img = insertText(img, c(1,:), sprintf("N=%.2f E=%.2f err=%.2f",north,east,err), ...
-        "BoxColor","yellow","FontSize",18);
-    set(hImg,'CData',img); drawnow limitrate;
-
-    fprintf("iter %d: N=%.2f E=%.2f err=%.2f\n", i, north, east, err);
-
-    if err < tol, fprintf("WYCENTROWANO\n"); break; end
-
-    d.goto_relative(Kp*north, Kp*east, 0);
-    pause(1.0);
+    alt=t(3);
+    if alt < landAlt
+        fprintf("finalne ladowanie (alt=%.2f)\n",alt);
+        d.land();
+        landing=true;
+    else
+        fprintf("zejscie o %.1f (alt=%.2f)\n",descentStep,alt);
+        d.goto_relative(0,0,descentStep);
+        pause(1.0);
+    end
 end
