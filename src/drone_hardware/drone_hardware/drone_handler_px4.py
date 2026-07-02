@@ -8,6 +8,7 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.action import ActionServer,  CancelResponse
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 
 from drone_interfaces.msg import VelocityVectors, Telemetry
 from drone_interfaces.srv import SetMode, ToggleVelocityControl, SetServo, VtolServoCalib
@@ -78,7 +79,8 @@ class DroneHandlerPX4(Node):
         self.arm = ActionServer(self,Arm, NAMESPACE+'Arm',self.arm_callback)
         self.takeoff = ActionServer(self, Takeoff, NAMESPACE+'takeoff',self.takeoff_callback, cancel_callback=self.cancel_callback)
         self.goto_global = ActionServer(self, GotoGlobal, NAMESPACE+'goto_global', self.goto_global_action, cancel_callback=self.cancel_callback)
-        self.goto_rel = ActionServer(self, GotoRelative, NAMESPACE+'goto_relative', self.goto_relative_action, cancel_callback=self.cancel_callback)
+        goto_cbg = MutuallyExclusiveCallbackGroup()
+        self.goto_rel = ActionServer(self, GotoRelative, NAMESPACE+'goto_relative', self.goto_relative_action, cancel_callback=self.cancel_callback, callback_group=goto_cbg)
         self.yaw = ActionServer(self, SetYawAction, NAMESPACE+'Set_yaw', self.yaw_callback, cancel_callback=self.cancel_callback)
 
         #declare subcriptions
