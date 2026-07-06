@@ -74,7 +74,7 @@ grep -rlP '[^\x00-\x7F]' msg/ srv/ action/
 
 ---
 
-## 4. [WSL] Profil UDP dla Fast DDS
+## 4. Profil UDP dla Fast DDS
 
 **Tylko na WSL.** Discovery MATLAB<->kontener działa (multicast UDP), ale
 **transport danych** domyślnie idzie przez Fast DDS **shared memory (SHM)**,
