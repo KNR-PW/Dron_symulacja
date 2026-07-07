@@ -18,6 +18,7 @@ from rclpy.executors import MultiThreadedExecutor
 from drone_interfaces.msg import Telemetry, VelocityVectors
 from drone_interfaces.srv import GetAttitude, GetLocationRelative, SetServo, SetMode, SetSpeed, GetGpsPos, ToggleVelocityControl
 from drone_interfaces.action import GotoRelative, GotoGlobal, Arm, Takeoff, SetYawAction
+from std_msgs.msg import Float32
 
 import haversine as hv
 class DroneHandler(Node):
@@ -56,6 +57,9 @@ class DroneHandler(Node):
         self.vector_receiver = self.create_subscription(VelocityVectors, NAMESPACE+'velocity_vectors', self.velocity_control_callback ,10)
         self._velocity_control_flag = False
         self.toggle_velocity_control_srv = self.create_service(ToggleVelocityControl, NAMESPACE+'toggle_v_control', self.toggle_velocity_control)
+
+        #DECLARE GIMBAL (pitch w stopniach przez MAVLink mount -> serwo)
+        self.gimbal_pitch_sub = self.create_subscription(Float32, NAMESPACE+'gimbal_pitch', self.gimbal_pitch_callback, 10)
 
         # ONLY FOR TEST IF YOU SEE HERE SOMETHING UNCOMMENTED TELL THIS TO HIS CREATOR
         #self._counter = 0
@@ -579,6 +583,25 @@ class DroneHandler(Node):
             yaw_rate = msg.yaw
 
             self.send_global_velocity(v_n, v_e, v_d, yaw_rate)
+
+    def gimbal_pitch_callback(self, msg):
+        """Steruje pitchem gimbala przez MAVLink (DO_MOUNT_CONTROL).
+        TA SAMA sciezka co na prawdziwym dronie: ArduPilot wystawia PWM na serwo
+        montazu; w symulacji plugin Gazebo czyta to serwo i rusza gimbalem.
+        msg.data = kat pitch w stopniach (mount), ujemne = w dol."""
+        if self.vehicle is None:
+            return
+        pitch_deg = float(msg.data)
+        cmd = self.vehicle.message_factory.command_long_encode(
+            0, 0,
+            mavutil.mavlink.MAV_CMD_DO_MOUNT_CONTROL,
+            0,
+            pitch_deg,   # param1: pitch [deg]
+            0.0,         # param2: roll
+            0.0,         # param3: yaw
+            0, 0, 0,
+            mavutil.mavlink.MAV_MOUNT_MODE_MAVLINK_TARGETING)  # param7
+        self.vehicle.send_mavlink(cmd)
 
     def toggle_velocity_control(self, request, response):
 

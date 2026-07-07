@@ -1,5 +1,5 @@
 """
-Launch: tent_tracker — maszyna stanów SEARCH → APPROACH → HOVER
+Launch: suas_flight_controller — maszyna stanów SEARCH → APPROACH → HOVER
 """
 
 from launch import LaunchDescription
@@ -12,7 +12,8 @@ def generate_launch_description():
     # ─── Argumenty ────────────────────────────────────────
     args = [
         DeclareLaunchArgument("target_alt", default_value="5.0"),
-        DeclareLaunchArgument("kp_gimbal", default_value="1.5"),
+        DeclareLaunchArgument("vfov_deg", default_value="114.6"),
+        DeclareLaunchArgument("damping", default_value="0.4"),
         DeclareLaunchArgument("kp_vx", default_value="4.0"),
         DeclareLaunchArgument("kp_vy", default_value="1.0"),
         DeclareLaunchArgument("kp_alt", default_value="0.5"),
@@ -28,10 +29,11 @@ def generate_launch_description():
     # ─── Tent Tracker ─────────────────────────────────────
     tracker = Node(
         package="drone_autonomy",
-        executable="tent_tracker",
+        executable="suas_flight_controller",
         parameters=[{
             "target_alt":     LaunchConfiguration("target_alt"),
-            "kp_gimbal":      LaunchConfiguration("kp_gimbal"),
+            "vfov_deg":       LaunchConfiguration("vfov_deg"),
+            "damping":        LaunchConfiguration("damping"),
             "kp_vx":          LaunchConfiguration("kp_vx"),
             "kp_vy":          LaunchConfiguration("kp_vy"),
             "kp_alt":         LaunchConfiguration("kp_alt"),

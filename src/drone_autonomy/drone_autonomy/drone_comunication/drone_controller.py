@@ -12,6 +12,7 @@ from drone_interfaces.srv import (
 
 )
 from drone_interfaces.msg import Telemetry, VelocityVectors
+from std_msgs.msg import Float32
 from drone_interfaces.action import (
     Arm,
     Takeoff,
@@ -40,6 +41,7 @@ class DroneController(Node):
         self.toggle_velocity_control_cli = self.create_client(ToggleVelocityControl,NAMESPACE_HARDWARE+'toggle_v_control')
         self._set_guard_client = self.create_client(SetMode, 'set_brake_on_obstacle')
         self.velocity_publisher = self.create_publisher(VelocityVectors,NAMESPACE_HARDWARE+'velocity_vectors', 10)
+        self.gimbal_publisher = self.create_publisher(Float32, NAMESPACE_HARDWARE+'gimbal_pitch', 10)
 
         self._wait_for_service(self._mode_client, NAMESPACE_HARDWARE+'set_mode')
         if not DEV:
@@ -405,6 +407,16 @@ class DroneController(Node):
         return True
     
 # functions to fly by vectors
+    def set_gimbal_pitch(self, pitch_deg):
+        '''
+        Ustawia pitch gimbala w STOPNIACH przez MAVLink (mount) -> drone_handler.
+        Ta sama sciezka co na prawdziwym dronie (ArduPilot steruje serwem montazu),
+        wiec kod nie zmienia sie przy przejsciu sim -> real.
+
+        :param pitch_deg: kat pitch montazu w stopniach (ujemne = w dol)
+        '''
+        self.gimbal_publisher.publish(Float32(data=float(pitch_deg)))
+
     def send_vectors(self, vx, vy, vz, yaw=0.0):
         '''
         Method to send velocity vector in FRD frame to drone_handler.
