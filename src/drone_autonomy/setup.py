@@ -30,8 +30,8 @@ setup(
             'PID_test_mission=drone_autonomy.PID_test_mission:main',
             'field_test_of_velocity=drone_autonomy.field_test_of_velocity:main',
             'yolo_detector=drone_autonomy.yolo_detector:main',
-            'tent_tracker=drone_autonomy.tent_tracker:main',
-            'gimbal_tracker=drone_autonomy.gimbal_tracker:main',
+            'suas_flight_controller=drone_autonomy.suas_flight_controller:main',
+            'suas_gimbal_controller=drone_autonomy.suas_gimbal_controller:main',
         ],
     },
 )

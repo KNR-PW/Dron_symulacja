@@ -1,8 +1,13 @@
 """
-tent_tracker — Maszyna stanów: SEARCH → APPROACH → HOVER.
+suas_flight_controller — Maszyna stanów: SEARCH → APPROACH → HOVER.
 
-Steruje gimbalem kamery (pitch) przez gz topic i dronem (vx, vy, vz)
-przez velocity control, aby podlecieć nad wykryty namiot i nad nim zawisać.
+Steruje gimbalem kamery (pitch) przez MAVLink mount (set_gimbal_pitch,
+ta sama sciezka co na realnym dronie) i dronem (vx, vy, vz) przez velocity
+control, aby podlecieć nad wykryty namiot i nad nim zawisać.
+
+Gimbal liczony geometrycznie (jak w gimbal_tracker):
+  korekta = ey * (vfov/2) * damping, aplikowana RAZ na swieza detekcje.
+Kat pitch w STOPNIACH (kalibracja sim): +45 = przod, -45 = prosto w dol.
 
 API drona (FRD body frame):
   send_vectors(vx, vy, vz, yaw)
@@ -15,8 +20,6 @@ API drona (FRD body frame):
 import csv
 import math
 import os
-import subprocess
-import threading
 import time
 from enum import Enum, auto
 
@@ -41,21 +44,23 @@ class State(Enum):
 
 # ────────────────────── Node ──────────────────────
 
-class TentTracker(DroneController):
+class SuasFlightController(DroneController):
     """Podlot nad namiot z użyciem gimbala i regulatorów P."""
 
-    # Zakres gimbala w Gazebo (rad): 0.0 = prosto, 1.05 = max w dół (~60°)
-    GIMBAL_MIN = 0.0
-    GIMBAL_MAX = 1.57  # ~prosto w dol (zweryfikowane empirycznie)
-    GIMBAL_SEARCH = 0.30  # ~lekko w dol/przod — pozycja szukania
-    GIMBAL_DOWN = 1.45   # prawie pionowo w dol (prog APPROACH->HOVER)
+    # Kat pitch montazu w STOPNIACH: +45 = przod, -45 = prosto w dol (kalibracja sim)
+    PITCH_FRONT = 45.0
+    PITCH_DOWN = -45.0        # prosto w dol (HOVER)
+    GIMBAL_SEARCH = 30.0      # lekko w dol/przod — pozycja szukania
+    GIMBAL_HOVER_THR = -38.0  # prawie pionowo w dol (prog APPROACH->HOVER)
 
     def __init__(self):
-        super().__init__('tent_tracker')
+        super().__init__('suas_flight_controller')
 
         # ─── Parametry ROS ────────────────────────────────────
         self.declare_parameter('target_alt', 55.0)
-        self.declare_parameter('kp_gimbal', 1.5)
+        # Gimbal geometrycznie: kat wprost z bledu i pionowego FOV kamery + tlumienie
+        self.declare_parameter('vfov_deg', 114.6)
+        self.declare_parameter('damping', 0.4)
         self.declare_parameter('kp_vx', 2.0)
         self.declare_parameter('kp_vy', 3.0)
         self.declare_parameter('kp_alt', 0.5)
@@ -71,7 +76,8 @@ class TentTracker(DroneController):
         self.declare_parameter('hover_deadzone', 0.08)
 
         self.target_alt    = self.get_parameter('target_alt').value
-        self.kp_gimbal     = self.get_parameter('kp_gimbal').value
+        self.vfov_deg      = self.get_parameter('vfov_deg').value
+        self.damping       = self.get_parameter('damping').value
         self.kp_vx         = self.get_parameter('kp_vx').value
         self.kp_vy         = self.get_parameter('kp_vy').value
         self.kp_alt        = self.get_parameter('kp_alt').value
@@ -96,10 +102,9 @@ class TentTracker(DroneController):
         self.altitude = 0.0
         self.drone_yaw = 0.0
 
-        # Gimbal
-        self.gimbal_rad = self.GIMBAL_SEARCH
-        self._gimbal_target = self.GIMBAL_SEARCH
-        self._gimbal_lock = threading.Lock()
+        # Gimbal (kat pitch w stopniach; korekta raz na swieza detekcje)
+        self.pitch_deg = self.GIMBAL_SEARCH
+        self._new_det = False
 
         # EMA
         self.sm_vx = 0.0
@@ -120,64 +125,38 @@ class TentTracker(DroneController):
         self._timer = self.create_timer(period, self._control_loop)
         self._timer.cancel()
 
-        # ─── Wątek gimbala ────────────────────────────────────
-        self._gimbal_thread = threading.Thread(
-            target=self._gimbal_worker, daemon=True)
-        self._gimbal_thread.start()
-
         # ─── Debug publishers (rqt_plot) ──────────────────────
         self.pub_vx     = self.create_publisher(Float32, '~/debug/vx', 10)
         self.pub_vy     = self.create_publisher(Float32, '~/debug/vy', 10)
         self.pub_yaw    = self.create_publisher(Float32, '~/debug/yaw_rate', 10)
         self.pub_vz     = self.create_publisher(Float32, '~/debug/vz', 10)
-        self.pub_gimbal = self.create_publisher(Float32, '~/debug/gimbal_rad', 10)
+        self.pub_gimbal = self.create_publisher(Float32, '~/debug/gimbal_deg', 10)
         self.pub_ex     = self.create_publisher(Float32, '~/debug/error_x', 10)
         self.pub_ey     = self.create_publisher(Float32, '~/debug/error_y', 10)
 
         # ─── Logowanie CSV (Black Box) ────────────────────────
-        self.csv_path = os.path.expanduser('~/tent_tracker_log.csv')
+        self.csv_path = os.path.expanduser('~/suas_flight_controller_log.csv')
         self.csv_file = open(self.csv_path, 'w', newline='')
         self.csv_writer = csv.writer(self.csv_file)
         self.csv_writer.writerow([
-            'time_rel', 'state', 'ex', 'ey', 'gimbal_rad', 'vx_cmd', 'vy_cmd', 'yaw_cmd', 'vz_cmd', 'alt'
+            'time_rel', 'state', 'ex', 'ey', 'gimbal_deg', 'vx_cmd', 'vy_cmd', 'yaw_cmd', 'vz_cmd', 'alt'
         ])
         self.node_start_time = time.time()
 
-        self.get_logger().info(f"TentTracker init: alt={self.target_alt}m  kp_gimbal={self.kp_gimbal}  kp_vx={self.kp_vx}  kp_vy={self.kp_vy}  img={self.img_w}x{self.img_h}")
+        self.get_logger().info(f"SuasFlightController init: alt={self.target_alt}m  vfov={self.vfov_deg} damping={self.damping}  kp_vx={self.kp_vx}  kp_vy={self.kp_vy}  img={self.img_w}x{self.img_h}")
         self.get_logger().info(f"Logi CSV zapisywane do: {self.csv_path}")
 
     # ═══════════════════════════════════════════════════════════
-    #  Gimbal (osobny wątek)
+    #  Gimbal
     # ═══════════════════════════════════════════════════════════
 
-    def _set_gimbal(self, rad):
-        """Ustaw docelowy kąt gimbala (thread-safe)."""
-        rad = clamp(rad, self.GIMBAL_MIN, self.GIMBAL_MAX)
-        with self._gimbal_lock:
-            self._gimbal_target = rad
-
-    def _gimbal_worker(self):
-        """Wątek wysyłający komendy gz topic co ~100ms."""
-        last_sent = -1.0
-        while True:
-            with self._gimbal_lock:
-                target = self._gimbal_target
-
-            if abs(target - last_sent) > 0.01:
-                cmd = [
-                    "gz", "topic",
-                    "-t", "/gimbal/cmd_pitch",
-                    "-m", "gz.msgs.Double",
-                    "-p", f"data: {target:.3f}"
-                ]
-                try:
-                    subprocess.run(cmd, capture_output=True, timeout=2.0)
-                except Exception:
-                    pass
-                last_sent = target
-                self.gimbal_rad = target
-
-            time.sleep(0.1)
+    def _set_gimbal(self, deg):
+        """Ustaw kąt pitch gimbala [deg] i wyślij przez MAVLink mount
+        (set_gimbal_pitch -> drone_handler -> serwo; ta sama sciezka co na realu)."""
+        deg = clamp(deg, self.PITCH_DOWN, self.PITCH_FRONT)
+        if abs(deg - self.pitch_deg) > 0.2:
+            self.pitch_deg = deg
+            self.set_gimbal_pitch(deg)
 
     # ═══════════════════════════════════════════════════════════
     #  Callbacki
@@ -190,6 +169,7 @@ class TentTracker(DroneController):
             self.tent_cy = bb[1] + bb[3] / 2.0
             self.tent_detected = True
             self.last_det_time = time.time()
+            self._new_det = True
         else:
             self.tent_detected = False
 
@@ -210,11 +190,14 @@ class TentTracker(DroneController):
         alt_err = self.target_alt - self.altitude
         vz = clamp(-self.kp_alt * alt_err, -self.max_vz, self.max_vz)
 
-        # Znormalizowane uchyby obrazu (-1..+1)
+        # Znormalizowane uchyby obrazu (-1..+1).
+        # W oknie lost_timeout uzywamy OSTATNIEJ znanej pozycji namiotu —
+        # pojedyncza pusta klatka detekcji nie zeruje sterowania.
+        have_target = dt_lost <= self.lost_timeout
         half_w = self.img_w / 2.0
         half_h = self.img_h / 2.0
-        ex = (self.tent_cx - half_w) / half_w if self.tent_detected else 0.0
-        ey = (self.tent_cy - half_h) / half_h if self.tent_detected else 0.0
+        ex = (self.tent_cx - half_w) / half_w if have_target else 0.0
+        ey = (self.tent_cy - half_h) / half_h if have_target else 0.0
 
         # ─── Przejścia stanów ─────────────────────────────────
         if dt_lost > self.lost_timeout:
@@ -223,14 +206,14 @@ class TentTracker(DroneController):
                 self.state = State.SEARCH
                 self._set_gimbal(self.GIMBAL_SEARCH)
 
-        elif self.tent_detected:
+        elif have_target:
             if self.state == State.SEARCH:
                 self.get_logger().info("Namiot WIDZIANY → APPROACH")
                 self.state = State.APPROACH
 
             # APPROACH → HOVER: gimbal prawie pionowo
             if self.state == State.APPROACH:
-                if self.gimbal_rad >= self.GIMBAL_DOWN:
+                if self.pitch_deg <= self.GIMBAL_HOVER_THR:
                     self.get_logger().info(
                         "NAD NAMIOTEM! → HOVER (gimbal locked)")
                     self.state = State.HOVER
@@ -247,30 +230,34 @@ class TentTracker(DroneController):
             self.pub_vy.publish(Float32(data=0.0))
             self.pub_yaw.publish(Float32(data=0.0))
             self.pub_vz.publish(Float32(data=0.0))
-            self.pub_gimbal.publish(Float32(data=float(self.gimbal_rad)))
+            self.pub_gimbal.publish(Float32(data=float(self.pitch_deg)))
             self.pub_ex.publish(Float32(data=float(ex)))
             self.pub_ey.publish(Float32(data=float(ey)))
             self.csv_writer.writerow([
-                f"{rel_time:.3f}", self.state.name, f"{ex:.3f}", f"{ey:.3f}", f"{self.gimbal_rad:.3f}",
+                f"{rel_time:.3f}", self.state.name, f"{ex:.3f}", f"{ey:.3f}", f"{self.pitch_deg:.1f}",
                 "0.000", "0.000", "0.000", "0.000", f"{self.altitude:.2f}"
             ])
             self.csv_file.flush()
             self.get_logger().info(
-                f"[SEARCH] czekam na namiot... gimbal={self.gimbal_rad:.2f} alt={self.altitude:.1f}m",
+                f"[SEARCH] czekam na namiot... gimbal={self.pitch_deg:+.1f}deg alt={self.altitude:.1f}m",
                 throttle_duration_sec=2.0
             )
             return  # NIE wysyłamy send_vectors — ręczne sterowanie
 
         elif self.state == State.APPROACH:
-            # 1. Gimbal pitch — śledź namiot w osi Y obrazu
-            gimbal_delta = self.kp_gimbal * ey * (1.0 / self.control_rate)
-            new_gimbal = self.gimbal_rad + gimbal_delta
-            self._set_gimbal(new_gimbal)
+            # 1. Gimbal pitch — geometrycznie, RAZ na swieza detekcje
+            #    (detekcja jest wolniejsza niz ta petla; wielokrotne uzycie tej
+            #    samej klatki powodowaloby oscylacje gimbala).
+            if self._new_det:
+                self._new_det = False
+                correction = ey * (self.vfov_deg / 2.0) * self.damping
+                self._set_gimbal(self.pitch_deg - correction)
 
-            # 2. vx — leć do przodu proporcjonalnie do kąta gimbala
-            #    gimbal=0.0 → namiot daleko → leć szybko (forward_ratio=1.0)
-            #    gimbal=1.05 → namiot pod spodem → hamuj (forward_ratio=0.0)
-            forward_ratio = 1.0 - (self.gimbal_rad / self.GIMBAL_MAX)
+            # 2. vx — leć do przodu proporcjonalnie do pochylenia gimbala
+            #    pitch=+45 (przod) → namiot daleko → leć szybko (forward_ratio=1.0)
+            #    pitch=-45 (dol)   → namiot pod spodem → hamuj (forward_ratio=0.0)
+            tilt = (self.PITCH_FRONT - self.pitch_deg) / (self.PITCH_FRONT - self.PITCH_DOWN)
+            forward_ratio = 1.0 - tilt
             vx_target = self.kp_vx * forward_ratio
 
             # 3. vy — WYŁĄCZONE w APPROACH (używamy tylko yaw do celowania)
@@ -280,8 +267,9 @@ class TentTracker(DroneController):
             yaw_target = self.kp_yaw * ex
 
         elif self.state == State.HOVER:
-            # Gimbal zablokowany pionowo
-            self._set_gimbal(self.GIMBAL_MAX)
+            # Gimbal zablokowany pionowo w dol
+            self._set_gimbal(self.PITCH_DOWN)
+            self._new_det = False
 
             # Korekcja mikroruchów z uchybów obrazu (tylko translacja, bez obrotu)
             # Gdy kamera patrzy w dół: ex→vy, ey→-vx (obraz jest "odwrócony" vs body)
@@ -306,13 +294,13 @@ class TentTracker(DroneController):
         self.pub_vy.publish(Float32(data=float(self.sm_vy)))
         self.pub_yaw.publish(Float32(data=float(self.sm_yaw)))
         self.pub_vz.publish(Float32(data=float(vz)))
-        self.pub_gimbal.publish(Float32(data=float(self.gimbal_rad)))
+        self.pub_gimbal.publish(Float32(data=float(self.pitch_deg)))
         self.pub_ex.publish(Float32(data=float(ex)))
         self.pub_ey.publish(Float32(data=float(ey)))
 
         # ─── Zapis do CSV ─────────────────────────────────────
         self.csv_writer.writerow([
-            f"{rel_time:.3f}", self.state.name, f"{ex:.3f}", f"{ey:.3f}", f"{self.gimbal_rad:.3f}",
+            f"{rel_time:.3f}", self.state.name, f"{ex:.3f}", f"{ey:.3f}", f"{self.pitch_deg:.1f}",
             f"{self.sm_vx:.3f}", f"{self.sm_vy:.3f}", f"{self.sm_yaw:.3f}", f"{vz:.3f}", f"{self.altitude:.2f}"
         ])
         self.csv_file.flush() # upewnij się, że dane są na dysku
@@ -320,7 +308,7 @@ class TentTracker(DroneController):
         # ─── Logi ─────────────────────────────────────────────
         self.get_logger().info(
             f"[{self.state.name}] ex={ex:+.2f} ey={ey:+.2f} "
-            f"gimbal={self.gimbal_rad:.2f} | "
+            f"gimbal={self.pitch_deg:+.1f}deg | "
             f"vx={self.sm_vx:+.2f} vy={self.sm_vy:+.2f} "
             f"yr={self.sm_yaw:+.2f} alt={self.altitude:.1f}m",
             throttle_duration_sec=1.0
@@ -331,7 +319,7 @@ class TentTracker(DroneController):
     # ═══════════════════════════════════════════════════════════
 
     def run_mission(self):
-        self.get_logger().info("=== START MISJI: tent_tracker ===")
+        self.get_logger().info("=== START MISJI: suas_flight_controller ===")
         self.get_logger().info(
             f"Target alt: {self.target_alt}m | "
             f"kp_vx={self.kp_vx} kp_vy={self.kp_vy} max_vel={self.max_vel}")
@@ -344,8 +332,10 @@ class TentTracker(DroneController):
         self.velocity_mode_active = True
         self.get_logger().info("Velocity control AKTYWNY")
 
-        # Gimbal do pozycji startowej (szukanie)
-        self._set_gimbal(self.GIMBAL_SEARCH)
+        # Gimbal do pozycji startowej (szukanie) — wyslij bezwarunkowo,
+        # bo pitch_deg startuje juz na GIMBAL_SEARCH i _set_gimbal by pominal
+        self.pitch_deg = self.GIMBAL_SEARCH
+        self.set_gimbal_pitch(self.pitch_deg)
 
         # Start pętli
         self.state = State.SEARCH
@@ -369,7 +359,7 @@ class TentTracker(DroneController):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = TentTracker()
+    node = SuasFlightController()
 
     try:
         node.get_logger().info("Czekam 2s na inicjalizacje serwisow...")

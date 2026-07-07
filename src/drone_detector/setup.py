@@ -41,6 +41,7 @@ setup(
             "pool_detector=drone_detector.pool_detector:main",
             "simple_obstacle_avoidance=drone_detector.simple_obstacle_avoidance:main",
             "yolo_detector_ultralitycs=drone_detector.yolo_detector_ultralitycs:main",
+            "yolo_detector_jetson=drone_detector.yolo_detector_jetson:main",
         ],
     },
 )

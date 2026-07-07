@@ -3,3 +3,13 @@ FRAME_TYPE       1          # X class
 
 BATT_MONITOR     4          # Analog Voltage and Current (model Gazebo nie symuluje baterii,
                             # wlaczamy monitor, by SITL raportowal napiecie/procenty)
+
+# --- Gimbal (mount) sterowany przez MAVLink ---
+# ArduPilot wystawia PWM pitcha na SERVO10 (= kanal 9 w ArduPilotPlugin modelu),
+# plugin Gazebo czyta to serwo i rusza przegubem pitch. Ta sama sciezka co na realu.
+MNT1_TYPE        1          # Servo gimbal
+SERVO10_FUNCTION 7          # Mount1Pitch -> wyjscie pitcha montazu na SERVO10
+SERVO10_MIN      1100       # zgodne z servo_min w pluginie modelu
+SERVO10_MAX      1900       # zgodne z servo_max w pluginie modelu
+MNT1_PITCH_MIN   -90        # zakres kata pitch montazu (do kalibracji)
+MNT1_PITCH_MAX   90
