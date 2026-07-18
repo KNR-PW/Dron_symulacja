@@ -23,8 +23,8 @@ from drone_interfaces.action import (
 
 class DroneController(Node):
 
-    def __init__(self, node_name: str = 'drone_controller'):
-        super().__init__(node_name)
+    def __init__(self, node_name: str = 'drone_controller', namespace: str = ''):
+        super().__init__(node_name, namespace=namespace)
         # --- Declare KNR Namespaces ---
         NAMESPACE_HARDWARE = 'knr_hardware/'
         NAMESPACE_VIDEO = 'knr_video/'

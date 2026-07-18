@@ -54,3 +54,16 @@ DEF Iris Iris {
     }
   ]
 }
+
+DEF Iris2 Iris {
+  translation 3 0 0.1
+  rotation 1.96082e-06 1.96082e-06 1 1.5708
+  name "Iris2"
+  controller "ardupilot_sitl_controller"
+  controllerArgs [
+    "--motors"
+    "m1_motor, m2_motor, m3_motor, m4_motor"
+    "--instance"
+    "1"
+  ]
+}

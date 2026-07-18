@@ -17,18 +17,29 @@ def generate_launch_description():
         ros2_supervisor=True
     )
 
-    drone_handler_node = Node(
+    drone_handler_node_1 = Node(
         package='drone_hardware',
         executable='drone_handler',
+        namespace='drone1',
         parameters=[
             {'fc_ip': 'tcp:127.0.0.1:5762'}
+        ]
+    )
+
+    drone_handler_node_2 = Node(
+        package='drone_hardware',
+        executable='drone_handler',
+        namespace='drone2',
+        parameters=[
+            {'fc_ip': 'tcp:127.0.0.1:5772'}
         ]
     )
 
     drone_handler_node_action = TimerAction(
         period=10.0,
         actions=[
-            drone_handler_node
+            drone_handler_node_1,
+            drone_handler_node_2
         ]
     )
 

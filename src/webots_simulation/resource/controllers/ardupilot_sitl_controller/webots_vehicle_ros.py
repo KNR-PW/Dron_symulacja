@@ -105,7 +105,8 @@ class WebotsArduVehicleRos():
 
         # Setup ros2
         rclpy.init()
-        self.node = Node('webots_vehicle_node')
+        node_name = 'webots_vehicle_node' if instance == 0 else f'webots_vehicle_node_{instance}'
+        self.node = Node(node_name)
         self.camera_publisher = self.node.create_publisher(Image, 'camera', 10)
         # self.camera_publisher_2 = self.node.create_publisher(Image, 'camera_2', 10)
         self.gps_publisher = self.node.create_publisher(Image, 'gps', 10)
