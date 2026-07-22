@@ -220,7 +220,7 @@ class DroneHandler(Node):
             0,          #not used
             servo_id,   #number of servo instance
             pwm,        #pwm value for servo control
-            0,0,0,0) #not used
+            0,0,0,0,0) #not used
         # send command to vehicle
         self.vehicle.send_mavlink(msg)
 
