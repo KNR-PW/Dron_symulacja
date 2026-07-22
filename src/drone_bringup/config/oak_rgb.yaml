@@ -1,0 +1,8 @@
+/oak:
+  ros__parameters:
+    camera:
+      i_pipeline_type: 'RGB'   # tylko kamera RGB (bez glebi i chmury punktow) - lekkie dla USB2
+      i_nn_type: 'none'        # bez sieci na kamerze, YOLO liczy na Jetsonie
+    rgb:
+      i_resolution: '1080P'
+      i_fps: 30.0
