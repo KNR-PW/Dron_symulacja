@@ -22,6 +22,8 @@ from std_msgs.msg import Float32
 
 import haversine as hv
 class DroneHandler(Node):
+
+
     def __init__(self):
         super().__init__('drone_handler')
         self.vehicle = None
@@ -583,28 +585,26 @@ class DroneHandler(Node):
 
             self.send_global_velocity(v_n, v_e, v_d, yaw_rate)
 
+
     def gimbal_pitch_callback(self, msg):
-        """Steruje pitchem naszego mechanizmu na Mount2 (MAIN7) przez gimbal manager.
-        DO_GIMBAL_MANAGER_PITCHYAW z param7 = gimbal device id 2 (Mount2).
-        Mount1 (MAIN1/2) obsluguje sam ArduPilot - tego NIE dotykamy.
-        msg.data = kat pitch w stopniach, ujemne = w dol."""
+        """Pitch gimbala (MAIN7) przez surowe PWM - DO_SET_SERVO.
+        Wymaga SERVO7_FUNCTION = 0 w ArduPilocie.
+        Kalibracja: -90 deg = 1100 us (prosto w dol), -45 deg = 1600 us.
+        Zakres realny: -90 do ok. -18 deg (limit PWM 1900).
+        msg.data = kat w stopniach, ujemne = w dol."""
         if self.vehicle is None:
             return
-        pitch_deg = float(msg.data)
-        cmd_id = getattr(mavutil.mavlink, "MAV_CMD_DO_GIMBAL_MANAGER_PITCHYAW", 1000)
-        NAN = float("nan")
-        cmd = self.vehicle.message_factory.command_long_encode(
-            0, 0,
-            cmd_id,
-            0,             # confirmation
-            pitch_deg,     # param1: pitch [deg]
-            NAN,           # param2: yaw (nie ruszamy)
-            NAN,           # param3: pitch rate
-            NAN,           # param4: yaw rate
-            0,             # param5: flags
-            0,             # param6
-            2)             # param7: gimbal device id = Mount2 (MAIN7)
-        self.vehicle.send_mavlink(cmd)
+
+        # punkty kalibracyjne (kat -> PWM) i bezpieczne krance
+        a1, p1 = -90.0, 1100
+        a2, p2 = -45.0, 1600
+        pwm_min, pwm_max = 1100, 1900
+
+        angle = float(msg.data)
+        pwm = p1 + (angle - a1) * (p2 - p1) / (a2 - a1)   # interpolacja liniowa
+        pwm = int(max(pwm_min, min(pwm_max, pwm)))         # clamp do bezpiecznego zakresu
+
+        self.set_servo(7, pwm)
 
     def toggle_velocity_control(self, request, response):
 

@@ -2,6 +2,7 @@
 """Klasa bazowa dla detektorow YOLO (wspolna logika SIM i JETSON)."""
 
 import time
+import cv2
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
@@ -11,6 +12,10 @@ from ultralytics import YOLO
 
 from drone_interfaces.msg import TentDetection
 
+# ── 1. STALE ────────────────────────────────────────────────────────
+DEBUG_MAX_WIDTH = 960   # szerokosc obrazu debug (px); mniejszy = tanszy encode/transfer
+DEBUG_EVERY_N = 2       # publikuj co N-ta klatke debug (1 = kazda)
+
 
 class YoloDetectorBase(Node):
     """Wspolna logika: subskrypcja kamery, publikacja detekcji i podglad debug."""
@@ -18,7 +23,7 @@ class YoloDetectorBase(Node):
     def __init__(self, node_name: str, default_model: str, track_kwargs: dict = None):
         super().__init__(node_name)
 
-        # --- parametry ROS ---
+        # ── 2. PARAMETRY ROS ────────────────────────────────────────
         self.declare_parameter("camera_topic", "/rgb_camera/image")
         self.declare_parameter("model_path", default_model)
         self.declare_parameter("conf", 0.5)
@@ -29,31 +34,27 @@ class YoloDetectorBase(Node):
         self.input_size = self.get_parameter("input_size").value
         cam_topic = self.get_parameter("camera_topic").value
 
-        # --- model YOLO ---
+        # ── 3. MODEL YOLO ───────────────────────────────────────────
         self.get_logger().info(f"Loading model: {model_path}")
         self.model = YOLO(model_path, task="detect")
         self.br = CvBridge()
-
-        # dodatkowe flagi przekazywane do model.track() (np. half=True)
         self._track_kwargs = track_kwargs or {}
 
-        # --- pub / sub ---
+        # ── 4. PUB / SUB ────────────────────────────────────────────
         self.pub = self.create_publisher(TentDetection, "/tent_detections", 10)
         self.img_pub = self.create_publisher(Image, "/tent_detections/image", 1)
-        # depth=1 + best-effort => YOLO zawsze bierze NAJNOWSZA klatke,
-        # zalegle sa porzucane (minimalne opoznienie obrazu/detekcji).
         cam_qos = QoSProfile(depth=1, history=HistoryPolicy.KEEP_LAST,
                              reliability=ReliabilityPolicy.BEST_EFFORT)
         self.create_subscription(Image, cam_topic, self._on_image, cam_qos)
 
-        # --- FPS counter ---
+        # ── 5. LICZNIKI ─────────────────────────────────────────────
         self._frames = 0
         self._detected_frames = 0
         self._t0 = time.monotonic()
 
         self.get_logger().info(f"{node_name} ready  |  input_size={self.input_size}")
 
-    # ------------------------------------------------------------------
+    # ────────────────────────────────────────────────────────────────
     def _on_image(self, msg: Image):
         frame = self.br.imgmsg_to_cv2(msg, desired_encoding="bgr8")
 
@@ -66,7 +67,7 @@ class YoloDetectorBase(Node):
             **self._track_kwargs,
         )
 
-        # --- publikuj detekcje ---
+        # ── 6. PUBLIKACJA DETEKCJI ──────────────────────────────────
         det = TentDetection()
         det.detected = False
         det.bounding_box = [0.0, 0.0, 0.0, 0.0]
@@ -81,16 +82,20 @@ class YoloDetectorBase(Node):
 
         self.pub.publish(det)
 
-        # --- podglad debug (tylko gdy ktos subskrybuje) ---
-        if self.img_pub.get_subscription_count() > 0:
+        # ── 7. PODGLAD DEBUG (pomniejszony, co N-ta klatka) ─────────
+        if self.img_pub.get_subscription_count() > 0 and self._frames % DEBUG_EVERY_N == 0:
+            dbg = frame
             if det.detected:
-                import cv2
-                x, y, w, h = float(det.bounding_box[0]), float(det.bounding_box[1]), float(det.bounding_box[2]), float(det.bounding_box[3])
-                cv2.rectangle(frame, (int(x), int(y)), (int(x+w), int(y+h)), (0, 255, 0), 2)
-                cv2.putText(frame, f"{det.confidence:.2f}", (int(x), int(y)-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-            self.img_pub.publish(self.br.cv2_to_imgmsg(frame, encoding="bgr8"))
+                x, y, w, h = det.bounding_box
+                cv2.rectangle(dbg, (int(x), int(y)), (int(x + w), int(y + h)), (0, 255, 0), 2)
+                cv2.putText(dbg, f"{det.confidence:.2f}", (int(x), int(y) - 5),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+            if dbg.shape[1] > DEBUG_MAX_WIDTH:
+                scale = DEBUG_MAX_WIDTH / dbg.shape[1]
+                dbg = cv2.resize(dbg, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+            self.img_pub.publish(self.br.cv2_to_imgmsg(dbg, encoding="bgr8"))
 
-        # --- FPS ---
+        # ── 8. FPS ──────────────────────────────────────────────────
         self._frames += 1
         if det.detected:
             self._detected_frames += 1

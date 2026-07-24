@@ -1,0 +1,10 @@
+/oak:
+  ros__parameters:
+    camera:
+      i_pipeline_type: 'RGB'
+      i_nn_type: 'none'
+      i_ip: '169.254.1.222'   # PoE — łącz przez sieć zamiast USB
+      i_use_id: false          # nie filtruj po mxid — łącz tylko po IP
+    rgb:
+      i_resolution: '1080P'
+      i_fps: 30.0

@@ -6,3 +6,6 @@
     rgb:
       i_resolution: '1080P'
       i_fps: 30.0
+      i_output_isp: true
+      i_isp_num: 1        # bylo domyslnie 2
+      i_isp_den: 1        # bylo domyslnie 3  -> 2/3 z 1080p = 720p
