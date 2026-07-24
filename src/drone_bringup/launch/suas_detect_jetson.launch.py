@@ -72,9 +72,10 @@ def generate_launch_description():
         executable="republish",
         name="image_compressor",
         arguments=["raw", "compressed"],
+        parameters=[{"out.jpeg_quality": 20}],
         remappings=[
             ("in", "/tent_detections/image"),
-            ("out/compressed", "/tent_detections/image_compressed"),
+            ("out/compressed", "/tent_detections/image/compressed"),
         ],
     )
 

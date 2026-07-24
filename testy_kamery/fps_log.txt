@@ -1,0 +1,45 @@
+
+[2026-07-23 17:13:10]
+Frames processed: 667
+Elapsed time:     35.92 s
+Avg pipeline FPS: 18.57
+Avg inference FPS:33.35
+Device:           cuda:0
+Source:           OAK-D Pro (USB)
+Model:            /home/jetsonknr/Dron_symulacja/testy_kamery/yolo26s.engine
+
+[2026-07-23 17:14:20]
+Frames processed: 621
+Elapsed time:     39.66 s
+Avg pipeline FPS: 15.66
+Avg inference FPS:34.91
+Device:           cuda:0
+Source:           OAK PoE @ 169.254.1.222
+Model:            /home/jetsonknr/Dron_symulacja/testy_kamery/yolo26s.engine
+
+[2026-07-23 17:17:10]
+Frames processed: 493
+Elapsed time:     26.78 s
+Avg pipeline FPS: 18.41
+Avg inference FPS:35.51
+Device:           cuda:0
+Source:           OAK-D Pro (USB)
+Model:            /home/jetsonknr/Dron_symulacja/testy_kamery/yolo26s.engine
+
+[2026-07-23 17:18:11]
+Frames processed: 787
+Elapsed time:     48.18 s
+Avg pipeline FPS: 16.34
+Avg inference FPS:34.04
+Device:           cuda:0
+Source:           OAK PoE @ 169.254.1.222
+Model:            /home/jetsonknr/Dron_symulacja/testy_kamery/yolo26s.engine
+
+[2026-07-23 17:40:46]
+Frames processed: 23289
+Elapsed time:     1119.85 s
+Avg pipeline FPS: 20.80
+Avg inference FPS:35.42
+Device:           cuda:0
+Source:           OAK PoE @ 169.254.1.222
+Model:            /home/jetsonknr/Dron_symulacja/testy_kamery/yolo26s.engine
