@@ -1,3 +1,7 @@
+sudo nvpmodel -m 1
+sudo jetson_clocks        # powtórz PO zmianie trybu
+sudo nvpmodel -q          # potwierdź: 25W
+
 # Misja namiotowa — co jest czym i jak uruchomić
 
 Wariant ArduPilot + Gazebo (branch `ardupilot_gz`).
