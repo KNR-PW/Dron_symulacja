@@ -17,8 +17,11 @@ class VideoRecorder(Node):
         # prepering dir to save video
         self.declare_parameter('camera_topic', 'camera')
         self.declare_parameter('save_directory_base', 'saved_video')
+        # fps zapisu do pliku - ustaw na REALNA czestotliwosc nagrywanego topicu
+        # (sprawdz: ros2 topic hz <topic>), inaczej wideo odtwarza sie za szybko/wolno
+        self.declare_parameter('fps', 15.0)
 
-
+        self.fps = float(self.get_parameter('fps').value)
         camera_topic = self.get_parameter('camera_topic').get_parameter_value().string_value
         self.get_logger().info(f'camera_topic: {camera_topic}')
         self.subscription = self.create_subscription(
@@ -63,10 +66,10 @@ class VideoRecorder(Node):
         self.video_name += 1
         height ,width , c = self.current_frame.shape
         size = (int(width), int(height))
-        self.result = cv2.VideoWriter(self.save_directory+"/video"+str(self.video_name)+".avi", cv2.VideoWriter_fourcc(*'MJPG'), 10, size) 
+        self.result = cv2.VideoWriter(self.save_directory+"/video"+str(self.video_name)+".avi", cv2.VideoWriter_fourcc(*'MJPG'), self.fps, size)
         self._start_video_flag = True
         response.error = False
-        self.get_logger().info('Start making video')
+        self.get_logger().info(f'Start making video @ {self.fps} fps')
 
         return response
     

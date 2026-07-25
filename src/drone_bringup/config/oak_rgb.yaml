@@ -1,11 +1,17 @@
 /oak:
   ros__parameters:
     camera:
-      i_pipeline_type: 'RGB'   # tylko kamera RGB (bez glebi i chmury punktow) - lekkie dla USB2
+      i_pipeline_type: 'RGB'   # tylko kamera RGB (bez glebi i chmury punktow)
       i_nn_type: 'none'        # bez sieci na kamerze, YOLO liczy na Jetsonie
     rgb:
-      i_resolution: '1080P'
-      i_fps: 30.0
-      i_output_isp: true
-      i_isp_num: 1        # bylo domyslnie 2
-      i_isp_den: 1        # bylo domyslnie 3  -> 2/3 z 1080p = 720p
+      # OAK-D PRO W: obiektyw wide siedzi na CAM_A i jest uzywany zawsze - nie ma
+      # parametru "wide" do wlaczenia. Ale sensor IMX378 jest 4:3 (4056x3040),
+      # a tryb '1080P' to 16:9 -> obcina gore i dol, czyli OS PITCHU gimbala.
+      # Dlatego pelna klatka 4:3 + zjazd ISP zamiast trybu 16:9.
+      i_resolution: '12MP'     # 4056x3040 - pelne pole widzenia obiektywu wide
+      i_isp_num: 1
+      i_isp_den: 4             # -> 1014x760 (4:3, pelny FOV, ~imgsz=1024)
+                               # 1/2 -> 2028x1520 jesli chcesz wiecej detalu (4x dane)
+                               # 1/3 NIE dziala: 3040/3 nie jest calkowite
+      i_output_isp: true       # publikuj wyjscie ISP (respektuje skalowanie powyzej)
+      i_fps: 15.0
