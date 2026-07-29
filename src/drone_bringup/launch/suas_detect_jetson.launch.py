@@ -11,6 +11,7 @@ from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 from ament_index_python.packages import get_package_share_directory
 
 
@@ -50,6 +51,16 @@ def generate_launch_description():
         default_value="/oak/rgb/image_raw",
         description="Topic obrazu z prawdziwej kamery (np. OAK-D)",
     )
+    debug_every_n_arg = DeclareLaunchArgument(
+        "debug_every_n",
+        default_value="1",
+        description="Publikuj podglad co N-ta klatke (1 = kazda)",
+    )
+    debug_jpeg_quality_arg = DeclareLaunchArgument(
+        "debug_jpeg_quality",
+        default_value="20",
+        description="Jakosc JPEG podgladu (1-100); nizsza = mniej danych po Wi-Fi",
+    )
 
     # ─── YOLO detektor (Jetson) ──────────────────────────
     yolo_detector = Node(
@@ -62,30 +73,28 @@ def generate_launch_description():
                 "model_path": LaunchConfiguration("model_path"),
                 "conf": LaunchConfiguration("conf"),
                 "input_size": 1024,
+                # ParameterValue(int) bo LaunchConfiguration oddaje string,
+                # a node deklaruje te parametry jako int
+                "debug_every_n": ParameterValue(
+                    LaunchConfiguration("debug_every_n"), value_type=int),
+                "debug_jpeg_quality": ParameterValue(
+                    LaunchConfiguration("debug_jpeg_quality"), value_type=int),
             }
         ],
     )
 
-    # ─── Kompresja obrazu do przesylu po Wi-Fi (stacja naziemna) ───
-    image_compressor = Node(
-        package="image_transport",
-        executable="republish",
-        name="image_compressor",
-        arguments=["raw", "compressed"],
-        parameters=[{"out.jpeg_quality": 20}],
-        remappings=[
-            ("in", "/tent_detections/image"),
-            ("out/compressed", "/tent_detections/image/compressed"),
-        ],
-    )
+    # Kompresja do /tent_detections/image/compressed leci teraz w samym detektorze
+    # (cv2.imencode). Osobny node republish wymagal wyslania raw bgr8 960x720
+    # (2.1 MB/klatke) miedzy procesami — to bylo drozsze niz sam JPEG.
 
     return LaunchDescription(
         [
             model_path_arg,
             confidence_arg,
             camera_topic_arg,
+            debug_every_n_arg,
+            debug_jpeg_quality_arg,
             depthai_launch,     # kamera OAK-D
             yolo_detector,      # detekcja YOLO
-            image_compressor,   # kompresja obrazu do stacji naziemnej
         ]
     )

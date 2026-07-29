@@ -6,7 +6,7 @@ import cv2
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import CompressedImage, Image
 from cv_bridge import CvBridge
 from ultralytics import YOLO
 
@@ -14,7 +14,6 @@ from drone_interfaces.msg import TentDetection
 
 # ── 1. STALE ────────────────────────────────────────────────────────
 DEBUG_MAX_WIDTH = 960   # szerokosc obrazu debug (px); mniejszy = tanszy encode/transfer
-DEBUG_EVERY_N = 2       # publikuj co N-ta klatke debug (1 = kazda)
 
 
 class YoloDetectorBase(Node):
@@ -28,11 +27,15 @@ class YoloDetectorBase(Node):
         self.declare_parameter("model_path", default_model)
         self.declare_parameter("conf", 0.5)
         self.declare_parameter("input_size", 1024)
+        self.declare_parameter("debug_every_n", 1)      # 1 = podglad z kazdej klatki
+        self.declare_parameter("debug_jpeg_quality", 20)
 
         model_path = self.get_parameter("model_path").value
         self.conf = self.get_parameter("conf").value
         self.input_size = self.get_parameter("input_size").value
         cam_topic = self.get_parameter("camera_topic").value
+        self.debug_every_n = max(1, self.get_parameter("debug_every_n").value)
+        self.jpeg_quality = self.get_parameter("debug_jpeg_quality").value
 
         # ── 3. MODEL YOLO ───────────────────────────────────────────
         self.get_logger().info(f"Loading model: {model_path}")
@@ -43,6 +46,10 @@ class YoloDetectorBase(Node):
         # ── 4. PUB / SUB ────────────────────────────────────────────
         self.pub = self.create_publisher(TentDetection, "/tent_detections", 10)
         self.img_pub = self.create_publisher(Image, "/tent_detections/image", 1)
+        # JPEG robimy tu, w tym samym watku. Wysylanie raw bgr8 960x720 (2.1 MB/klatke)
+        # do osobnego node'a republish kosztowalo wiecej CPU niz sam encode.
+        self.img_pub_c = self.create_publisher(
+            CompressedImage, "/tent_detections/image/compressed", 1)
         cam_qos = QoSProfile(depth=1, history=HistoryPolicy.KEEP_LAST,
                              reliability=ReliabilityPolicy.BEST_EFFORT)
         self.create_subscription(Image, cam_topic, self._on_image, cam_qos)
@@ -50,9 +57,12 @@ class YoloDetectorBase(Node):
         # ── 5. LICZNIKI ─────────────────────────────────────────────
         self._frames = 0
         self._detected_frames = 0
+        self._dbg_frames = 0
         self._t0 = time.monotonic()
 
-        self.get_logger().info(f"{node_name} ready  |  input_size={self.input_size}")
+        self.get_logger().info(
+            f"{node_name} ready  |  input_size={self.input_size} "
+            f"debug_every_n={self.debug_every_n}")
 
     # ────────────────────────────────────────────────────────────────
     def _on_image(self, msg: Image):
@@ -74,7 +84,10 @@ class YoloDetectorBase(Node):
         det.confidence = 0.0
 
         if results and len(results[0].boxes) > 0:
-            box = results[0].boxes[0]
+            # Najpewniejszy box, nie pierwszy z listy: track() porzadkuje wyniki wg
+            # kolejnosci aktywacji sciezek, wiec [0] to "najstarszy" cel, nie "najlepszy".
+            boxes = results[0].boxes
+            box = boxes[int(boxes.conf.argmax())]
             x1, y1, x2, y2 = map(float, box.xyxy[0].tolist())
             det.detected = True
             det.bounding_box = [x1, y1, x2 - x1, y2 - y1]
@@ -83,7 +96,10 @@ class YoloDetectorBase(Node):
         self.pub.publish(det)
 
         # ── 7. PODGLAD DEBUG (pomniejszony, co N-ta klatka) ─────────
-        if self.img_pub.get_subscription_count() > 0 and self._frames % DEBUG_EVERY_N == 0:
+        self._dbg_frames += 1
+        want_raw = self.img_pub.get_subscription_count() > 0
+        want_c = self.img_pub_c.get_subscription_count() > 0
+        if (want_raw or want_c) and self._dbg_frames % self.debug_every_n == 0:
             dbg = frame
             if det.detected:
                 x, y, w, h = det.bounding_box
@@ -93,7 +109,20 @@ class YoloDetectorBase(Node):
             if dbg.shape[1] > DEBUG_MAX_WIDTH:
                 scale = DEBUG_MAX_WIDTH / dbg.shape[1]
                 dbg = cv2.resize(dbg, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
-            self.img_pub.publish(self.br.cv2_to_imgmsg(dbg, encoding="bgr8"))
+
+            if want_c:
+                ok, buf = cv2.imencode(
+                    ".jpg", dbg, [int(cv2.IMWRITE_JPEG_QUALITY), self.jpeg_quality])
+                if ok:
+                    cmsg = CompressedImage()
+                    cmsg.header = msg.header
+                    cmsg.format = "jpeg"
+                    cmsg.data = buf.tobytes()
+                    self.img_pub_c.publish(cmsg)
+            if want_raw:
+                raw = self.br.cv2_to_imgmsg(dbg, encoding="bgr8")
+                raw.header = msg.header
+                self.img_pub.publish(raw)
 
         # ── 8. FPS ──────────────────────────────────────────────────
         self._frames += 1
