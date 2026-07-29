@@ -34,8 +34,8 @@ Sprawdzenie (T2):
 ```bash
 ros2 topic echo knr_hardware/telemetry --once
 ros2 topic pub --once knr_hardware/gimbal_pitch std_msgs/msg/Float32 "{data: 0.0}"    # poziomo
-ros2 topic pub --once knr_hardware/gimbal_pitch std_msgs/msg/Float32 "{data: -45.0}"  # w dol
-ros2 topic pub --once knr_hardware/gimbal_pitch std_msgs/msg/Float32 "{data: 30.0}"   # pozycja SEARCH
+ros2 topic pub --once knr_hardware/gimbal_pitch std_msgs/msg/Float32 "{data: -45.0}"  # pod katem w dol/przod = SEARCH
+ros2 topic pub --once knr_hardware/gimbal_pitch std_msgs/msg/Float32 "{data: -90.0}"  # prosto w dol
 ```
 **PASS:** serwo staje na zadanym kacie. Nie rusza → BEC / reboot Cube'a / `MNT1_DEFLT_MODE=2`. ok 
 1.ok
@@ -77,7 +77,14 @@ Wymaga: T1 + T2 dzialaja.
 ```bash
 ros2 launch drone_bringup suas_gimbal_controller.launch.py img_h:=760 vfov_deg:=64.4
 # opcje: damping:=0.4  deadzone:=0.06  control_rate:=10.0
+#        pitch_min:=-90.0  pitch_max:=-45.0  pitch_search:=-45.0
 ```
+
+Zakres pitcha (domyslny, konwencja realu wg `docs/gimbal setup.md`):
+`0` = poziomo, `-45` = pod katem w dol/przod (SEARCH), `-90` = prosto w dol.
+Gimbal pracuje w `-90..-45`, czyli nigdy nie patrzy nad horyzont.
+W Gazebo kalibracja jest inna (`-45` = prosto w dol) — tam podaj
+`pitch_min:=-45.0 pitch_max:=45.0 pitch_search:=30.0`.
 
 Domyslne `img_h:=1024 vfov_deg:=114.6` sa dla Gazebo — nie uzywaj na realu.
 `64.4` = pomiar z 29.07 (patrz 3a). Powtorz pomiar po zmianie configu kamery.
