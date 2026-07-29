@@ -17,6 +17,7 @@ from launch.actions import (DeclareLaunchArgument, IncludeLaunchDescription,
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 from ament_index_python.packages import get_package_share_directory
 
 
@@ -73,8 +74,11 @@ def generate_launch_description():
         name="drone_handler",
         output="screen",
         parameters=[{
-            "fc_ip": LaunchConfiguration("fc_ip"),
-            "dev": LaunchConfiguration("dev"),
+            "fc_ip": ParameterValue(LaunchConfiguration("fc_ip"), value_type=str),
+            # value_type=str obowiazkowo: drone_handler deklaruje 'dev' jako string
+            # 'false', a launch bez tego zapisalby dev:=true jako YAML-owy bool
+            # i node wywala InvalidParameterTypeException
+            "dev": ParameterValue(LaunchConfiguration("dev"), value_type=str),
         }],
     )
 
