@@ -539,11 +539,15 @@ class DroneHandler(Node):
             self.get_logger().info(f"ESC is not initialized yet:{self.vehicle.battery}")
 
         # Publish current velocity
-        if self.vehicle and self.vehicle.velocity:
+        # Zanim przyjdzie pierwsza ramka, dronekit zwraca [None, None, None] —
+        # sama lista jest prawdziwa, wiec trzeba sprawdzic elementy. Inaczej
+        # float(None) leci wyjatkiem, a to jest poza try i ubija executor.
+        vel = self.vehicle.velocity if self.vehicle else None
+        if vel and all(v is not None for v in vel):
             vel_msg = VelocityVectors()
-            vel_msg.vx = float(self.vehicle.velocity[0])
-            vel_msg.vy = float(self.vehicle.velocity[1])
-            vel_msg.vz = float(self.vehicle.velocity[2])
+            vel_msg.vx = float(vel[0])
+            vel_msg.vy = float(vel[1])
+            vel_msg.vz = float(vel[2])
             self.velocity_pub.publish(vel_msg)
 
     #velocty control definitions
