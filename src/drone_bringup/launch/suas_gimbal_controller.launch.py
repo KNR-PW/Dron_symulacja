@@ -18,6 +18,10 @@ def generate_launch_description():
         DeclareLaunchArgument("control_rate", default_value="10.0"),
         DeclareLaunchArgument("lost_timeout", default_value="2.0"),
         DeclareLaunchArgument("deadzone", default_value="0.06"),
+        # Konwencja realu: 0 = poziomo, -45 = pod katem w dol/przod, -90 = prosto w dol
+        DeclareLaunchArgument("pitch_search", default_value="-45.0"),
+        DeclareLaunchArgument("pitch_min", default_value="-90.0"),
+        DeclareLaunchArgument("pitch_max", default_value="-45.0"),
     ]
 
     # ─── Gimbal Tracker ───────────────────────────────────
@@ -31,6 +35,9 @@ def generate_launch_description():
             "control_rate": LaunchConfiguration("control_rate"),
             "lost_timeout": LaunchConfiguration("lost_timeout"),
             "deadzone":     LaunchConfiguration("deadzone"),
+            "pitch_search": LaunchConfiguration("pitch_search"),
+            "pitch_min":    LaunchConfiguration("pitch_min"),
+            "pitch_max":    LaunchConfiguration("pitch_max"),
         }],
     )
 

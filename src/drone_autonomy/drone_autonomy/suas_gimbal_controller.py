@@ -4,9 +4,14 @@ Minimalny tester gimbala — sledzi namiot pitchem gimbala (bez ruchu drona).
 Steruje przez ROS topic knr_hardware/gimbal_pitch -> drone_handler -> MAVLink
 (DO_MOUNT_CONTROL) -> ArduPilot -> serwo montazu. TA SAMA sciezka co na realu.
 
-Kalibracja (params gazebo_iris.parm, MNT1_PITCH -90..90):
-    pitch +30 deg ~ lekko w dol (search),  -45 deg = prosto w dol.
+Konwencja katow (real, MNT1_PITCH_MIN/MAX = -90/45 wg docs/gimbal setup.md):
+      0 deg = poziomo (w przod)
+    -45 deg = pod katem w dol/przod  (pozycja SEARCH)
+    -90 deg = prosto w dol
 Wiec: namiot ponizej srodka (ey>0) => patrz bardziej w dol => pitch maleje.
+
+UWAGA: Gazebo ma inna kalibracje (-45 = prosto w dol). Do symulacji podaj
+pitch_min/pitch_max/pitch_search jako parametry, nie zmieniaj domyslnych.
 """
 
 import time
@@ -22,14 +27,15 @@ def clamp(v, lo, hi):
 
 
 class SuasGimbalController(DroneController):
-    # Kat pitch montazu w STOPNIACH (konwencja po kalibracji):
-    GIMBAL_SEARCH = 30.0    # lekko w dol/przod — pozycja gdy brak namiotu
-    GIMBAL_DOWN = -45.0     # prosto w dol
-    PITCH_MIN = -45.0       # nie schodzimy ponizej "prosto w dol"
-    PITCH_MAX = 45.0        # nie wyzej niz przod
 
     def __init__(self):
         super().__init__('suas_gimbal_controller')
+
+        # Zakres pracy gimbala w STOPNIACH — parametry, bo Gazebo i real maja
+        # rozne kalibracje (patrz docstring modulu).
+        self.declare_parameter('pitch_search', -45.0)  # gdy brak namiotu: pod katem w dol/przod
+        self.declare_parameter('pitch_min', -90.0)     # najnizej: prosto w dol
+        self.declare_parameter('pitch_max', -45.0)     # najwyzej: pod katem w dol/przod
 
         # Sterowanie geometryczne: kat liczony WPROST z bledu i pionowego FOV kamery,
         # z tlumieniem. Bez "magicznego" kp.
@@ -40,6 +46,9 @@ class SuasGimbalController(DroneController):
         self.declare_parameter('lost_timeout', 2.0)
         self.declare_parameter('deadzone', 0.06)
 
+        self.pitch_search = self.get_parameter('pitch_search').value
+        self.pitch_min    = self.get_parameter('pitch_min').value
+        self.pitch_max    = self.get_parameter('pitch_max').value
         self.vfov_deg     = self.get_parameter('vfov_deg').value
         self.damping      = self.get_parameter('damping').value
         self.img_h        = self.get_parameter('img_h').value
@@ -50,13 +59,15 @@ class SuasGimbalController(DroneController):
         self.tent_detected = False
         self.tent_cy = 0.0
         self.last_det_time = 0.0
-        self.pitch_deg = self.GIMBAL_SEARCH
+        self.pitch_deg = self.pitch_search
         self._new_det = False   # korekta tylko raz na SWIEZA detekcje
 
         self.create_subscription(TentDetection, '/tent_detections', self._det_cb, 10)
         self._timer = self.create_timer(1.0 / self.control_rate, self._loop)
         self.get_logger().info(
-            f"SuasGimbalController (MAVLink mount) gotowy | vfov={self.vfov_deg} damping={self.damping}")
+            f"SuasGimbalController (MAVLink mount) gotowy | vfov={self.vfov_deg} "
+            f"damping={self.damping} | pitch {self.pitch_min}..{self.pitch_max} "
+            f"search={self.pitch_search}")
 
     def _det_cb(self, msg: TentDetection):
         if msg.detected:
@@ -69,7 +80,7 @@ class SuasGimbalController(DroneController):
             self.tent_detected = False
 
     def _set_pitch(self, deg):
-        self.pitch_deg = clamp(deg, self.PITCH_MIN, self.PITCH_MAX)
+        self.pitch_deg = clamp(deg, self.pitch_min, self.pitch_max)
         self.set_gimbal_pitch(self.pitch_deg)
 
     def _loop(self):
@@ -78,7 +89,7 @@ class SuasGimbalController(DroneController):
 
         # Do SEARCH dopiero po dluzszym braku detekcji (nie przy 1 pustej klatce).
         if dt_lost > self.lost_timeout:
-            self._set_pitch(self.GIMBAL_SEARCH)
+            self._set_pitch(self.pitch_search)
             self.get_logger().info("[SZUKAM] namiot zgubiony -> SEARCH",
                                    throttle_duration_sec=2.0)
             return
