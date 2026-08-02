@@ -1,0 +1,123 @@
+#VRML_SIM R2025a utf8
+
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackground.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/floors/protos/Floor.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/appearances/protos/Grass.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/factory/manhole/protos/SquareManhole.proto"
+IMPORTABLE EXTERNPROTO "../protos/IrisSimple.proto"
+
+WorldInfo {
+  title "Stereo Depth Test"
+  basicTimeStep 2
+  FPS 20
+}
+Viewpoint {
+  orientation 0.028363339622224835 -0.9981822757472139 -0.05317579665212045 5.301673552943007
+  position -15.587707190660662 -7.548547887879861 15.221757217483317
+  follow "Iris"
+  followSmoothness 0.01
+}
+TexturedBackground {
+}
+TexturedBackgroundLight {
+}
+Floor {
+  size 30 30
+  appearance Grass {
+  }
+}
+SquareManhole {
+  translation 0 0 0
+  name "drone takeoff"
+  size 0.5 0.5 0.1
+}
+DEF Iris IrisSimple {
+  translation 0 0 0.13
+  rotation 0 0 1 0
+  controller "ardupilot_sitl_controller"
+  controllerArgs [
+    "--motors"
+    "m1_motor, m2_motor, m3_motor, m4_motor"
+    "--stereo-left"
+    "oak_left"
+    "--stereo-right"
+    "oak_right"
+    "--stereo-name"
+    "oak"
+    "--stereo-fps"
+    "10"
+  ]
+  extensionSlot [
+    DEF OAK_LEFT Camera {
+      translation 0.09 0.0375 0.0
+      rotation 0 1 0 0.785
+      name "oak_left"
+      fieldOfView 1.2
+      width 320
+      height 240
+    }
+    DEF OAK_RIGHT Camera {
+      translation 0.09 -0.0375 0.0
+      rotation 0 1 0 0.785
+      name "oak_right"
+      fieldOfView 1.2
+      width 320
+      height 240
+    }
+  ]
+}
+Solid {
+  translation 3 0 1.5
+  children [
+    Shape {
+      appearance PBRAppearance {
+        baseColor 0.8 0.3 0.2
+        roughness 0.95
+      }
+      geometry Box {
+        size 0.4 3.0 3.0
+      }
+    }
+  ]
+  name "wall"
+  boundingObject Box {
+    size 0.4 3.0 3.0
+  }
+}
+DEF BOX_LEFT Solid {
+  translation 4 1.5 1.0
+  children [
+    Shape {
+      appearance PBRAppearance {
+        baseColor 0.2 0.6 0.8
+        roughness 0.9
+      }
+      geometry Box {
+        size 0.6 0.6 2.0
+      }
+    }
+  ]
+  name "pillar_left"
+  boundingObject Box {
+    size 0.6 0.6 2.0
+  }
+}
+DEF BOX_RIGHT Solid {
+  translation 5 -2.0 1.0
+  children [
+    Shape {
+      appearance PBRAppearance {
+        baseColor 0.3 0.8 0.3
+        roughness 0.9
+      }
+      geometry Box {
+        size 0.6 0.6 2.0
+      }
+    }
+  ]
+  name "pillar_right"
+  boundingObject Box {
+    size 0.6 0.6 2.0
+  }
+}

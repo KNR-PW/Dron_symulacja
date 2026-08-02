@@ -30,6 +30,8 @@ setup(
             'PID_test_mission=drone_autonomy.PID_test_mission:main',
             'field_test_of_velocity=drone_autonomy.field_test_of_velocity:main',
             'hydrolab_full_mission=drone_autonomy.testyHydrolab.hydrolab_full_mission:main',
+            'obstacle_avoidance_oak=drone_autonomy.obstacle_avoidance_oak:main',
+            'oa_test_mission=drone_autonomy.oa_test_mission:main',
         ],
     },
 )

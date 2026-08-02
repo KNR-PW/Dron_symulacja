@@ -63,6 +63,8 @@ class WebotsArduVehicleRos():
                  rangefinder_stream_port: int = None,
                  lidar_name: str = None,
                  lidar_fps: int = 10,
+                 stereo_pairs: List = None,
+                 stereo_fps: int = 10,
                  instance: int = 0,
                  motor_velocity_cap: float = float('inf'),
                  reversed_motors: List[int] = None,
@@ -161,6 +163,27 @@ class WebotsArduVehicleRos():
                                                   target=self._handle_image_stream,
                                                   args=[self.rangefinder, rangefinder_stream_port])
                 self._rangefinder_thread.start()
+
+        # init stereo camera pairs
+        # stereo_pairs is a list of (left_device_name, right_device_name, topic_namespace)
+        if stereo_pairs:
+            for left_name, right_name, ns in stereo_pairs:
+                left_dev = self.robot.getDevice(left_name)
+                right_dev = self.robot.getDevice(right_name)
+                if left_dev is None or right_dev is None:
+                    print(f"Failed to get stereo devices: {left_name} / {right_name}")
+                    continue
+                left_dev.enable(1000 // stereo_fps)
+                right_dev.enable(1000 // stereo_fps)
+
+                left_pub = self.node.create_publisher(Image, f'{ns}/left/image_raw', 10)
+                right_pub = self.node.create_publisher(Image, f'{ns}/right/image_raw', 10)
+
+                thread = Thread(daemon=True,
+                                target=self._handle_stereo_stream,
+                                args=[left_dev, right_dev, left_pub, right_pub, ns, stereo_fps])
+                thread.start()
+                print(f"Stereo pair '{ns}' enabled ({left_name} + {right_name})")
 
         # init lidar
         print(f"Lidar name: {lidar_name}")
@@ -536,6 +559,50 @@ class WebotsArduVehicleRos():
             # Czekamy do następnej klatki
             while self.robot.getTime() - start_time < 1.0/fps:
                 time.sleep(0.001)
+
+    def _handle_stereo_stream(self, left_dev: Camera, right_dev: Camera,
+                              left_pub, right_pub, ns: str, fps: int):
+        """Publish a rectified stereo pair as two mono8 Image topics sharing one timestamp.
+
+        The pair is emitted with a common stamp so a downstream node can pair them
+        with an exact TimeSynchronizer before running the disparity search.
+        """
+        time.sleep(2)
+        print(f"Stereo stream '{ns}' started "
+              f"({left_dev.getWidth()}x{left_dev.getHeight()} @ {fps}fps)")
+
+        while self._webots_connected:
+            start_time = self.robot.getTime()
+
+            left_img = self._device_gray_image(left_dev)
+            right_img = self._device_gray_image(right_dev)
+            if left_img is None or right_img is None:
+                time.sleep(1.0 / fps)
+                continue
+
+            stamp = self.node.get_clock().now().to_msg()
+
+            left_msg = self.br.cv2_to_imgmsg(left_img, "mono8")
+            left_msg.header.stamp = stamp
+            left_msg.header.frame_id = f'{ns}_left_optical'
+
+            right_msg = self.br.cv2_to_imgmsg(right_img, "mono8")
+            right_msg.header.stamp = stamp
+            right_msg.header.frame_id = f'{ns}_left_optical'
+
+            left_pub.publish(left_msg)
+            right_pub.publish(right_msg)
+
+            while self.robot.getTime() - start_time < 1.0 / fps:
+                time.sleep(0.001)
+
+    def _device_gray_image(self, device: Camera) -> np.ndarray:
+        """Read a Webots Camera BGRA buffer and return a mono8 numpy array"""
+        raw = device.getImage()
+        if raw is None:
+            return None
+        img = np.frombuffer(raw, np.uint8).reshape((device.getHeight(), device.getWidth(), 4))
+        return np.average(img[:, :, :3], axis=2).astype(np.uint8)
 
     def get_camera_gray_image(self) -> np.ndarray:
         """Get the grayscale image from the camera as a numpy array of bytes"""

@@ -17,41 +17,47 @@ def generate_launch_description():
         ros2_supervisor=True
     )
 
-    drone_handler_node_1 = Node(
+    drone_handler_node = Node(
         package='drone_hardware',
         executable='drone_handler',
-        namespace='drone1',
         parameters=[
             {'fc_ip': 'tcp:127.0.0.1:5762'}
-        ]
-    )
-
-    drone_handler_node_2 = Node(
-        package='drone_hardware',
-        executable='drone_handler',
-        namespace='drone2',
-        parameters=[
-            {'fc_ip': 'tcp:127.0.0.1:5772'}
         ]
     )
 
     drone_handler_node_action = TimerAction(
         period=10.0,
         actions=[
-            drone_handler_node_1,
-            drone_handler_node_2
+            drone_handler_node
         ]
+    )
+
+    stereo_depth_node = Node(
+        package='webots_simulation',
+        executable='stereo_depth',
+        parameters=[{
+            'left_topic': 'oak/left/image_raw',
+            'right_topic': 'oak/right/image_raw',
+            'output_ns': 'oak/stereo',
+            'points_topic': 'oak/points',
+            'baseline': 0.075,
+            'fx': 233.87,
+            'fy': 233.87,
+            'cx': 160.0,
+            'cy': 120.0,
+        }]
     )
 
     return LaunchDescription([
         DeclareLaunchArgument(
             'world',
-            default_value='swarm_test.wbt',
+            default_value='depth_test.wbt',
             description='Choose one of the world files from `/webots_simulation/resource/worlds` directory'
         ),
         webots,
         webots._supervisor,
         drone_handler_node_action,
+        stereo_depth_node,
 
         launch.actions.RegisterEventHandler(
             event_handler=launch.event_handlers.OnProcessExit(

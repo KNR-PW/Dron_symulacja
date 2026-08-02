@@ -88,6 +88,24 @@ def get_args():
                         default=10,
                         help="Lidar FPS")
 
+    parser.add_argument("--stereo-left",
+                        type=str,
+                        default=None,
+                        help="Comma spaced list of Webots Camera names for the LEFT eye of each stereo pair")
+    parser.add_argument("--stereo-right",
+                        type=str,
+                        default=None,
+                        help="Comma spaced list of Webots Camera names for the RIGHT eye of each stereo pair")
+    parser.add_argument("--stereo-name",
+                        type=str,
+                        default="oak",
+                        help="Comma spaced list of topic namespaces for each stereo pair "
+                             "(publishes <name>/left/image_raw and <name>/right/image_raw)")
+    parser.add_argument("--stereo-fps",
+                        type=int,
+                        default=10,
+                        help="Stereo cameras FPS. Note lower FPS is faster")
+
     parser.add_argument("--instance", "-i",
                         type=int,
                         default=0,
@@ -110,6 +128,16 @@ if __name__ == "__main__":
     else:
         reversed_motors = []
 
+    # parse stereo pairs into a list of (left_name, right_name, namespace) tuples
+    stereo_pairs = []
+    if args.stereo_left and args.stereo_right:
+        left_names = [x.strip() for x in args.stereo_left.split(",")]
+        right_names = [x.strip() for x in args.stereo_right.split(",")]
+        ns_names = [x.strip() for x in args.stereo_name.split(",")]
+        for i, (ln, rn) in enumerate(zip(left_names, right_names)):
+            ns = ns_names[i] if i < len(ns_names) else f"oak{i}"
+            stereo_pairs.append((ln, rn, ns))
+
     vehicle = WebotsArduVehicleRos(motor_names=motors,
                                 reversed_motors=reversed_motors,
                                 accel_name=args.accel,
@@ -124,6 +152,8 @@ if __name__ == "__main__":
                                 rangefinder_stream_port=args.rangefinder_port,
                                 lidar_name=args.lidar,
                                 lidar_fps=args.lidar_fps,
+                                stereo_pairs=stereo_pairs,
+                                stereo_fps=args.stereo_fps,
                                 instance=args.instance,
                                 motor_velocity_cap=args.motor_cap,
                                 bidirectional_motors=args.bidirectional_motors,

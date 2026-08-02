@@ -65,6 +65,7 @@ setup(
     entry_points={
         'console_scripts': [
             "ardupilot_camera_handler=webots_simulation.ardupilot_camera_handler:main",
+            "stereo_depth=webots_simulation.stereo_depth:main",
         ],
     },
 )
