@@ -5,9 +5,26 @@ Steruje gimbalem kamery (pitch) przez MAVLink mount (set_gimbal_pitch,
 ta sama sciezka co na realnym dronie) i dronem (vx, vy, vz) przez velocity
 control, aby podlecieć nad wykryty namiot i nad nim zawisać.
 
-Gimbal liczony geometrycznie (jak w gimbal_tracker):
-  korekta = ey * (vfov/2) * damping, aplikowana RAZ na swieza detekcje.
-Kat pitch w STOPNIACH (kalibracja sim): +45 = przod, -45 = prosto w dol.
+Gimbal liczony geometrycznie (dokladnie jak w suas_gimbal_controller):
+  korekta = ey * (vfov/2) * damping, aplikowana RAZ na swieza detekcje,
+  z martwa strefa (gimbal_deadzone) zeby nie drgal przy namiocie w srodku.
+
+Konwencja katow (real, MNT1_PITCH_MIN/MAX = -90/45 wg docs/gimbal setup.md):
+      0 deg = poziomo (w przod)
+    -45 deg = pod katem w dol/przod  (pozycja SEARCH)
+    -90 deg = prosto w dol           (HOVER)
+Namiot ponizej srodka (ey>0) => patrz bardziej w dol => pitch maleje.
+
+UWAGA: domyslne parametry sa dla realu (OAK-D PRO W: img 1014x760, vfov 64.4).
+Gazebo ma inna kalibracje gimbala (-45 = prosto w dol, +45 = przod) i inna kamere
+(1024x1024, vfov 114.6) — do symulacji podaj parametry:
+  pitch_min:=-45.0 pitch_max:=45.0 pitch_search:=30.0 pitch_hover_thr:=-38.0
+  img_w:=1024 img_h:=1024 vfov_deg:=114.6
+
+Wejscie w APPROACH dopiero po potwierdzeniu detekcji: M trafien (det_confirm_frames)
+z ostatnich N klatek (det_window_frames) i — o ile tracker podaje ID — nalezacych
+do tej samej sciezki. Filtruje falszywki, a przy tym toleruje pojedyncze
+przegapienia detektora. Prog pewnosci ustawia sam detektor (parametr 'conf').
 
 API drona (FRD body frame):
   send_vectors(vx, vy, vz, yaw)
@@ -18,9 +35,9 @@ API drona (FRD body frame):
 """
 
 import csv
-import math
 import os
 import time
+from collections import deque
 from enum import Enum, auto
 
 import rclpy
@@ -47,20 +64,35 @@ class State(Enum):
 class SuasFlightController(DroneController):
     """Podlot nad namiot z użyciem gimbala i regulatorów P."""
 
-    # Kat pitch montazu w STOPNIACH: +45 = przod, -45 = prosto w dol (kalibracja sim)
-    PITCH_FRONT = 45.0
-    PITCH_DOWN = -45.0        # prosto w dol (HOVER)
-    GIMBAL_SEARCH = 30.0      # lekko w dol/przod — pozycja szukania
-    GIMBAL_HOVER_THR = -38.0  # prawie pionowo w dol (prog APPROACH->HOVER)
-
     def __init__(self):
         super().__init__('suas_flight_controller')
 
         # ─── Parametry ROS ────────────────────────────────────
-        self.declare_parameter('target_alt', 55.0)
+        # UWAGA: ta sama wartosc domyslna co w launchu — nie rozjezdzac ich.
+        self.declare_parameter('target_alt', 5.0)
+        # Zakres pracy gimbala w STOPNIACH — parametry (jak w suas_gimbal_controller),
+        # bo Gazebo i real maja rozne kalibracje (patrz docstring modulu).
+        self.declare_parameter('pitch_search', -45.0)     # brak namiotu: pod katem w dol/przod
+        self.declare_parameter('pitch_min', -90.0)        # najnizej: prosto w dol (HOVER)
+        # Wyzej niz pitch_search (inaczej vx startuje od razu na 100% kp_vx, bo
+        # forward_ratio liczy sie wzgledem tego zakresu) i zeby tracker mogl siegnac
+        # namiotu widocznego POWYZEJ linii szukania. Limit sprzetowy to ok. -18 deg
+        # (PWM 1900, patrz drone_handler.gimbal_pitch_callback).
+        self.declare_parameter('pitch_max', -30.0)        # najwyzej: pod katem w dol/przod
+        self.declare_parameter('pitch_hover_thr', -83.0)  # prog APPROACH->HOVER (7 deg od pionu)
         # Gimbal geometrycznie: kat wprost z bledu i pionowego FOV kamery + tlumienie
-        self.declare_parameter('vfov_deg', 114.6)
-        self.declare_parameter('damping', 0.4)
+        self.declare_parameter('vfov_deg', 64.4)   # zmierzony pionowy FOV OAK-D PRO W
+        self.declare_parameter('damping', 0.6)
+        self.declare_parameter('gimbal_deadzone', 0.06)
+        # Filtr falszywych detekcji: okno M z N klatek (odporne na pojedyncze
+        # przegapienia detektora, dalej odrzuca pojedyncze falszywki).
+        self.declare_parameter('det_confirm_frames', 6)   # M — ile trafien wymagamy
+        self.declare_parameter('det_window_frames', 8)    # N — dlugosc okna
+        self.declare_parameter('det_confirm_gap', 0.5)    # dluzsza przerwa = okno nieaktualne [s]
+        # Progu pewnosci tu NIE ma — filtruje juz detektor (parametr 'conf' w
+        # launchach detekcji). Jedno pokretlo, jedno miejsce.
+        # Wymagaj tego samego ID sciezki z trackera w calym oknie
+        self.declare_parameter('require_same_track', True)
         self.declare_parameter('kp_vx', 2.0)
         self.declare_parameter('kp_vy', 3.0)
         self.declare_parameter('kp_alt', 0.5)
@@ -70,14 +102,31 @@ class SuasFlightController(DroneController):
         self.declare_parameter('max_yaw_rate', 0.3)
         self.declare_parameter('ema_alpha', 0.4)
         self.declare_parameter('lost_timeout', 3.0)
-        self.declare_parameter('img_w', 1024)
-        self.declare_parameter('img_h', 1024)
+        # Rozmiar oryginalnej klatki (w niej sa wspolrzedne bounding_box):
+        # OAK-D PRO W, ISP 1/4 z 12MP -> 1014x760 (patrz config/oak_rgb.yaml)
+        self.declare_parameter('img_w', 1014)
+        self.declare_parameter('img_h', 760)
         self.declare_parameter('control_rate', 10.0)
         self.declare_parameter('hover_deadzone', 0.08)
 
         self.target_alt    = self.get_parameter('target_alt').value
+        self.pitch_search  = self.get_parameter('pitch_search').value
+        self.pitch_min     = self.get_parameter('pitch_min').value
+        self.pitch_max     = self.get_parameter('pitch_max').value
+        self.pitch_hover_thr = self.get_parameter('pitch_hover_thr').value
         self.vfov_deg      = self.get_parameter('vfov_deg').value
         self.damping       = self.get_parameter('damping').value
+        self.gimbal_deadzone = self.get_parameter('gimbal_deadzone').value
+        self.det_confirm_frames = self.get_parameter('det_confirm_frames').value
+        self.det_window_frames  = self.get_parameter('det_window_frames').value
+        self.det_confirm_gap    = self.get_parameter('det_confirm_gap').value
+        self.require_same_track = self.get_parameter('require_same_track').value
+        # M > N = warunek nie do spelnienia (dron nigdy nie wszedlby w APPROACH).
+        if self.det_confirm_frames > self.det_window_frames:
+            self.get_logger().warn(
+                f"det_confirm_frames({self.det_confirm_frames}) > det_window_frames"
+                f"({self.det_window_frames}) — przycinam do {self.det_window_frames}")
+            self.det_confirm_frames = self.det_window_frames
         self.kp_vx         = self.get_parameter('kp_vx').value
         self.kp_vy         = self.get_parameter('kp_vy').value
         self.kp_alt        = self.get_parameter('kp_alt').value
@@ -94,17 +143,22 @@ class SuasFlightController(DroneController):
 
         # ─── Stan ─────────────────────────────────────────────
         self.state = State.SEARCH
-        self.tent_detected = False
         self.tent_cx = 0.0
         self.tent_cy = 0.0
         self.last_det_time = 0.0
+        self.last_conf = 0.0
 
         self.altitude = 0.0
         self.drone_yaw = 0.0
 
         # Gimbal (kat pitch w stopniach; korekta raz na swieza detekcje)
-        self.pitch_deg = self.GIMBAL_SEARCH
+        self.pitch_deg = self.pitch_search
         self._new_det = False
+
+        # Potwierdzanie detekcji: przesuwne okno N ostatnich klatek (1 = trafienie)
+        self._det_window = deque(maxlen=self.det_window_frames)
+        self._prev_frame_time = 0.0
+        self._cand_id = -1          # ID sledzonego kandydata (-1 = brak/tracker milczy)
 
         # EMA
         self.sm_vx = 0.0
@@ -139,11 +193,18 @@ class SuasFlightController(DroneController):
         self.csv_file = open(self.csv_path, 'w', newline='')
         self.csv_writer = csv.writer(self.csv_file)
         self.csv_writer.writerow([
-            'time_rel', 'state', 'ex', 'ey', 'gimbal_deg', 'vx_cmd', 'vy_cmd', 'yaw_cmd', 'vz_cmd', 'alt'
+            'time_rel', 'state', 'ex', 'ey', 'gimbal_deg', 'vx_cmd', 'vy_cmd', 'yaw_cmd', 'vz_cmd', 'alt',
+            'conf', 'det_hits', 'det_window', 'track_id'
         ])
         self.node_start_time = time.time()
 
         self.get_logger().info(f"SuasFlightController init: alt={self.target_alt}m  vfov={self.vfov_deg} damping={self.damping}  kp_vx={self.kp_vx}  kp_vy={self.kp_vy}  img={self.img_w}x{self.img_h}")
+        self.get_logger().info(
+            f"Gimbal: pitch {self.pitch_min}..{self.pitch_max} search={self.pitch_search} "
+            f"hover_thr={self.pitch_hover_thr} deadzone={self.gimbal_deadzone} | "
+            f"potwierdzenie detekcji: {self.det_confirm_frames} z {self.det_window_frames} "
+            f"klatek, max przerwa {self.det_confirm_gap}s, "
+            f"same_track={self.require_same_track} (prog pewnosci: parametr 'conf' detektora)")
         self.get_logger().info(f"Logi CSV zapisywane do: {self.csv_path}")
 
     # ═══════════════════════════════════════════════════════════
@@ -153,25 +214,87 @@ class SuasFlightController(DroneController):
     def _set_gimbal(self, deg):
         """Ustaw kąt pitch gimbala [deg] i wyślij przez MAVLink mount
         (set_gimbal_pitch -> drone_handler -> serwo; ta sama sciezka co na realu)."""
-        deg = clamp(deg, self.PITCH_DOWN, self.PITCH_FRONT)
+        deg = clamp(deg, self.pitch_min, self.pitch_max)
         if abs(deg - self.pitch_deg) > 0.2:
             self.pitch_deg = deg
             self.set_gimbal_pitch(deg)
 
     # ═══════════════════════════════════════════════════════════
+    #  Hamowanie
+    # ═══════════════════════════════════════════════════════════
+
+    def _brake(self):
+        """Jawne wyzerowanie predkosci przy wyjsciu z APPROACH/HOVER.
+
+        W SEARCH nie wysylamy setpointow, a ArduPilot w GUIDED trzyma OSTATNI
+        zadany wektor jeszcze ~3 s — bez tego dron przy 3 m/s dryfowalby ~9 m
+        po utracie celu. Zerujemy tez EMA, zeby po powrocie do APPROACH
+        rozpedzac sie od zera, a nie od ostatniej predkosci sprzed utraty."""
+        self.sm_vx = 0.0
+        self.sm_vy = 0.0
+        self.sm_yaw = 0.0
+        try:
+            self.send_vectors(0.0, 0.0, 0.0, 0.0)
+        except Exception as e:
+            self.get_logger().error(f"Nie udalo sie wyslac zerowego wektora: {e}")
+
+    # ═══════════════════════════════════════════════════════════
     #  Callbacki
     # ═══════════════════════════════════════════════════════════
 
+    @property
+    def _det_hits(self):
+        """Ile trafien w oknie N ostatnich klatek."""
+        return sum(self._det_window)
+
+    def _reset_det_window(self):
+        self._det_window.clear()
+        self._cand_id = -1
+
     def _det_cb(self, msg: TentDetection):
-        if msg.detected:
-            bb = msg.bounding_box  # [x, y, w, h]
-            self.tent_cx = bb[0] + bb[2] / 2.0
-            self.tent_cy = bb[1] + bb[3] / 2.0
-            self.tent_detected = True
-            self.last_det_time = time.time()
-            self._new_det = True
-        else:
-            self.tent_detected = False
+        """Detektor publikuje KAZDA klatke (takze detected=False), wiec okno
+        liczy sie w klatkach, nie w czasie. Wymagamy M trafien z ostatnich N —
+        pojedyncze przegapienie detektora nie kasuje dorobku, a pojedyncza
+        falszywka nie wystarczy do startu podlotu.
+
+        Pewnosci nie sprawdzamy — detektor publikuje detected=True dopiero
+        powyzej swojego progu 'conf'."""
+        now = time.time()
+
+        # Detektor sie zaciol / kamera padla — stare okno przestaje byc aktualne.
+        if self._prev_frame_time > 0.0 and (now - self._prev_frame_time) > self.det_confirm_gap:
+            if self._det_window:
+                self.get_logger().warn(
+                    f"Przerwa w detekcjach {now - self._prev_frame_time:.2f}s "
+                    f"(> {self.det_confirm_gap}s) — okno potwierdzania wyzerowane")
+            self._reset_det_window()
+        self._prev_frame_time = now
+
+        good = bool(msg.detected)
+
+        if good and self.require_same_track and msg.track_id >= 0:
+            # Tracker widzi obiekt: liczymy tylko klatki tej samej sciezki.
+            # Skok na inne ID = inny obiekt, wiec potwierdzamy go od zera.
+            if self._cand_id < 0:
+                self._cand_id = msg.track_id
+            elif msg.track_id != self._cand_id:
+                self.get_logger().info(
+                    f"Zmiana sledzonego obiektu (ID {self._cand_id} → {msg.track_id}) "
+                    f"— potwierdzam od nowa")
+                self._det_window.clear()
+                self._cand_id = msg.track_id
+
+        self._det_window.append(1 if good else 0)
+
+        if not good:
+            return
+
+        bb = msg.bounding_box  # [x, y, w, h]
+        self.tent_cx = bb[0] + bb[2] / 2.0
+        self.tent_cy = bb[1] + bb[3] / 2.0
+        self.last_conf = msg.confidence
+        self.last_det_time = now
+        self._new_det = True
 
     def _tel_cb(self, msg: Telemetry):
         self.altitude = msg.alt
@@ -202,18 +325,31 @@ class SuasFlightController(DroneController):
         # ─── Przejścia stanów ─────────────────────────────────
         if dt_lost > self.lost_timeout:
             if self.state != State.SEARCH:
-                self.get_logger().info("Namiot ZGUBIONY → SEARCH")
+                self.get_logger().info("Namiot ZGUBIONY → SEARCH (hamowanie)")
                 self.state = State.SEARCH
-                self._set_gimbal(self.GIMBAL_SEARCH)
+                self._set_gimbal(self.pitch_search)
+                self._brake()
+            self._reset_det_window()
 
         elif have_target:
+            # SEARCH → APPROACH dopiero po M trafieniach z ostatnich N klatek —
+            # pojedyncze falszywe wskazanie nie startuje podlotu.
             if self.state == State.SEARCH:
-                self.get_logger().info("Namiot WIDZIANY → APPROACH")
-                self.state = State.APPROACH
+                if self._det_hits >= self.det_confirm_frames:
+                    self.get_logger().info(
+                        f"Namiot POTWIERDZONY ({self._det_hits}/{len(self._det_window)} "
+                        f"klatek, ID={self._cand_id}) → APPROACH")
+                    self.state = State.APPROACH
+                else:
+                    self.get_logger().info(
+                        f"[SEARCH] potwierdzam namiot {self._det_hits}/"
+                        f"{self.det_confirm_frames} (okno {len(self._det_window)}/"
+                        f"{self.det_window_frames}, ID={self._cand_id})...",
+                        throttle_duration_sec=1.0)
 
             # APPROACH → HOVER: gimbal prawie pionowo
             if self.state == State.APPROACH:
-                if self.pitch_deg <= self.GIMBAL_HOVER_THR:
+                if self.pitch_deg <= self.pitch_hover_thr:
                     self.get_logger().info(
                         "NAD NAMIOTEM! → HOVER (gimbal locked)")
                     self.state = State.HOVER
@@ -224,7 +360,8 @@ class SuasFlightController(DroneController):
         yaw_target = 0.0
 
         if self.state == State.SEARCH:
-            # Nie wysyłamy zer — użytkownik steruje ręcznie
+            # Nie wysyłamy setpointów — wejście w SEARCH zahamowało już drona
+            # (_brake), a dalej lot prowadzi operator.
             # Publikujemy tylko debug/csv i wychodzimy
             self.pub_vx.publish(Float32(data=0.0))
             self.pub_vy.publish(Float32(data=0.0))
@@ -235,14 +372,16 @@ class SuasFlightController(DroneController):
             self.pub_ey.publish(Float32(data=float(ey)))
             self.csv_writer.writerow([
                 f"{rel_time:.3f}", self.state.name, f"{ex:.3f}", f"{ey:.3f}", f"{self.pitch_deg:.1f}",
-                "0.000", "0.000", "0.000", "0.000", f"{self.altitude:.2f}"
+                "0.000", "0.000", "0.000", "0.000", f"{self.altitude:.2f}",
+                f"{self.last_conf:.2f}", self._det_hits, len(self._det_window), self._cand_id
             ])
             self.csv_file.flush()
             self.get_logger().info(
-                f"[SEARCH] czekam na namiot... gimbal={self.pitch_deg:+.1f}deg alt={self.altitude:.1f}m",
+                f"[SEARCH] czekam na namiot... gimbal={self.pitch_deg:+.1f}deg "
+                f"alt={self.altitude:.1f}m det={self._det_hits}/{self.det_confirm_frames}",
                 throttle_duration_sec=2.0
             )
-            return  # NIE wysyłamy send_vectors — ręczne sterowanie
+            return  # NIE wysyłamy send_vectors — steruje operator
 
         elif self.state == State.APPROACH:
             # 1. Gimbal pitch — geometrycznie, RAZ na swieza detekcje
@@ -250,14 +389,18 @@ class SuasFlightController(DroneController):
             #    samej klatki powodowaloby oscylacje gimbala).
             if self._new_det:
                 self._new_det = False
-                correction = ey * (self.vfov_deg / 2.0) * self.damping
-                self._set_gimbal(self.pitch_deg - correction)
+                # Martwa strefa jak w gimbal_controller: blisko srodka nie ruszamy
+                # gimbala (koniec drgan).
+                if abs(ey) >= self.gimbal_deadzone:
+                    correction = ey * (self.vfov_deg / 2.0) * self.damping
+                    self._set_gimbal(self.pitch_deg - correction)
 
             # 2. vx — leć do przodu proporcjonalnie do pochylenia gimbala
-            #    pitch=+45 (przod) → namiot daleko → leć szybko (forward_ratio=1.0)
-            #    pitch=-45 (dol)   → namiot pod spodem → hamuj (forward_ratio=0.0)
-            tilt = (self.PITCH_FRONT - self.pitch_deg) / (self.PITCH_FRONT - self.PITCH_DOWN)
-            forward_ratio = 1.0 - tilt
+            #    pitch=pitch_max (przod/skos) → namiot daleko → leć szybko (ratio=1.0)
+            #    pitch=pitch_min (prosto w dol) → namiot pod spodem → hamuj (ratio=0.0)
+            span = self.pitch_max - self.pitch_min
+            forward_ratio = (self.pitch_deg - self.pitch_min) / span if span else 0.0
+            forward_ratio = clamp(forward_ratio, 0.0, 1.0)
             vx_target = self.kp_vx * forward_ratio
 
             # 3. vy — WYŁĄCZONE w APPROACH (używamy tylko yaw do celowania)
@@ -268,13 +411,14 @@ class SuasFlightController(DroneController):
 
         elif self.state == State.HOVER:
             # Gimbal zablokowany pionowo w dol
-            self._set_gimbal(self.PITCH_DOWN)
+            self._set_gimbal(self.pitch_min)
             self._new_det = False
 
             # Korekcja mikroruchów z uchybów obrazu (tylko translacja, bez obrotu)
             # Gdy kamera patrzy w dół: ex→vy, ey→-vx (obraz jest "odwrócony" vs body)
-            vx_target = -self.kp_vy * ey
-            vy_target =  self.kp_vy * ex
+            # Martwa strefa: blisko środka nie ruszamy dronem.
+            vx_target = -self.kp_vy * ey if abs(ey) >= self.hover_deadzone else 0.0
+            vy_target =  self.kp_vy * ex if abs(ex) >= self.hover_deadzone else 0.0
             yaw_target = 0.0
 
         # ─── Clamp + EMA ─────────────────────────────────────
@@ -301,7 +445,8 @@ class SuasFlightController(DroneController):
         # ─── Zapis do CSV ─────────────────────────────────────
         self.csv_writer.writerow([
             f"{rel_time:.3f}", self.state.name, f"{ex:.3f}", f"{ey:.3f}", f"{self.pitch_deg:.1f}",
-            f"{self.sm_vx:.3f}", f"{self.sm_vy:.3f}", f"{self.sm_yaw:.3f}", f"{vz:.3f}", f"{self.altitude:.2f}"
+            f"{self.sm_vx:.3f}", f"{self.sm_vy:.3f}", f"{self.sm_yaw:.3f}", f"{vz:.3f}", f"{self.altitude:.2f}",
+            f"{self.last_conf:.2f}", self._det_hits, len(self._det_window), self._cand_id
         ])
         self.csv_file.flush() # upewnij się, że dane są na dysku
 
@@ -333,13 +478,15 @@ class SuasFlightController(DroneController):
         self.get_logger().info("Velocity control AKTYWNY")
 
         # Gimbal do pozycji startowej (szukanie) — wyslij bezwarunkowo,
-        # bo pitch_deg startuje juz na GIMBAL_SEARCH i _set_gimbal by pominal
-        self.pitch_deg = self.GIMBAL_SEARCH
+        # bo pitch_deg startuje juz na pitch_search i _set_gimbal by pominal
+        self.pitch_deg = self.pitch_search
         self.set_gimbal_pitch(self.pitch_deg)
 
         # Start pętli
         self.state = State.SEARCH
         self.last_det_time = 0.0
+        self._prev_frame_time = 0.0
+        self._reset_det_window()
         self._timer.reset()
         self.get_logger().info("Szukam namiotu...")
 
