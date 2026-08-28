@@ -82,6 +82,7 @@ class YoloDetectorBase(Node):
         det.detected = False
         det.bounding_box = [0.0, 0.0, 0.0, 0.0]
         det.confidence = 0.0
+        det.track_id = -1
 
         if results and len(results[0].boxes) > 0:
             # Najpewniejszy box, nie pierwszy z listy: track() porzadkuje wyniki wg
@@ -92,6 +93,8 @@ class YoloDetectorBase(Node):
             det.detected = True
             det.bounding_box = [x1, y1, x2 - x1, y2 - y1]
             det.confidence = float(box.conf[0])
+            # ID sciezki z trackera; None dopoki tracker nie potwierdzi sciezki.
+            det.track_id = int(box.id[0]) if box.id is not None else -1
 
         self.pub.publish(det)
 

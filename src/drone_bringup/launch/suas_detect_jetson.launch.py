@@ -61,6 +61,16 @@ def generate_launch_description():
         default_value="20",
         description="Jakosc JPEG podgladu (1-100); nizsza = mniej danych po Wi-Fi",
     )
+    web_port_arg = DeclareLaunchArgument(
+        "web_port",
+        default_value="8080",
+        description="Port serwera podgladu w przegladarce",
+    )
+    web_address_arg = DeclareLaunchArgument(
+        "web_address",
+        default_value="0.0.0.0",
+        description="Interfejs nasluchu; 0.0.0.0 = wszystkie (Tailscale + LAN)",
+    )
 
     # ─── YOLO detektor (Jetson) ──────────────────────────
     yolo_detector = Node(
@@ -87,6 +97,23 @@ def generate_launch_description():
     # (cv2.imencode). Osobny node republish wymagal wyslania raw bgr8 960x720
     # (2.1 MB/klatke) miedzy procesami — to bylo drozsze niz sam JPEG.
 
+    # ─── Podglad w przegladarce ──────────────────────────
+    # http://<ip-jetsona>:8080/  — lista topicow z obrazem.
+    # Nie obciaza Jetsona, dopoki nikt nie patrzy (detektor publikuje podglad
+    # tylko przy aktywnej subskrypcji). Szczegoly: docs/podglad_web_kamera.md
+    web_video_server = Node(
+        package="web_video_server",
+        executable="web_video_server",
+        name="web_video_server",
+        parameters=[
+            {
+                "port": ParameterValue(
+                    LaunchConfiguration("web_port"), value_type=int),
+                "address": LaunchConfiguration("web_address"),
+            }
+        ],
+    )
+
     return LaunchDescription(
         [
             model_path_arg,
@@ -94,7 +121,10 @@ def generate_launch_description():
             camera_topic_arg,
             debug_every_n_arg,
             debug_jpeg_quality_arg,
+            web_port_arg,
+            web_address_arg,
             depthai_launch,     # kamera OAK-D
             yolo_detector,      # detekcja YOLO
+            web_video_server,   # podglad w przegladarce
         ]
     )
