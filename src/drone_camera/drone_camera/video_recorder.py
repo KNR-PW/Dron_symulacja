@@ -6,6 +6,7 @@ import cv2
 import os
 from rcl_interfaces.msg import ParameterDescriptor, ParameterType
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
+from rclpy.executors import ExternalShutdownException
 
 from drone_interfaces.srv import TurnOnVideo, TurnOffVideo
 
@@ -29,6 +30,9 @@ class VideoRecorder(Node):
         # przelaczy sie na MJPG/avi (patrz start_video_callback).
         self.declare_parameter('video_ext', 'mp4')
         self.declare_parameter('fourcc', 'mp4v')
+        # true = nagrywaj od razu po pierwszej klatce, bez wolania serwisu.
+        # Zatrzymanie node'a (Ctrl+C) domyka wtedy plik.
+        self.declare_parameter('autostart', False)
 
         self.fps = float(self.get_parameter('fps').value)
         camera_topic = self.get_parameter('camera_topic').get_parameter_value().string_value
@@ -68,22 +72,27 @@ class VideoRecorder(Node):
 
         self._start_video_flag = False
         self.video_name = 0
+        self._autostart = self.get_parameter('autostart').get_parameter_value().bool_value
+        if self._autostart:
+            self.get_logger().info('autostart: nagrywanie ruszy po pierwszej klatce')
 
         self.get_logger().info('video_recorder node created')
 
     def listener_callback(self, data):
         self.current_frame = self.br.imgmsg_to_cv2(data)
 
+        # Rozmiar klatki znamy dopiero tutaj, wiec autostart odpala sie
+        # przy pierwszym obrazie, a nie w konstruktorze.
+        if self._autostart:
+            self._autostart = False
+            self._open_video()
+
         if self._start_video_flag:
             self.result.write(self.current_frame)
 
-    def start_video_callback(self, request, response):
-        if not hasattr(self, 'current_frame'):
-            self.get_logger().error(
-                'Brak klatek z kamery — nie zaczynam nagrywania. '
-                'Sprawdz camera_topic i czy kamera publikuje.')
-            response.error = True
-            return response
+    def _open_video(self) -> bool:
+        """Otwiera nowy plik wideo. Zwraca True, gdy sie udalo."""
+        self.close_video()   # domknij poprzedni, gdyby ktos wolal start dwa razy
         self.video_name += 1
         height ,width , c = self.current_frame.shape
         size = (int(width), int(height))
@@ -103,20 +112,32 @@ class VideoRecorder(Node):
             self.result = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*'MJPG'), self.fps, size)
             if not self.result.isOpened():
                 self.get_logger().error(f'Nie moge zapisywac wideo do {path}')
-                response.error = True
-                return response
+                return False
 
         self._start_video_flag = True
-        response.error = False
         self.get_logger().info(f'Nagrywam do {path} @ {self.fps} fps')
+        return True
 
+    def close_video(self):
+        """Domyka plik. Bez tego nagranie zostaje uszkodzone."""
+        if self._start_video_flag:
+            self._start_video_flag = False
+            self.result.release()
+            self.get_logger().info('Nagranie zapisane')
+
+    def start_video_callback(self, request, response):
+        if not hasattr(self, 'current_frame'):
+            self.get_logger().error(
+                'Brak klatek z kamery — nie zaczynam nagrywania. '
+                'Sprawdz camera_topic i czy kamera publikuje.')
+            response.error = True
+            return response
+        response.error = not self._open_video()
         return response
-    
+
     def stop_video_callback(self, request, response):
-        self._start_video_flag = False
-        self.result.release()
+        self.close_video()
         response.error = False
-        self.get_logger().info('Stop making')
 
         return response
 
@@ -125,11 +146,17 @@ def main(args=None):
 
     images_recorder = VideoRecorder()
 
-    rclpy.spin(images_recorder)
-
-    images_recorder.destroy_node()
-
-    rclpy.shutdown()
+    try:
+        rclpy.spin(images_recorder)
+    except (KeyboardInterrupt, ExternalShutdownException):
+        pass
+    finally:
+        # Ctrl+C tez musi domknac plik — inaczej mp4 zostaje bez naglowka
+        # i nie da sie go odtworzyc.
+        images_recorder.close_video()
+        images_recorder.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == '__main__':
