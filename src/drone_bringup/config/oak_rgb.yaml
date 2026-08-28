@@ -15,3 +15,13 @@
                                # 1/3 NIE dziala: 3040/3 nie jest calkowite
       i_output_isp: true       # publikuj wyjscie ISP (respektuje skalowanie powyzej)
       i_fps: 15.0
+
+    # ── Jakosc JPEG dla PODGLADU (/oak/rgb/image_raw/compressed) ──────────
+    # Dotyczy wylacznie wtyczki compressed z image_transport. YOLO czyta
+    # surowy /oak/rgb/image_raw, wiec to NIE wplywa na detekcje — psuje tylko
+    # obraz ogladany w przegladarce, za to mocno tnie transfer przez Tailscale.
+    # Domyslnie 80; 25 = kilkukrotnie mniejsza klatka.
+    oak:
+      rgb:
+        image_raw:
+          jpeg_quality: 25
