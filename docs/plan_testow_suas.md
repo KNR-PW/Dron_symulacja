@@ -52,7 +52,7 @@ ros2 launch drone_bringup suas_detect_jetson.launch.py
 Sprawdzenie (T3):
 ```bash
 ros2 topic hz /oak/rgb/image_raw
-ros2 topic echo /oak/rgb/image_raw --field height --once   # ma byc 760 (config 12MP + ISP 1/4)
+ros2 topic echo /oak/rgb/image_raw --field height --once   # ma byc 1024 (kwadratowe preview)
 ros2 topic hz /tent_detections
 ros2 topic echo /tent_detections --once
 ```
@@ -75,7 +75,7 @@ ros2 run rqt_image_view rqt_image_view /tent_detections/image/compressed
 Wymaga: T1 + T2 dzialaja.
 
 ```bash
-ros2 launch drone_bringup suas_gimbal_controller.launch.py img_h:=760 vfov_deg:=64.4
+ros2 launch drone_bringup suas_gimbal_controller.launch.py img_h:=1024 vfov_deg:=64.4
 # opcje: damping:=0.4  deadzone:=0.06  control_rate:=10.0
 #        pitch_min:=-90.0  pitch_max:=-45.0  pitch_search:=-45.0
 ```
@@ -86,12 +86,13 @@ Gimbal pracuje w `-90..-45`, czyli nigdy nie patrzy nad horyzont.
 W Gazebo kalibracja jest inna (`-45` = prosto w dol) — tam podaj
 `pitch_min:=-45.0 pitch_max:=45.0 pitch_search:=30.0`.
 
-Domyslne `img_h:=1024 vfov_deg:=114.6` sa dla Gazebo — nie uzywaj na realu.
+Domyslne `vfov_deg:=114.6` jest dla Gazebo — nie uzywaj na realu (`img_h` to
+teraz 1024 w obu przypadkach).
 `64.4` = pomiar z 29.07 (patrz 3a). Powtorz pomiar po zmianie configu kamery.
 
 **Nie wpisuj 720.** `/tent_detections/image` ma 960x720, bo podglad debug jest
 skalowany do 960 px szerokosci. Wspolrzedne w `/tent_detections` sa w pikselach
-oryginalnego obrazu, czyli `img_h` = 760 (to co zwraca `image_raw --field height`).
+oryginalnego obrazu, czyli `img_h` = 1024 (to co zwraca `image_raw --field height`).
 
 ### 3a. Pomiar VFOV — raz, przy dzialajacym T2
 
@@ -110,7 +111,13 @@ print(f"VFOV   = {math.degrees(2*math.atan(m.height/(2*m.k[4]))):.1f}")
 EOF
 ```
 
-Powtorz po kazdej zmianie `i_resolution` / `i_isp_den` w `config/oak_rgb.yaml`.
+Powtorz po kazdej zmianie `i_resolution` / `i_isp_den` / `i_preview_size`
+w `config/oak_rgb.yaml`. Uwaga: crop do kwadratu tnie BOKI, wiec sam VFOV
+nie powinien sie zmienic wzgledem klatki 4:3 — ten pomiar to potwierdza.
+
+> **Wykrywanie ludzi z 50 m:** ten plan opisuje scenariusz namiotowy z malej
+> wysokosci. Dobor kadru i rozdzielczosci pod ludzi z 50 m, wraz z liczbami
+> i procedura weryfikacji, jest w `docs/oak_kadr_detekcji.md`.
 
 Logi: `[SLEDZE]` dosuwa, `[CENTR]` wycentrowany, `[SZUKAM]` brak namiotu.
 

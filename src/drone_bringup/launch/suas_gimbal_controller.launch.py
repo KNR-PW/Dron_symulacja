@@ -12,10 +12,12 @@ from launch_ros.actions import Node
 def generate_launch_description():
     # ─── Argumenty ────────────────────────────────────────
     args = [
-        # Zmierzone dla OAK-D PRO W (ISP 1/4 z 12MP -> 1014x760)
+        # Zmierzone dla OAK-D PRO W. Crop do kwadratu tnie boki, nie gore/dol,
+        # wiec pionowy FOV jest ten sam co przy klatce 4:3 -> vfov bez zmian.
         DeclareLaunchArgument("vfov_deg", default_value="64.4"),
         DeclareLaunchArgument("damping", default_value="0.4"),
-        DeclareLaunchArgument("img_h", default_value="760"),
+        # Kwadratowe preview 1024x1024 z config/oak_rgb.yaml
+        DeclareLaunchArgument("img_h", default_value="1024"),
         DeclareLaunchArgument("control_rate", default_value="10.0"),
         DeclareLaunchArgument("lost_timeout", default_value="2.0"),
         DeclareLaunchArgument("deadzone", default_value="0.06"),

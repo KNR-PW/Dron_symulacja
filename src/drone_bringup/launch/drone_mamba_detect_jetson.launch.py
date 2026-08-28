@@ -6,7 +6,7 @@ Laczy T1 i T2 z docs/plan_testow_suas.md w jednym terminalu:
   - suas_detect_jetson     (kamera OAK-D + YOLO -> /tent_detections)
 
 Gimbal (T3) zostaje osobno — odpalasz go dopiero gdy /tent_detections publikuje:
-  ros2 launch drone_bringup suas_gimbal_controller.launch.py img_h:=760 vfov_deg:=64.4
+  ros2 launch drone_bringup suas_gimbal_controller.launch.py img_h:=1024 vfov_deg:=64.4
 """
 
 import os

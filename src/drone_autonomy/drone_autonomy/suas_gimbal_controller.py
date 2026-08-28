@@ -10,10 +10,10 @@ Konwencja katow (real, MNT1_PITCH_MIN/MAX = -90/45 wg docs/gimbal setup.md):
     -90 deg = prosto w dol
 Wiec: namiot ponizej srodka (ey>0) => patrz bardziej w dol => pitch maleje.
 
-UWAGA: domyslne parametry sa dla realu (OAK-D PRO W: img_h 760, vfov 64.4).
-Gazebo ma inna kalibracje (-45 = prosto w dol) i inna kamere (1024x1024,
-vfov 114.6) — do symulacji podaj pitch_min/pitch_max/pitch_search oraz
-img_h:=1024 vfov_deg:=114.6, nie zmieniaj domyslnych.
+UWAGA: domyslne parametry sa dla realu (OAK-D PRO W: img_h 1024, vfov 64.4).
+Gazebo ma inna kalibracje (-45 = prosto w dol) i inny FOV — do symulacji podaj
+pitch_min/pitch_max/pitch_search oraz vfov_deg:=114.6, nie zmieniaj domyslnych.
+Rozmiar klatki jest teraz ten sam (1024x1024) w Gazebo i na realu.
 """
 
 import time
@@ -43,7 +43,7 @@ class SuasGimbalController(DroneController):
         # z tlumieniem. Bez "magicznego" kp.
         self.declare_parameter('vfov_deg', 64.4)    # zmierzony pionowy FOV OAK-D PRO W
         self.declare_parameter('damping', 0.4)      # 1.0 = deadbeat (1 krok), mniej = lagodniej
-        self.declare_parameter('img_h', 760)        # wysokosc oryginalnej klatki (ISP 1/4 z 12MP)
+        self.declare_parameter('img_h', 1024)       # wysokosc klatki: kwadratowe preview 1024x1024
         self.declare_parameter('control_rate', 10.0)
         self.declare_parameter('lost_timeout', 2.0)
         self.declare_parameter('deadzone', 0.06)
