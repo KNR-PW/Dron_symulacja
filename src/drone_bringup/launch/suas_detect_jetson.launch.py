@@ -9,7 +9,7 @@ import os
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from ament_index_python.packages import get_package_share_directory
@@ -19,11 +19,18 @@ def generate_launch_description():
     # ─── Kamera OAK-D (depthai) — tryb RGB-only ──────────
     # Publikuje obraz na /oak/rgb/image_raw. Config wymusza pipeline RGB
     # (bez glebi/chmury punktow) — lekkie, dziala nawet po USB2.
-    oak_rgb_config = os.path.join(
+    # oak_config wybiera plik z config/: oak_rgb.yaml (lot z detekcja) albo
+    # oak_rgb_4k.yaml (pelna rozdzielczosc do zbierania materialu).
+    oak_config_arg = DeclareLaunchArgument(
+        "oak_config",
+        default_value="oak_rgb.yaml",
+        description="Nazwa pliku config kamery w drone_bringup/config/",
+    )
+    oak_rgb_config = PathJoinSubstitution([
         get_package_share_directory("drone_bringup"),
         "config",
-        "oak_rgb.yaml",
-    )
+        LaunchConfiguration("oak_config"),
+    ])
     depthai_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(
@@ -116,6 +123,8 @@ def generate_launch_description():
 
     return LaunchDescription(
         [
+            # oak_config musi byc przed depthai_launch — podstawia sie w sciezke configu
+            oak_config_arg,
             model_path_arg,
             confidence_arg,
             camera_topic_arg,

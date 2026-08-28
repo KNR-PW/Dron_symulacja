@@ -1,0 +1,58 @@
+# Config KAMERY DO ZBIERANIA MATERIALU — pelna rozdzielczosc, bez cropa.
+#
+# NIE do latania z detekcja. Sluzy do zrobienia zdjec/nagran w maksymalnej
+# jakosci, zeby POTEM offline sprawdzic, ktory kadr jest potrzebny do wykrycia
+# czlowieka z 50 m (patrz docs/oak_kadr_detekcji.md).
+#
+# Nazwa "_4k" jest potoczna — domyslnie jest tu 12 MP (4056x3040), a nie 3840x2160.
+# To celowe: 12 MP to PELNA matryca w 4:3, wiec z jednego takiego zdjecia da sie
+# offline wyciac kazdy testowany wariant kadru. Tryb 4K jest 16:9, czyli juz
+# przyciety w pionie — z niego nie odtworzysz wariantow z pelnym FOV.
+# Blok 4K jest nizej, do odkomentowania, jesli chodzi Ci o nagrywanie wideo.
+#
+# Uzycie (kamera osobno, bez detektora):
+#   ros2 launch depthai_ros_driver camera.launch.py \
+#       params_file:=$(ros2 pkg prefix drone_bringup)/share/drone_bringup/config/oak_rgb_4k.yaml
+#   ros2 launch drone_bringup oak_photos.launch.py
+#
+# Albo przez detekcyjny launch:
+#   ros2 launch drone_bringup suas_detect_jetson.launch.py oak_config:=oak_rgb_4k.yaml
+
+/oak:
+  ros__parameters:
+    camera:
+      i_pipeline_type: 'RGB'   # tylko RGB, bez glebi i chmury punktow
+      i_nn_type: 'none'        # bez sieci na kamerze
+
+    rgb:
+      # ── Pelna matryca, zero skalowania i zero cropa ────────────────────
+      i_resolution: '12MP'     # 4056x3040, pelne pole widzenia obiektywu wide
+      i_isp_num: 1
+      i_isp_den: 1             # bez zjazdu ISP — natywne piksele sensora
+      i_output_isp: true       # publikuj wyjscie ISP (nie preview — bez cropa)
+      i_fps: 10.0              # 12 MP zwykle nie wyrabia wiecej; zmierz przez
+                               # ros2 topic hz /oak/rgb/image_raw
+
+      # ── Wariant 4K (16:9) — odkomentuj do nagrywania wideo ────────────
+      # Wyzszy fps i mniejsze klatki, ale przyciete w pionie: NIE nadaje sie
+      # do offline'owego testu kadrow.
+      # i_resolution: '4K'     # 3840x2160
+      # i_fps: 20.0
+
+      # ── Ekspozycja ────────────────────────────────────────────────────
+      # Parametry z prefiksem r_ sa zmienialne W LOCIE:
+      #   ros2 param set /oak rgb.r_exposure 2000
+      # Domyslnie auto. Przy GSD ok. 2 cm/px i 10 m/s auto-exposure pod chmurami
+      # potrafi zejsc do 1/60 s = ok. 8 px smugi i rozmazac czlowieka calkowicie.
+      # Jesli na zdjeciach cel jest smuga, wlacz manual i skracaj czas:
+      # r_set_man_exposure: true
+      # r_exposure: 3000       # mikrosekundy (3000 us = 1/333 s)
+      # r_iso: 400             # 100-1600; wyzsze = jasniej, ale wiecej szumu
+
+    # ── Podglad w przegladarce ──────────────────────────────────────────
+    # Klatki 12 MP sa duze, wiec podglad trzyma sie nisko, zeby nie zapchac
+    # Tailscale. Nie wplywa na zapisywany material — recorder czyta surowy topic.
+    oak:
+      rgb:
+        image_raw:
+          jpeg_quality: 30
