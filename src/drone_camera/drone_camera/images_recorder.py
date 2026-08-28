@@ -5,6 +5,7 @@ from cv_bridge import CvBridge
 import cv2
 import os
 from rcl_interfaces.msg import ParameterDescriptor, ParameterType
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 # made by Stanisław Kołodziejski
 
 class ImagesRecorder(Node):
@@ -18,14 +19,24 @@ class ImagesRecorder(Node):
                 type=ParameterType.PARAMETER_DOUBLE,
                 description="Frames per second for the video recording.",
             ))
+        # Kamery publikujace BEST_EFFORT (np. OAK-D) nie dogadaja sie z domyslnym
+        # subskrybentem RELIABLE — wtedy nie przychodzi ani jedna klatka.
+        # BEST_EFFORT po stronie odbiorcy dziala z obydwoma rodzajami publisherow.
+        self.declare_parameter('best_effort', False)
 
         camera_topic = self.get_parameter('camera_topic').get_parameter_value().string_value
         self.get_logger().info(f'camera_topic: {camera_topic}')
+        if self.get_parameter('best_effort').get_parameter_value().bool_value:
+            qos = QoSProfile(depth=1, history=HistoryPolicy.KEEP_LAST,
+                             reliability=ReliabilityPolicy.BEST_EFFORT)
+            self.get_logger().info('QoS: BEST_EFFORT')
+        else:
+            qos = 10
         self.subscription = self.create_subscription(
             Image,
             camera_topic,
             self.listener_callback,
-            10)
+            qos)
 
         save_directory_base = self.get_parameter('save_directory_base').get_parameter_value().string_value
         if not os.path.exists(save_directory_base):

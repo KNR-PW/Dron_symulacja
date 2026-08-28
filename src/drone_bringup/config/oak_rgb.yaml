@@ -24,4 +24,4 @@
     oak:
       rgb:
         image_raw:
-          jpeg_quality: 25
+          jpeg_quality: 10
