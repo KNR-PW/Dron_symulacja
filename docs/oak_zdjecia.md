@@ -7,7 +7,7 @@ zapis do `~/oak_photos/1`, `~/oak_photos/2`...
 ```bash
 ros2 launch drone_bringup oak_photos.launch.py
 
-ros2 launch drone_bringup oak_photos.launch.py fps:=2.0
+ros2 launch drone_bringup oak_photos.launch.py camera_topic:=/oak/rgb/image_raw fps:=0.5
 ```
 
 ## Wybor 1 topicu
