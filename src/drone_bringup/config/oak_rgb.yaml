@@ -5,16 +5,30 @@
       i_nn_type: 'none'        # bez sieci na kamerze, YOLO liczy na Jetsonie
     rgb:
       # OAK-D PRO W: obiektyw wide siedzi na CAM_A i jest uzywany zawsze - nie ma
-      # parametru "wide" do wlaczenia. Ale sensor IMX378 jest 4:3 (4056x3040),
-      # a tryb '1080P' to 16:9 -> obcina gore i dol, czyli OS PITCHU gimbala.
-      # Dlatego pelna klatka 4:3 + zjazd ISP zamiast trybu 16:9.
-      i_resolution: '12MP'     # 4056x3040 - pelne pole widzenia obiektywu wide
+      # parametru "wide" do wlaczenia. Sensor IMX378 jest 4:3 (4056x3040).
+      #
+      # DLACZEGO KWADRAT 1024x1024, a nie klatka 4:3:
+      # MODEL4.engine to TensorRT ze SZTYWNYM wejsciem 1024x1024. Ultralytics
+      # letterboxuje kazda klatke do tego ksztaltu. Przy 4:3 (1014x760) model
+      # dostawal 1024x767 obrazu + 257 px szarych pasow = 25% tensora zmarnowane.
+      # Kwadratowe wyjscie wypelnia caly tensor realnym obrazem: +33% pikseli
+      # na celu, przy tym samym koszcie inferencji.
+      #
+      # Crop do kwadratu jest CENTRALNY i tnie BOKI, nie gore/dol -> pionowy FOV
+      # bez zmian, wiec vfov_deg=64.4 w suas_*_controller zostaje poprawne.
+      # Poziomy FOV spada z ~86 na ~64 stopni (swiadomie - liczy sie zasieg, nie szerokosc).
+      i_resolution: '12MP'     # 4056x3040 - pelny odczyt sensora
       i_isp_num: 1
-      i_isp_den: 4             # -> 1014x760 (4:3, pelny FOV, ~imgsz=1024)
-                               # 1/2 -> 2028x1520 jesli chcesz wiecej detalu (4x dane)
-                               # 1/3 NIE dziala: 3040/3 nie jest calkowite
-      i_output_isp: true       # publikuj wyjscie ISP (respektuje skalowanie powyzej)
-      i_fps: 15.0
+      i_isp_den: 2             # -> 2028x1520 NA URZADZENIU; to tylko zrodlo dla
+                               # preview, przez USB NIE leci (i_output_isp: false).
+                               # Musi byc >= 1024 w obu osiach, inaczej preview
+                               # upscalowalby. 1/3 NIE dziala: 3040/3 nie jest calkowite.
+      i_output_isp: false      # publikuj preview (kwadrat), nie surowy ISP
+      i_enable_preview: true
+      i_preview_size: 1024     # dokladnie wejscie MODEL4.engine - zero skalowania na Jetsonie
+      i_keep_preview_aspect_ratio: true   # crop centralny zamiast rozciagniecia obrazu
+      i_fps: 15.0              # sufit to i tak inferencja enginu; podnies jesli
+                               # log detektora pokazuje FPS blisko 15
 
     # ── Jakosc JPEG dla PODGLADU (/oak/rgb/image_raw/compressed) ──────────
     # Dotyczy wylacznie wtyczki compressed z image_transport. YOLO czyta

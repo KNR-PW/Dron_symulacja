@@ -15,11 +15,12 @@ Konwencja katow (real, MNT1_PITCH_MIN/MAX = -90/45 wg docs/gimbal setup.md):
     -90 deg = prosto w dol           (HOVER)
 Namiot ponizej srodka (ey>0) => patrz bardziej w dol => pitch maleje.
 
-UWAGA: domyslne parametry sa dla realu (OAK-D PRO W: img 1014x760, vfov 64.4).
-Gazebo ma inna kalibracje gimbala (-45 = prosto w dol, +45 = przod) i inna kamere
-(1024x1024, vfov 114.6) — do symulacji podaj parametry:
+UWAGA: domyslne parametry sa dla realu (OAK-D PRO W: img 1024x1024, vfov 64.4).
+Gazebo ma inna kalibracje gimbala (-45 = prosto w dol, +45 = przod) i szerszy FOV
+— do symulacji podaj parametry:
   pitch_min:=-45.0 pitch_max:=45.0 pitch_search:=30.0 pitch_hover_thr:=-38.0
-  img_w:=1024 img_h:=1024 vfov_deg:=114.6
+  vfov_deg:=114.6
+Rozmiar klatki jest teraz ten sam (1024x1024) w Gazebo i na realu.
 
 Wejscie w APPROACH dopiero po potwierdzeniu detekcji: M trafien (det_confirm_frames)
 z ostatnich N klatek (det_window_frames) i — o ile tracker podaje ID — nalezacych
@@ -103,9 +104,11 @@ class SuasFlightController(DroneController):
         self.declare_parameter('ema_alpha', 0.4)
         self.declare_parameter('lost_timeout', 3.0)
         # Rozmiar oryginalnej klatki (w niej sa wspolrzedne bounding_box):
-        # OAK-D PRO W, ISP 1/4 z 12MP -> 1014x760 (patrz config/oak_rgb.yaml)
-        self.declare_parameter('img_w', 1014)
-        self.declare_parameter('img_h', 760)
+        # OAK-D PRO W, kwadratowe preview 1024x1024 (patrz config/oak_rgb.yaml).
+        # Kwadrat, bo MODEL4.engine ma sztywne wejscie 1024x1024 - klatka 4:3
+        # dokladalaby szare pasy i marnowala 25% tensora.
+        self.declare_parameter('img_w', 1024)
+        self.declare_parameter('img_h', 1024)
         self.declare_parameter('control_rate', 10.0)
         self.declare_parameter('hover_deadzone', 0.08)
 
