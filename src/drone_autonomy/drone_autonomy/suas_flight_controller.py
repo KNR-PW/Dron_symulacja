@@ -15,12 +15,15 @@ Konwencja katow (real, MNT1_PITCH_MIN/MAX = -90/45 wg docs/gimbal setup.md):
     -90 deg = prosto w dol           (HOVER)
 Namiot ponizej srodka (ey>0) => patrz bardziej w dol => pitch maleje.
 
-UWAGA: domyslne parametry sa dla realu (OAK-D PRO W: img 1024x1024, vfov 64.4).
-Gazebo ma inna kalibracje gimbala (-45 = prosto w dol, +45 = przod) i szerszy FOV
-— do symulacji podaj parametry:
-  pitch_min:=-45.0 pitch_max:=45.0 pitch_search:=30.0 pitch_hover_thr:=-38.0
-  vfov_deg:=114.6
-Rozmiar klatki jest teraz ten sam (1024x1024) w Gazebo i na realu.
+UWAGA: domyslne parametry sa dla REALU (OAK-D PRO W: img 1024x1024, vfov 64.4)
+i w Gazebo dzialaja BEZ ZMIAN — symulacja zostala dociagnieta do realu:
+  * kamera: model gimbal_small_3d ma 1024x1024 i FOV 64.4 deg,
+  * gimbal: pitch idzie przez SERVO7 (kanal 6 w ArduPilotPlugin modelu
+    iris_with_gimbal), czyli ta sama sciezka DO_SET_SERVO(7) co na realu,
+    z ta sama kalibracja 1100 us = -90 deg, 1600 us = -45 deg.
+Nie nadpisuj wiec w symulacji ani vfov_deg/img_*, ani katow pitch_*.
+Jedyne, co warto podniesc w Gazebo, to det_confirm_gap (detektor chodzi tam
+~2-4 FPS zamiast 7-14).
 
 Wejscie w APPROACH dopiero po potwierdzeniu detekcji: M trafien (det_confirm_frames)
 z ostatnich N klatek (det_window_frames) i — o ile tracker podaje ID — nalezacych
@@ -65,8 +68,8 @@ class State(Enum):
 class SuasFlightController(DroneController):
     """Podlot nad namiot z użyciem gimbala i regulatorów P."""
 
-    def __init__(self):
-        super().__init__('suas_flight_controller')
+    def __init__(self, node_name='suas_flight_controller'):
+        super().__init__(node_name)
 
         # ─── Parametry ROS ────────────────────────────────────
         # UWAGA: ta sama wartosc domyslna co w launchu — nie rozjezdzac ich.
@@ -192,7 +195,9 @@ class SuasFlightController(DroneController):
         self.pub_ey     = self.create_publisher(Float32, '~/debug/error_y', 10)
 
         # ─── Logowanie CSV (Black Box) ────────────────────────
-        self.csv_path = os.path.expanduser('~/suas_flight_controller_log.csv')
+        # Nazwa pliku od nazwy wezla — misja nadpisujaca ten kontroler
+        # (suas_simple_mission) pisze do wlasnego CSV, a nie do tego samego pliku.
+        self.csv_path = os.path.expanduser(f'~/{self.get_name()}_log.csv')
         self.csv_file = open(self.csv_path, 'w', newline='')
         self.csv_writer = csv.writer(self.csv_file)
         self.csv_writer.writerow([

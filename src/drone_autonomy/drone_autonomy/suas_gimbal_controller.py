@@ -10,10 +10,11 @@ Konwencja katow (real, MNT1_PITCH_MIN/MAX = -90/45 wg docs/gimbal setup.md):
     -90 deg = prosto w dol
 Wiec: namiot ponizej srodka (ey>0) => patrz bardziej w dol => pitch maleje.
 
-UWAGA: domyslne parametry sa dla realu (OAK-D PRO W: img_h 1024, vfov 64.4).
-Gazebo ma inna kalibracje (-45 = prosto w dol) i inny FOV — do symulacji podaj
-pitch_min/pitch_max/pitch_search oraz vfov_deg:=114.6, nie zmieniaj domyslnych.
-Rozmiar klatki jest teraz ten sam (1024x1024) w Gazebo i na realu.
+UWAGA: domyslne parametry sa dla REALU (OAK-D PRO W: img_h 1024, vfov 64.4)
+i w Gazebo dzialaja BEZ ZMIAN. Symulacja ma teraz te sama kamere
+(gimbal_small_3d: 1024x1024, FOV 64.4 deg) i te sama sciezke gimbala
+(DO_SET_SERVO(7) -> kanal 6 w modelu iris_with_gimbal, kalibracja
+1100 us = -90 deg, 1600 us = -45 deg). Nic nie nadpisujemy.
 """
 
 import time
