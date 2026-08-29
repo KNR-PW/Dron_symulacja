@@ -29,6 +29,12 @@ class YoloDetectorBase(Node):
         self.declare_parameter("input_size", 1024)
         self.declare_parameter("debug_every_n", 1)      # 1 = podglad z kazdej klatki
         self.declare_parameter("debug_jpeg_quality", 20)
+        # Filtr klas modelu, np. "0" = tylko namioty, "1" = tylko ludzie,
+        # "" = wszystkie. Model jest dwuklasowy, a publikujemy TYLKO jeden
+        # (najpewniejszy) box na klatke — bez filtra namiot z 50 m zawsze
+        # wygra z czlowiekiem, bo jest wiekszy i latwiejszy do wykrycia.
+        # Indeksy klas wypisuje log przy starcie.
+        self.declare_parameter("classes", "")
 
         model_path = self.get_parameter("model_path").value
         self.conf = self.get_parameter("conf").value
@@ -36,6 +42,9 @@ class YoloDetectorBase(Node):
         cam_topic = self.get_parameter("camera_topic").value
         self.debug_every_n = max(1, self.get_parameter("debug_every_n").value)
         self.jpeg_quality = self.get_parameter("debug_jpeg_quality").value
+        cls_str = self.get_parameter("classes").value.strip()
+        # None = bez filtra; ultralytics oczekuje listy indeksow albo None
+        self.classes = [int(c) for c in cls_str.split(",") if c.strip()] or None
 
         # ── 3. MODEL YOLO ───────────────────────────────────────────
         self.get_logger().info(f"Loading model: {model_path}")
@@ -60,9 +69,13 @@ class YoloDetectorBase(Node):
         self._dbg_frames = 0
         self._t0 = time.monotonic()
 
+        # Wypisujemy mapowanie indeks -> nazwa, zeby dalo sie ustawic 'classes'
+        # bez zgadywania, ktory numer to ktora klasa.
+        self.get_logger().info(f"Klasy modelu: {self.model.names}")
         self.get_logger().info(
             f"{node_name} ready  |  input_size={self.input_size} "
-            f"debug_every_n={self.debug_every_n}")
+            f"debug_every_n={self.debug_every_n} "
+            f"classes={self.classes if self.classes is not None else 'wszystkie'}")
 
     # ────────────────────────────────────────────────────────────────
     def _on_image(self, msg: Image):
@@ -74,6 +87,7 @@ class YoloDetectorBase(Node):
             persist=True,
             verbose=False,
             imgsz=self.input_size,
+            classes=self.classes,
             **self._track_kwargs,
         )
 
