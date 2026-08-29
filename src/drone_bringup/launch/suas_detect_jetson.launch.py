@@ -68,7 +68,7 @@ def generate_launch_description():
     )
     debug_jpeg_quality_arg = DeclareLaunchArgument(
         "debug_jpeg_quality",
-        default_value="20",
+        default_value="10",
         description="Jakosc JPEG podgladu (1-100); nizsza = mniej danych po Wi-Fi",
     )
     web_port_arg = DeclareLaunchArgument(
