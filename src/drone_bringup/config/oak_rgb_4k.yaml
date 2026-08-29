@@ -4,13 +4,13 @@
 # jakosci, zeby POTEM offline sprawdzic, ktory kadr jest potrzebny do wykrycia
 # czlowieka z 50 m (patrz docs/oak_kadr_detekcji.md).
 #
-# Uzycie (kamera osobno, bez detektora):
-#   ros2 launch depthai_ros_driver camera.launch.py \
-#       params_file:=$(ros2 pkg prefix drone_bringup)/share/drone_bringup/config/oak_rgb_4k.yaml
+# Uzycie:
+#   ros2 launch drone_bringup suas_detect_jetson.launch.py oak_config:=oak_rgb_4k.yaml
 #   ros2 launch drone_bringup oak_photos.launch.py
 #
-# Albo przez detekcyjny launch:
-#   ros2 launch drone_bringup suas_detect_jetson.launch.py oak_config:=oak_rgb_4k.yaml
+# UWAGA: zadnych nawiasow z dolarem w tym pliku, takze w komentarzach.
+# depthai wczytuje go przez ParameterFile(allow_substs=True), wiec launch
+# parsuje KAZDA linie i wywala sie na "Unknown substitution".
 
 /oak:
   ros__parameters:
@@ -23,12 +23,27 @@
       i_resolution: '12MP'     # 4056x3040, pelne pole widzenia obiektywu wide
       i_isp_num: 1
       i_isp_den: 1             # bez zjazdu ISP — natywne piksele sensora
-      i_output_isp: true       # publikuj wyjscie ISP (nie preview — bez cropa)
+      i_output_isp: true       # /oak/rgb/image_raw = pelne 4056x3040, bez cropa
       i_fps: 10.0              # 12 MP zwykle nie wyrabia wiecej; zmierz przez
                                # ros2 topic hz /oak/rgb/image_raw
+
+      # ── Preview 1024x1024 OBOK pelnej klatki ──────────────────────────
+      # Sterownik publikuje oba strumienie naraz:
+      #   /oak/rgb/image_raw          4056x3040  -> nagrania i zdjecia
+      #   /oak/rgb/preview/image_raw  1024x1024  -> detekcja / testy
+      # Preview powstaje ZAWSZE z calej klatki ISP, niezaleznie od i_isp_den,
+      # wiec pole widzenia jest identyczne jak w oak_rgb.yaml — mozna testowac
+      # na tym samym kadrze, nagrywajac jednoczesnie w pelnej rozdzielczosci.
+      # Skalowanie robi kamera, nie Jetson.
+      i_enable_preview: true
+      i_preview_size: 1024
+      i_keep_preview_aspect_ratio: true
 
 
     oak:
       rgb:
         image_raw:
           jpeg_quality: 5
+        preview:
+          image_raw:
+            jpeg_quality: 8
