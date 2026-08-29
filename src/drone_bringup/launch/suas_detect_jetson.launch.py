@@ -48,7 +48,7 @@ def generate_launch_description():
     # ─── Argumenty ────────────────────────────────────────
     model_path_arg = DeclareLaunchArgument(
         "model_path",
-        default_value="/home/jetsonknr/Dron_symulacja/src/drone_detector/models/MODEL4.engine",
+        default_value="/home/jetsonknr/Dron_symulacja/src/drone_detector/models/MODEL5.engine",
         description="Sciezka do modelu TensorRT (.engine) — musi byc zbudowany dla imgsz=1024",
     )
     confidence_arg = DeclareLaunchArgument(
