@@ -48,7 +48,7 @@ def generate_launch_description():
     # ─── Argumenty ────────────────────────────────────────
     model_path_arg = DeclareLaunchArgument(
         "model_path",
-        default_value="/home/jetsonknr/Dron_symulacja/src/drone_detector/models/MODEL5.engine",
+        default_value="/home/jetsonknr/Dron_symulacja/src/drone_detector/models/MODEL4.engine",
         description="Sciezka do modelu TensorRT (.engine) — musi byc zbudowany dla imgsz=1024",
     )
     confidence_arg = DeclareLaunchArgument(
@@ -60,6 +60,12 @@ def generate_launch_description():
         "camera_topic",
         default_value="/oak/rgb/preview/image_raw",
         description="Topic obrazu z prawdziwej kamery (np. OAK-D)",
+    )
+    classes_arg = DeclareLaunchArgument(
+        "classes",
+        default_value="",
+        description="Filtr klas modelu: \"\" = wszystkie, \"0\" = tylko namioty, "
+                    "\"1\" = tylko ludzie. Indeksy wypisuje log detektora przy starcie",
     )
     debug_every_n_arg = DeclareLaunchArgument(
         "debug_every_n",
@@ -92,6 +98,7 @@ def generate_launch_description():
                 "camera_topic": LaunchConfiguration("camera_topic"),
                 "model_path": LaunchConfiguration("model_path"),
                 "conf": LaunchConfiguration("conf"),
+                "classes": LaunchConfiguration("classes"),
                 "input_size": 1024,
                 # ParameterValue(int) bo LaunchConfiguration oddaje string,
                 # a node deklaruje te parametry jako int
@@ -130,6 +137,7 @@ def generate_launch_description():
             oak_config_arg,
             model_path_arg,
             confidence_arg,
+            classes_arg,
             camera_topic_arg,
             debug_every_n_arg,
             debug_jpeg_quality_arg,
