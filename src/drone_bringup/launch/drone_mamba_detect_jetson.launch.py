@@ -47,7 +47,10 @@ def generate_launch_description():
     )
     camera_topic_arg = DeclareLaunchArgument(
         "camera_topic",
-        default_value="/oak/rgb/image_raw",
+        # Kwadratowe preview 1024x1024 — osobny topic niz /oak/rgb/image_raw,
+        # ktory oddaje pelna klatke 4:3 (2028x1520). Musi byc taki sam jak
+        # domyslny w suas_detect_jetson.launch.py, bo ta wartosc go nadpisuje.
+        default_value="/oak/rgb/preview/image_raw",
         description="Topic obrazu z kamery OAK-D",
     )
     debug_every_n_arg = DeclareLaunchArgument(

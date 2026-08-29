@@ -17,8 +17,11 @@ from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
     # ─── Kamera OAK-D (depthai) — tryb RGB-only ──────────
-    # Publikuje obraz na /oak/rgb/image_raw. Config wymusza pipeline RGB
-    # (bez glebi/chmury punktow) — lekkie, dziala nawet po USB2.
+    # Config wymusza pipeline RGB (bez glebi/chmury punktow) — lekkie, dziala
+    # nawet po USB2. Sterownik publikuje DWA strumienie:
+    #   /oak/rgb/image_raw          pelna klatka 4:3 (2028x1520 przy ISP/2)
+    #   /oak/rgb/preview/image_raw  kwadrat 1024x1024 (crop bokow) — dla YOLO
+    # Detektor czyta preview, bo MODEL4.engine ma sztywne wejscie 1024x1024.
     # oak_config wybiera plik z config/: oak_rgb.yaml (lot z detekcja) albo
     # oak_rgb_4k.yaml (pelna rozdzielczosc do zbierania materialu).
     oak_config_arg = DeclareLaunchArgument(
@@ -55,7 +58,7 @@ def generate_launch_description():
     )
     camera_topic_arg = DeclareLaunchArgument(
         "camera_topic",
-        default_value="/oak/rgb/image_raw",
+        default_value="/oak/rgb/preview/image_raw",
         description="Topic obrazu z prawdziwej kamery (np. OAK-D)",
     )
     debug_every_n_arg = DeclareLaunchArgument(

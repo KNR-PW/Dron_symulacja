@@ -39,3 +39,8 @@
       rgb:
         image_raw:
           jpeg_quality: 10
+        # To samo dla kwadratowego preview — to on idzie do YOLO, wiec to jego
+        # najczesciej ogladamy w przegladarce.
+        preview:
+          image_raw:
+            jpeg_quality: 10
