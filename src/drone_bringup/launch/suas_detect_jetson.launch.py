@@ -98,7 +98,10 @@ def generate_launch_description():
                 "camera_topic": LaunchConfiguration("camera_topic"),
                 "model_path": LaunchConfiguration("model_path"),
                 "conf": LaunchConfiguration("conf"),
-                "classes": LaunchConfiguration("classes"),
+                # value_type=str, bo "0" launch odczytalby jako INTEGER,
+                # a node deklaruje ten parametr jako string ("0,1" tez ma dzialac)
+                "classes": ParameterValue(
+                    LaunchConfiguration("classes"), value_type=str),
                 "input_size": 1024,
                 # ParameterValue(int) bo LaunchConfiguration oddaje string,
                 # a node deklaruje te parametry jako int
