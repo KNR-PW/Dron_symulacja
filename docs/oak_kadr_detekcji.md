@@ -72,7 +72,7 @@ python3 - <<'EOF'
 import math, rclpy
 from sensor_msgs.msg import CameraInfo
 rclpy.init(); n = rclpy.create_node('fov'); box = []
-n.create_subscription(CameraInfo, '/oak/rgb/camera_info', box.append, 10)
+n.create_subscription(CameraInfo, '/oak/rgb/preview/camera_info', box.append, 10)
 while not box: rclpy.spin_once(n)
 m = box[0]; fx, fy = m.k[0], m.k[4]
 print(f"rozmiar = {m.width}x{m.height}")
