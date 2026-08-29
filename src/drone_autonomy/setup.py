@@ -32,6 +32,7 @@ setup(
             'yolo_detector=drone_autonomy.yolo_detector:main',
             'suas_flight_controller=drone_autonomy.suas_flight_controller:main',
             'suas_gimbal_controller=drone_autonomy.suas_gimbal_controller:main',
+            'suas_simple_mission=drone_autonomy.suas_simple_mission:main',
         ],
     },
 )

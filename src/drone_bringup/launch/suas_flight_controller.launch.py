@@ -37,8 +37,9 @@ def generate_launch_description():
         DeclareLaunchArgument("det_confirm_gap", default_value="0.5"),
         # Prog pewnosci: parametr 'conf' w launchach detekcji, nie tutaj
         DeclareLaunchArgument("require_same_track", default_value="true"),
-        # Konwencja realu: 0 = poziomo, -45 = pod katem w dol/przod, -90 = prosto w dol
-        # Dla Gazebo: pitch_search=30.0 pitch_min=-45.0 pitch_max=45.0 pitch_hover_thr=-38.0
+        # Konwencja realu: 0 = poziomo, -45 = pod katem w dol/przod, -90 = prosto w dol.
+        # W Gazebo ta sama — model iris_with_gimbal czyta SERVO7 (kanal 6) z ta
+        # sama kalibracja co drone_handler, wiec nie nadpisujemy tego w symulacji.
         DeclareLaunchArgument("pitch_search", default_value="-45.0"),
         DeclareLaunchArgument("pitch_min", default_value="-90.0"),
         # -30 (nie -45 jak w gimbal_controller): daje zapas nad linia szukania,

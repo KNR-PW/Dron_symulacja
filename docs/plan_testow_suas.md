@@ -83,11 +83,12 @@ ros2 launch drone_bringup suas_gimbal_controller.launch.py img_h:=1024 vfov_deg:
 Zakres pitcha (domyslny, konwencja realu wg `docs/gimbal setup.md`):
 `0` = poziomo, `-45` = pod katem w dol/przod (SEARCH), `-90` = prosto w dol.
 Gimbal pracuje w `-90..-45`, czyli nigdy nie patrzy nad horyzont.
-W Gazebo kalibracja jest inna (`-45` = prosto w dol) — tam podaj
-`pitch_min:=-45.0 pitch_max:=45.0 pitch_search:=30.0`.
+W Gazebo obowiazuja **te same** katy: model `iris_with_gimbal` czyta SERVO7
+(kanal 6 w `ArduPilotPlugin`) z ta sama kalibracja co `drone_handler`
+(`1100 us = -90 deg`, `1600 us = -45 deg`), wiec nic nie nadpisujemy.
 
-Domyslne `vfov_deg:=114.6` jest dla Gazebo — nie uzywaj na realu (`img_h` to
-teraz 1024 w obu przypadkach).
+`vfov_deg` domyslnie `64.4` — ta sama wartosc w Gazebo i na realu, bo kamera
+w modelu `gimbal_small_3d` ma teraz FOV 64.4 deg i klatke 1024x1024.
 `64.4` = pomiar z 29.07 (patrz 3a). Powtorz pomiar po zmianie configu kamery.
 
 **Nie wpisuj 720.** `/tent_detections/image` ma 960x720, bo podglad debug jest
