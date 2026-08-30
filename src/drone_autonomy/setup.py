@@ -33,6 +33,7 @@ setup(
             'suas_flight_controller=drone_autonomy.suas_flight_controller:main',
             'suas_gimbal_controller=drone_autonomy.suas_gimbal_controller:main',
             'suas_simple_mission=drone_autonomy.suas_simple_mission:main',
+            'tent_geolocator=drone_autonomy.tent_geolocator:main',
         ],
     },
 )
