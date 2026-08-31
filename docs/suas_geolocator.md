@@ -1,4 +1,4 @@
-# Zapis wspolrzednych namiotu (tent_geolocator)
+# Zapis wspolrzednych namiotu (suas_geolocator)
 
 Node slucha detekcji YOLO i telemetrii, rzutuje kazda detekcje z piksela na punkt
 na ziemi (wysokosc + ogniskowa kamery) i grupuje punkty przestrzennie. Prawdziwy
@@ -19,7 +19,7 @@ ros2 launch drone_bringup suas_detect_jetson.launch.py \
     classes:=0
 
 # terminal 3 — zapis wspolrzednych
-ros2 launch drone_bringup tent_geolocator.launch.py
+ros2 launch drone_bringup suas_geolocator.launch.py
 ```
 
 `classes:=0` jest **konieczne**: model jest dwuklasowy (`{0: 'namiot', 1: 'people'}`),
@@ -60,7 +60,7 @@ prawdziwym namiotem, bez przewijania wideo.
 ## Parametry
 
 ```bash
-ros2 launch drone_bringup tent_geolocator.launch.py cluster_radius:=6.0
+ros2 launch drone_bringup suas_geolocator.launch.py cluster_radius:=6.0
 ```
 
 | parametr | domyslnie | co robi |
@@ -74,7 +74,7 @@ ros2 launch drone_bringup tent_geolocator.launch.py cluster_radius:=6.0
 | `save_dir` | `~/suas_targets` | katalog wynikow |
 
 Reszta (`focal_px`, `max_tilt`, `center_frac`, `tent_size_m`, `min_alt`...) przez
-`--ros-args -p`, patrz sekcja PARAMETRY w `tent_geolocator.py`.
+`--ros-args -p`, patrz sekcja PARAMETRY w `suas_geolocator.py`.
 
 ## Test bez latania
 

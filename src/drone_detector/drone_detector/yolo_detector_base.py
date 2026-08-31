@@ -3,17 +3,43 @@
 
 import time
 import cv2
-import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from sensor_msgs.msg import CompressedImage, Image
 from cv_bridge import CvBridge
 from ultralytics import YOLO
 
-from drone_interfaces.msg import TentDetection
+from drone_interfaces.msg import TentDetection, TentDetections
 
 # ── 1. STALE ────────────────────────────────────────────────────────
 DEBUG_MAX_WIDTH = 960   # szerokosc obrazu debug (px); mniejszy = tanszy encode/transfer
+
+# Model jest dwuklasowy i taki zostanie, wiec mapowanie trzymamy na sztywno —
+# parametr z wlasnym mini-jezykiem bylby przerostem formy nad trescia.
+# Nazwy sluza tylko do logow i etykiet; zrodlem prawdy sa indeksy modelu,
+# ktore node wypisuje przy starcie.
+CLASS_TOPICS = {
+    0: "/tent_detections",      # namiot
+    1: "/people_detections",    # czlowiek
+}
+CLASS_NAMES = {0: "namiot", 1: "czlowiek"}
+CLASS_COLORS = {0: (0, 255, 0), 1: (0, 165, 255)}   # BGR: zielony, pomaranczowy
+UNKNOWN_COLOR = (160, 160, 160)
+
+
+def _empty_detection() -> TentDetection:
+    """Pusta detekcja — publikowana, gdy w klatce nie ma obiektu danej klasy.
+
+    Publikujemy ja KAZDA klatke, takze bez trafienia: odbiorcy (okno M z N
+    w suas_flight_controller, timeouty gimbala) licza klatki, nie sekundy.
+    """
+    det = TentDetection()
+    det.detected = False
+    det.bounding_box = [0.0, 0.0, 0.0, 0.0]
+    det.confidence = 0.0
+    det.track_id = -1
+    det.class_id = -1
+    return det
 
 
 class YoloDetectorBase(Node):
@@ -29,11 +55,10 @@ class YoloDetectorBase(Node):
         self.declare_parameter("input_size", 1024)
         self.declare_parameter("debug_every_n", 1)      # 1 = podglad z kazdej klatki
         self.declare_parameter("debug_jpeg_quality", 20)
-        # Filtr klas modelu, np. "0" = tylko namioty, "1" = tylko ludzie,
-        # "" = wszystkie. Model jest dwuklasowy, a publikujemy TYLKO jeden
-        # (najpewniejszy) box na klatke — bez filtra namiot z 50 m zawsze
-        # wygra z czlowiekiem, bo jest wiekszy i latwiejszy do wykrycia.
-        # Indeksy klas wypisuje log przy starcie.
+        # Filtr klas modelu, np. "0" = tylko namioty, "1" = tylko ludzie.
+        # DOMYSLNIE PUSTY = obie klasy naraz. Filtr nie jest juz potrzebny do
+        # rozdzielenia klas (kazda ma wlasny topic) — zostaje na wypadek, gdyby
+        # ktoras klasa generowala smieci i chcialo sie ja wylaczyc.
         self.declare_parameter("classes", "")
 
         model_path = self.get_parameter("model_path").value
@@ -53,7 +78,16 @@ class YoloDetectorBase(Node):
         self._track_kwargs = track_kwargs or {}
 
         # ── 4. PUB / SUB ────────────────────────────────────────────
-        self.pub = self.create_publisher(TentDetection, "/tent_detections", 10)
+        # /detections — komplet boxow z klatki, obie klasy, z naglowkiem czasu.
+        # To jest zrodlo prawdy dla geolokalizacji.
+        self.pub_all = self.create_publisher(TentDetections, "/detections", 10)
+        # Topici per klasa — najpewniejszy box DANEJ klasy, kazda klatke.
+        # Zachowuja semantyke sprzed rozdzielenia klas, wiec suas_flight_controller
+        # i suas_gimbal_controller dzialaja bez zmian.
+        self.class_pubs = {
+            cls: self.create_publisher(TentDetection, topic, 10)
+            for cls, topic in CLASS_TOPICS.items()
+        }
         self.img_pub = self.create_publisher(Image, "/tent_detections/image", 1)
         # JPEG robimy tu, w tym samym watku. Wysylanie raw bgr8 960x720 (2.1 MB/klatke)
         # do osobnego node'a republish kosztowalo wiecej CPU niz sam encode.
@@ -65,17 +99,19 @@ class YoloDetectorBase(Node):
 
         # ── 5. LICZNIKI ─────────────────────────────────────────────
         self._frames = 0
-        self._detected_frames = 0
+        self._hits = {cls: 0 for cls in CLASS_TOPICS}   # klatki z trafieniem, per klasa
         self._dbg_frames = 0
         self._t0 = time.monotonic()
 
-        # Wypisujemy mapowanie indeks -> nazwa, zeby dalo sie ustawic 'classes'
-        # bez zgadywania, ktory numer to ktora klasa.
+        # Wypisujemy mapowanie indeks -> nazwa, zeby dalo sie zweryfikowac, ze
+        # numery klas modelu zgadzaja sie z CLASS_TOPICS.
         self.get_logger().info(f"Klasy modelu: {self.model.names}")
+        topics = "  ".join(f"{c}->{t}" for c, t in CLASS_TOPICS.items())
         self.get_logger().info(
             f"{node_name} ready  |  input_size={self.input_size} "
             f"debug_every_n={self.debug_every_n} "
-            f"classes={self.classes if self.classes is not None else 'wszystkie'}")
+            f"classes={self.classes if self.classes is not None else 'wszystkie'} "
+            f"| /detections + {topics}")
 
     # ────────────────────────────────────────────────────────────────
     def _on_image(self, msg: Image):
@@ -91,38 +127,55 @@ class YoloDetectorBase(Node):
             **self._track_kwargs,
         )
 
-        # ── 6. PUBLIKACJA DETEKCJI ──────────────────────────────────
-        det = TentDetection()
-        det.detected = False
-        det.bounding_box = [0.0, 0.0, 0.0, 0.0]
-        det.confidence = 0.0
-        det.track_id = -1
+        # ── 6. WSZYSTKIE BOXY Z KLATKI ──────────────────────────────
+        dets = TentDetections()
+        # stamp klatki kamery, nie moment publikacji — odbiorca moze siegnac po
+        # telemetrie z chwili, w ktorej klatka powstala
+        dets.header = msg.header
+        dets.img_h, dets.img_w = frame.shape[0], frame.shape[1]
 
+        # Najpewniejszy box W OBREBIE KLASY. Bez tego namiot z 50 m zawsze
+        # wygrywalby z czlowiekiem, bo jest wiekszy i latwiejszy do wykrycia.
+        best = {}
         if results and len(results[0].boxes) > 0:
-            # Najpewniejszy box, nie pierwszy z listy: track() porzadkuje wyniki wg
-            # kolejnosci aktywacji sciezek, wiec [0] to "najstarszy" cel, nie "najlepszy".
             boxes = results[0].boxes
-            box = boxes[int(boxes.conf.argmax())]
-            x1, y1, x2, y2 = map(float, box.xyxy[0].tolist())
-            det.detected = True
-            det.bounding_box = [x1, y1, x2 - x1, y2 - y1]
-            det.confidence = float(box.conf[0])
-            # ID sciezki z trackera; None dopoki tracker nie potwierdzi sciezki.
-            det.track_id = int(box.id[0]) if box.id is not None else -1
+            for i in range(len(boxes)):
+                box = boxes[i]
+                x1, y1, x2, y2 = map(float, box.xyxy[0].tolist())
+                det = TentDetection()
+                det.detected = True
+                det.bounding_box = [x1, y1, x2 - x1, y2 - y1]
+                det.confidence = float(box.conf[0])
+                # ID sciezki z trackera; None dopoki tracker nie potwierdzi sciezki.
+                det.track_id = int(box.id[0]) if box.id is not None else -1
+                det.class_id = int(box.cls[0])
+                dets.detections.append(det)
+                prev = best.get(det.class_id)
+                if prev is None or det.confidence > prev.confidence:
+                    best[det.class_id] = det
 
-        self.pub.publish(det)
+        self.pub_all.publish(dets)
 
-        # ── 7. PODGLAD DEBUG (pomniejszony, co N-ta klatka) ─────────
+        # ── 7. NAJPEWNIEJSZY BOX PER KLASA (kazda klatke, takze pusty) ──
+        for cls, pub in self.class_pubs.items():
+            pub.publish(best.get(cls, _empty_detection()))
+
+        # ── 8. PODGLAD DEBUG (pomniejszony, co N-ta klatka) ─────────
         self._dbg_frames += 1
         want_raw = self.img_pub.get_subscription_count() > 0
         want_c = self.img_pub_c.get_subscription_count() > 0
         if (want_raw or want_c) and self._dbg_frames % self.debug_every_n == 0:
             dbg = frame
-            if det.detected:
+            for det in dets.detections:
                 x, y, w, h = det.bounding_box
-                cv2.rectangle(dbg, (int(x), int(y)), (int(x + w), int(y + h)), (0, 255, 0), 2)
-                cv2.putText(dbg, f"{det.confidence:.2f}", (int(x), int(y) - 5),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+                color = CLASS_COLORS.get(det.class_id, UNKNOWN_COLOR)
+                cv2.rectangle(dbg, (int(x), int(y)), (int(x + w), int(y + h)), color, 2)
+                name = CLASS_NAMES.get(det.class_id, str(det.class_id))
+                label = f"{name} {det.confidence:.2f}"
+                if det.track_id >= 0:
+                    label += f" #{det.track_id}"
+                cv2.putText(dbg, label, (int(x), int(y) - 5),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
             if dbg.shape[1] > DEBUG_MAX_WIDTH:
                 scale = DEBUG_MAX_WIDTH / dbg.shape[1]
                 dbg = cv2.resize(dbg, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
@@ -141,15 +194,20 @@ class YoloDetectorBase(Node):
                 raw.header = msg.header
                 self.img_pub.publish(raw)
 
-        # ── 8. FPS ──────────────────────────────────────────────────
+        # ── 9. FPS ──────────────────────────────────────────────────
         self._frames += 1
-        if det.detected:
-            self._detected_frames += 1
+        for cls in self._hits:
+            if cls in best:
+                self._hits[cls] += 1
 
         dt = time.monotonic() - self._t0
         if dt >= 2.0:
             fps = self._frames / dt
-            self.get_logger().info(f"FPS: {fps:.1f}  ({1000/fps:.0f} ms/frame) | Detekcje namiotu: {self._detected_frames}/{self._frames}")
+            per_class = "  ".join(
+                f"{CLASS_NAMES.get(c, c)}: {n}/{self._frames}"
+                for c, n in self._hits.items())
+            self.get_logger().info(
+                f"FPS: {fps:.1f}  ({1000/fps:.0f} ms/frame) | {per_class}")
             self._frames = 0
-            self._detected_frames = 0
+            self._hits = {cls: 0 for cls in CLASS_TOPICS}
             self._t0 = time.monotonic()

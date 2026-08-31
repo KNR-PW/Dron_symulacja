@@ -57,11 +57,27 @@ Uruchamia kamere OAK, detekcje i serwer podgladu.
 - podglad www
 
 ```bash
-ros2 launch drone_bringup suas_detect_jetson.launch.py classes:=0
+ros2 launch drone_bringup suas_detect_jetson.launch.py
 ```
 
-`classes:=0` = namioty, `classes:=1` = ludzie, brak = obie klasy naraz
-(wtedy publikowany jest tylko najpewniejszy obiekt — zwykle namiot).
+Detektor jest **dwuklasowy** i przy jednej inferencji publikuje trzy rzeczy:
+
+| topic | co niesie |
+|---|---|
+| `/detections` | komplet boxow z klatki, obie klasy, z `header.stamp` klatki |
+| `/tent_detections` | najpewniejszy **namiot**, KAZDA klatke (takze pusty) |
+| `/people_detections` | najpewniejszy **czlowiek**, KAZDA klatke (takze pusty) |
+
+Najpewniejszy box wybierany jest **w obrebie klasy**, wiec namiot nie zaslania juz
+czlowieka. `classes:=0` / `classes:=1` zostaje jako filtr awaryjny (gdyby ktoras
+klasa sypala smieciami) — do normalnej pracy nie jest potrzebny.
+
+Szybkie sprawdzenie:
+
+```bash
+ros2 topic echo /detections --once
+ros2 topic hz /tent_detections /people_detections
+```
 
 
 
@@ -98,6 +114,11 @@ ros2 launch drone_bringup suas_simple_mission.launch.py
 ```
 
 Wymaga: drone_handler (4) + detekcji (5).
+
+W symulacji zamiast kroku 5 idzie
+`ros2 launch drone_bringup suas_detect_gazebo.launch.py` — ma ten sam zestaw
+argumentow (`conf`, `classes`, `camera_topic`, `debug_every_n`,
+`debug_jpeg_quality`), wiec komendy sa przenoszalne miedzy symulacja a realem.
 
 W stanie SEARCH dron NIE przeszukuje terenu — wisi i czeka, az detektor
 zobaczy cel. Namiot musi byc w kadrze.

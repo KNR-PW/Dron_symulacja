@@ -5,14 +5,14 @@ Wymaga dzialajacego drone_handler (gazeboo_ap_sim.launch.py / hardware)
 oraz detektora publikujacego /tent_detections (suas_detect_gazebo albo
 suas_detect_jetson). Startuje sam z siebie — bez gui_panel.
 
-Domyslne wartosci sa dla REALU i w Gazebo dzialaja BEZ ZMIAN — symulacja ma
-te sama kamere (1024x1024, FOV 64.4 deg) i te sama sciezke gimbala
-(DO_SET_SERVO(7) -> kanal 6 w modelu iris_with_gimbal). Katow pitch_* ani
-vfov_deg/img_* nie nadpisujemy.
-
-Jedyny wyjatek w symulacji — detektor chodzi tam ~2-4 FPS (na realu 7-14),
-wiec domyslne det_confirm_gap:=0.5 kasuje okno potwierdzania po kazdej klatce:
-  ros2 launch drone_bringup suas_simple_mission.launch.py det_confirm_gap:=1.5
+Domyslne wartosci sa dla REALU. Kamera w Gazebo (gimbal_small_3d) ma juz ten
+sam FOV (64.4 deg) i klatke 1024x1024, wiec w symulacji nadpisuje sie TYLKO
+katy gimbala (inna kalibracja: -45 = prosto w dol, +45 = przod):
+  ros2 launch drone_bringup suas_simple_mission.launch.py \
+      pitch_search:=30.0 pitch_min:=-45.0 pitch_max:=45.0 pitch_hover_thr:=-38.0 \
+      det_confirm_gap:=1.5
+Detektor w Gazebo chodzi ~2-4 FPS (na realu 7-14), wiec domyslne
+det_confirm_gap:=0.5 kasuje okno potwierdzania po kazdej klatce — stad 1.5.
 """
 
 from launch import LaunchDescription
@@ -44,7 +44,7 @@ PARAMS = [
     ("kp_vy",        "1.0"),
     ("kp_alt",       "0.5"),
     ("kp_yaw",       "0.3"),
-    ("max_vel",      "4.0"),
+    ("max_vel",      "3.0"),
     ("max_vz",       "1.5"),
     ("max_yaw_rate", "0.5"),
     ("ema_alpha",    "0.15"),
