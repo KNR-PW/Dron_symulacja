@@ -10,7 +10,7 @@ Sekwencja (bez udzialu operatora):
     4. KONTROLER      — start maszyny stanow SEARCH -> APPROACH -> HOVER
                         (dokladnie ta z suas_flight_controller)
     5. CZEKANIE       — az dron ZAWISNIE NAD NAMIOTEM: stan HOVER **i** namiot
-                        w srodku kadru (|ex|,|ey| <= `center_tol`) przez
+                        blisko celu (|ex|,|ey| <= `center_tol_m` metrow) przez
                         `hover_hold_time` s. Sam HOVER nie wystarcza — kontroler
                         wchodzi w niego na progu kata gimbala, a dosuwanie nad
                         cel trwa jeszcze kilkanascie sekund.
@@ -55,21 +55,35 @@ class SuasSimpleMission(SuasFlightController):
         # zawis za "nad namiotem". Samo wejscie w HOVER tego NIE znaczy —
         # kontroler przelacza sie na progu kata gimbala, a dosuwanie nad cel
         # trwa jeszcze kilkanascie sekund.
-        self.declare_parameter('center_tol', 0.12)
+        # W METRACH, nie w ulamku kadru: "wycentrowany" ma znaczyc to samo
+        # niezaleznie od wysokosci lotu.
+        self.declare_parameter('center_tol_m', 1.0)
+        # ─── Opcjonalne kroki do testowania mechanizmow etapu 5b ───────
+        # Domyslnie WYLACZONE, zeby ta misja zostala tym sprawdzonym punktem
+        # odniesienia, ktorym jest. Wlaczasz je tylko na czas testu.
+        #
+        # test_sweep: po starcie, PRZED szukaniem celu, przejedz gimbalem przez
+        # sweep_pitches. Widac wtedy, czy gimbal faktycznie jedzie i czy detekcja
+        # lapie cel przy ktoryms z katow.
+        self.declare_parameter('test_sweep', False)
+        # drop_after_hover: po "NAD CELEM" zapytaj o spacje i zrzuc ladunek.
+        self.declare_parameter('drop_after_hover', False)
 
         self.settle_time     = self.get_parameter('settle_time').value
         self.hover_hold_time = self.get_parameter('hover_hold_time').value
         self.search_timeout  = self.get_parameter('search_timeout').value
         self.finish_action   = str(self.get_parameter('finish_action').value).lower()
-        self.center_tol      = self.get_parameter('center_tol').value
+        self.center_tol_m    = self.get_parameter('center_tol_m').value
+        self.test_sweep      = self.get_parameter('test_sweep').value
+        self.drop_after_hover = self.get_parameter('drop_after_hover').value
 
-        # Ponizej hover_deadzone kontroler przestaje korygowac, wiec ciasniejsza
+        # Ponizej hover_deadzone_m kontroler przestaje korygowac, wiec ciasniejsza
         # tolerancja to warunek nie do spelnienia (czekalby do timeoutu).
-        if self.center_tol < self.hover_deadzone:
+        if self.center_tol_m < self.hover_deadzone_m:
             self.get_logger().warn(
-                f"center_tol({self.center_tol}) < hover_deadzone({self.hover_deadzone}) "
-                f"— podnosze do {self.hover_deadzone}")
-            self.center_tol = self.hover_deadzone
+                f"center_tol_m({self.center_tol_m}) < hover_deadzone_m"
+                f"({self.hover_deadzone_m}) — podnosze do {self.hover_deadzone_m}")
+            self.center_tol_m = self.hover_deadzone_m
 
         if self.finish_action not in ('rtl', 'land', 'none'):
             self.get_logger().warn(
@@ -83,7 +97,7 @@ class SuasSimpleMission(SuasFlightController):
         self.get_logger().info(
             f"SuasSimpleMission: takeoff={self.target_alt}m settle={self.settle_time}s "
             f"hover_hold={self.hover_hold_time}s timeout={self.search_timeout}s "
-            f"center_tol={self.center_tol} finish={self.finish_action}")
+            f"center_tol={self.center_tol_m} m finish={self.finish_action}")
 
     # ═══════════════════════════════════════════════════════════
     #  Pomocnicze
@@ -117,17 +131,17 @@ class SuasSimpleMission(SuasFlightController):
             rclpy.spin_once(self, timeout_sec=0.1)
 
     def _tent_error(self):
-        """Znormalizowany uchyb polozenia namiotu w kadrze (ex, ey) w zakresie
-        -1..+1, albo None gdy detekcja jest przeterminowana (lost_timeout).
-        Liczony tak samo jak w petli kontrolera."""
+        """Pozycja celu wzgledem drona (do przodu, w prawo) w METRACH, albo None
+        gdy detekcja jest przeterminowana (lost_timeout).
+
+        Ta sama funkcja, ktorej uzywa petla kontrolera — z kompensacja przechylu
+        ramy. Inaczej warunek konca podlotu reagowalby na samo pochylenie drona,
+        a nie na to, gdzie faktycznie jest cel."""
         if self.last_det_time <= 0.0:
             return None
         if time.time() - self.last_det_time > self.lost_timeout:
             return None
-        half_w = self.img_w / 2.0
-        half_h = self.img_h / 2.0
-        return ((self.tent_cx - half_w) / half_w,
-                (self.tent_cy - half_h) / half_h)
+        return self._target_offset()
 
     def _wait_for_hover(self) -> bool:
         """Czekaj, az dron faktycznie zawisnie NAD namiotem.
@@ -136,7 +150,7 @@ class SuasSimpleMission(SuasFlightController):
         gimbala (pitch_hover_thr), a wtedy namiot potrafi byc jeszcze kilka
         metrow z boku — dosuwanie idzie dopiero mikrokorektami w HOVER.
         Dlatego warunkiem konca jest HOVER **i** namiot w srodku kadru
-        (|ex|,|ey| <= center_tol) nieprzerwanie przez hover_hold_time.
+        (|ex|,|ey| <= center_tol_m metrow) nieprzerwanie przez hover_hold_time.
 
         Zwraca True = zawis nad namiotem potwierdzony, False = timeout
         albo przerwanie."""
@@ -152,19 +166,19 @@ class SuasSimpleMission(SuasFlightController):
 
             err = self._tent_error()
             centered = (err is not None
-                        and abs(err[0]) <= self.center_tol
-                        and abs(err[1]) <= self.center_tol)
+                        and abs(err[0]) <= self.center_tol_m
+                        and abs(err[1]) <= self.center_tol_m)
 
             if self.state == State.HOVER and centered:
                 if hover_since is None:
                     hover_since = now
                     self.get_logger().info(
-                        f"Namiot w srodku kadru (ex={err[0]:+.2f} ey={err[1]:+.2f}) "
+                        f"Cel pod dronem (przod {err[0]:+.1f} prawo {err[1]:+.1f} m) "
                         f"— trzymam {self.hover_hold_time}s na potwierdzenie")
                 elif now - hover_since >= self.hover_hold_time:
                     self.get_logger().info(
-                        f"NAD NAMIOTEM stabilnie przez {now - hover_since:.1f}s "
-                        f"(ex={err[0]:+.2f} ey={err[1]:+.2f}) — podlot zakonczony")
+                        f"NAD CELEM stabilnie przez {now - hover_since:.1f}s "
+                        f"(przod {err[0]:+.1f} prawo {err[1]:+.1f} m) — podlot zakonczony")
                     return True
             else:
                 if hover_since is not None:
@@ -175,11 +189,11 @@ class SuasSimpleMission(SuasFlightController):
 
                 if self.state == State.HOVER:
                     # Jestesmy nad celem "z grubsza" — pokaz, ile brakuje.
-                    opis = (f"ex={err[0]:+.2f} ey={err[1]:+.2f}" if err
+                    opis = (f"przod {err[0]:+.1f} prawo {err[1]:+.1f} m" if err
                             else "brak swiezej detekcji")
                     self.get_logger().info(
                         f"[MISJA] HOVER — dosuwam sie nad namiot ({opis}, "
-                        f"cel <= {self.center_tol}) t={now - t_start:.0f}/"
+                        f"cel <= {self.center_tol_m} m) t={now - t_start:.0f}/"
                         f"{self.search_timeout:.0f}s",
                         throttle_duration_sec=3.0)
 
@@ -241,6 +255,14 @@ class SuasSimpleMission(SuasFlightController):
         self.get_logger().info(f"Zawis {self.settle_time}s po starcie...")
         self._spin_for(self.settle_time)
 
+        # ─── 3b. (opcjonalnie) Zamiatanie gimbalem ────────────
+        # Przed run_mission(), bo wtedy stan to jeszcze SEARCH i petla sterowania
+        # nie walczy o kat gimbala — w SEARCH wychodzi wczesniej i go nie rusza.
+        if self.test_sweep:
+            found = self.sweep_for_target()
+            self.get_logger().info(
+                f"[TEST] zamiatanie: {'cel znaleziony' if found else 'nic'}")
+
         # ─── 4. Kontroler SEARCH -> APPROACH -> HOVER ─────────
         # run_mission() z rodzica: velocity control ON, gimbal na pitch_search,
         # start petli sterowania.
@@ -248,6 +270,20 @@ class SuasSimpleMission(SuasFlightController):
 
         # ─── 5. Czekaj na zawis nad namiotem ──────────────────
         reached = self._wait_for_hover()
+
+        # ─── 5b. (opcjonalnie) Potwierdzenie i zrzut ──────────
+        if reached and self.drop_after_hover:
+            err = self._tent_error()
+            gdzie = (f"przod {err[0]:+.1f} prawo {err[1]:+.1f} m" if err
+                     else "brak swiezej detekcji")
+            if self.wait_confirm(
+                    "=== CEL: NAMIOT ===\n"
+                    f"Nad celem ({gdzie}), alt={self.altitude:.1f} m.\n"
+                    f"[SPACJA] = zrzuc ladunek     "
+                    f"[nic] = pomijam zrzut za {self.confirm_timeout:.0f}s"):
+                self.drop(0)
+            else:
+                self.get_logger().warn("bez potwierdzenia — zrzut pominiety")
 
         # ─── 6. Powrot ────────────────────────────────────────
         # stop_mission zeruje wektory i wylacza velocity control — dopiero

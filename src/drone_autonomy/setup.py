@@ -34,6 +34,8 @@ setup(
             'suas_gimbal_controller=drone_autonomy.suas_gimbal_controller:main',
             'suas_simple_mission=drone_autonomy.suas_simple_mission:main',
             'suas_geolocator=drone_autonomy.suas_geolocator:main',
+            'suas_marker_web=drone_autonomy.suas_marker_web:main',
+            'suas_full_mission=drone_autonomy.suas_full_mission:main',
         ],
     },
 )

@@ -55,6 +55,14 @@ def generate_launch_description():
         default_value="5",
         description="To samo dla czlowieka; nizej, bo jest mniejszy i gorzej wykrywany",
     )
+    person_max_alt_arg = DeclareLaunchArgument(
+        "person_max_alt",
+        default_value="50.0",
+        description="Powyzej tej wysokosci automat NIE zapisuje czlowieka. "
+                    "50 m to wysokosc zrzutu; z pulapu ortofoto (80 m) czlowiek "
+                    "ma 5 px, wiec detekcje sa smieciem. "
+                    "Znaczniki operatora dzialaja na kazdej wysokosci",
+    )
     person_size_m_arg = DeclareLaunchArgument(
         "person_size_m",
         default_value="0.6",
@@ -97,6 +105,8 @@ def generate_launch_description():
                     LaunchConfiguration("min_obs"), value_type=int),
                 "min_obs_person": ParameterValue(
                     LaunchConfiguration("min_obs_person"), value_type=int),
+                "person_max_alt": ParameterValue(
+                    LaunchConfiguration("person_max_alt"), value_type=float),
                 "person_size_m": ParameterValue(
                     LaunchConfiguration("person_size_m"), value_type=float),
                 "gimbal_stabilized": ParameterValue(
@@ -119,6 +129,7 @@ def generate_launch_description():
             min_obs_arg,
             min_obs_person_arg,
             person_size_m_arg,
+            person_max_alt_arg,
             gimbal_stabilized_arg,
             det_latency_arg,
             snapshots_arg,

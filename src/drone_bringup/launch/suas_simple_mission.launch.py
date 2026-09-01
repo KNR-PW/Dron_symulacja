@@ -27,12 +27,14 @@ PARAMS = [
     # ─── Misja (tylko suas_simple_mission) ────────────────
     ("settle_time",     "3.0"),    # zawis po starcie przed szukaniem [s]
     ("hover_hold_time", "5.0"),    # ile zawis nad namiotem musi trwac [s]
-    ("center_tol",      "0.12"),   # jak blisko srodka kadru ma byc namiot (0..1)
+    ("center_tol_m",    "1.5"),    # jak blisko celu ma byc dron [m]
     ("search_timeout",  "120.0"),  # limit na caly podlot, potem powrot [s]
     ("finish_action",   "rtl"),    # rtl | land | none
+    ("test_sweep",       "false"),  # zamiatanie gimbalem przed szukaniem
+    ("drop_after_hover", "false"),  # potwierdzenie + zrzut po zawisie
 
     # ─── Kontroler (jak w suas_flight_controller.launch.py) ─
-    ("target_alt",   "30.0"),       # wysokosc startu I trzymana w locie
+    ("target_alt",   "50.0"),       # wysokosc startu I trzymana w locie
     # Zmierzone dla OAK-D PRO W. Crop do kwadratu tnie boki, nie gore/dol,
     # wiec pionowy FOV jest ten sam co przy klatce 4:3 -> vfov bez zmian.
     ("vfov_deg",     "64.4"),
@@ -41,7 +43,7 @@ PARAMS = [
     ("img_h",        "1024"),
     ("damping",      "0.6"),
     ("kp_vx",        "4.0"),
-    ("kp_vy",        "1.0"),
+    ("kp_hover",     "0.2"),     # 1/s: m/s na metr uchybu (bylo kp_vy na ulamkach kadru)
     ("kp_alt",       "0.5"),
     ("kp_yaw",       "0.3"),
     ("max_vel",      "3.0"),
@@ -49,7 +51,7 @@ PARAMS = [
     ("max_yaw_rate", "0.5"),
     ("ema_alpha",    "0.15"),
     ("lost_timeout",    "3.0"),
-    ("hover_deadzone",  "0.08"),
+    ("hover_deadzone_m","0.5"),   # [m]
     ("gimbal_deadzone", "0.06"),
     # Filtr falszywych detekcji: M trafien z ostatnich N klatek przed APPROACH
     ("det_confirm_frames", "4"),
@@ -58,7 +60,7 @@ PARAMS = [
     # Prog pewnosci: parametr 'conf' w launchach detekcji, nie tutaj
     ("require_same_track", "true"),
     # Konwencja realu: 0 = poziomo, -45 = pod katem w dol/przod, -90 = prosto w dol
-    ("pitch_search",    "-45.0"),
+    ("pitch_search",    "-55.0"),
     ("pitch_min",       "-90.0"),
     ("pitch_max",       "-30.0"),
     ("pitch_hover_thr", "-83.0"),

@@ -40,6 +40,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from sensor_msgs.msg import CompressedImage
 from std_msgs.msg import Float32
 
+from drone_autonomy.geometry import _project_pixel
 from drone_interfaces.msg import Telemetry, TentDetections, OperatorMark
 
 
@@ -55,77 +56,6 @@ def meters_to_gps(lat0, lon0, d_north, d_east):
     d_lat = d_north / 111_320.0
     d_lon = d_east / (111_320.0 * math.cos(lat_rad))
     return lat0 + d_lat, lon0 + d_lon
-
-
-def _rot_body_to_ned(roll, pitch, yaw):
-    """Macierz obrotu FRD (przod-prawo-dol) -> NED, konwencja Z-Y-X.
-
-    R = Rz(yaw) * Ry(pitch) * Rx(roll). Dla roll=pitch=0 redukuje sie do
-    samego obrotu o kurs, czyli do tego, co robil poprzedni wzor.
-    """
-    cr, sr = math.cos(roll), math.sin(roll)
-    cp, sp = math.cos(pitch), math.sin(pitch)
-    cy, sy = math.cos(yaw), math.sin(yaw)
-    return (
-        (cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr),
-        (sy * cp, sy * sp * sr + cy * cr, sy * sp * cr - cy * sr),
-        (-sp,     cp * sr,                cp * cr),
-    )
-
-
-def _project_pixel(u, v, alt, roll, pitch, yaw,
-                   mount_pitch_deg, cam_yaw_offset, focal_px, cx, cy,
-                   stabilized=False):
-    """Piksel (u, v) -> punkt na ziemi wzgledem drona.
-
-    Zwraca (d_north, d_east, slant) w metrach albo None, gdy promien nie trafia
-    w ziemie (patrzy w horyzont albo w gore).
-
-    Osie kamery w ukladzie FRD drona (x=przod, y=prawo, z=dol), przy kacie
-    montazu `mount_pitch_deg` (-90 = prosto w dol):
-
-        phi = -mount_pitch_deg          0 = poziomo w przod, 90 = prosto w dol
-        boresight     b = ( cos phi, 0,  sin phi)
-        gora kadru   up = ( sin phi, 0, -cos phi)
-        prawo kadru  rt = ( 0,       1,   0     )
-
-    Sprawdzenie: dla phi=90 wychodzi b=(0,0,1) czyli w dol, a gora kadru
-    (1,0,0) czyli nos drona - zgodnie z konwencja "gora kadru = przod drona".
-
-    DLACZEGO TO JEST WAZNE: gimbal nie jest stabilizowany, wiec na prostym
-    galsie z predkoscia 8 m/s kopter trzyma staly pitch ok. 10 stopni i kamera
-    patrzy 10 stopni obok nadiru. Na 80 m to 14 m bledu - wiecej niz cala
-    reszta budzetu dokladnosci razem wzieta.
-    """
-    phi = math.radians(-mount_pitch_deg)
-    cph, sph = math.cos(phi), math.sin(phi)
-    b = (cph, 0.0, sph)
-    up = (sph, 0.0, -cph)
-    rt = (0.0, 1.0, 0.0)
-
-    # Obrot kadru wzgledem nosa drona (jak kamera jest wkrecona w uchwyt).
-    if cam_yaw_offset:
-        ca, sa = math.cos(cam_yaw_offset), math.sin(cam_yaw_offset)
-        def _rz(w):
-            return (ca * w[0] - sa * w[1], sa * w[0] + ca * w[1], w[2])
-        b, up, rt = _rz(b), _rz(up), _rz(rt)
-
-    du = u - cx
-    dv = cy - v                      # v rosnie w DOL obrazu
-    d_body = tuple(focal_px * b[i] + du * rt[i] + dv * up[i] for i in range(3))
-
-    # Stabilizowany mount sam zdejmuje roll/pitch - wtedy zostaje sam kurs,
-    # bo gimbal jest jednoosiowy i kadr i tak krazy razem z rama.
-    R = (_rot_body_to_ned(0.0, 0.0, yaw) if stabilized
-         else _rot_body_to_ned(roll, pitch, yaw))
-    dn, de, dd = (sum(R[i][j] * d_body[j] for j in range(3)) for i in range(3))
-
-    if dd <= 1e-6:
-        return None                  # promien nie idzie w dol
-
-    scale = alt / dd
-    slant = scale * math.sqrt(dn * dn + de * de + dd * dd)
-    return scale * dn, scale * de, slant
 
 
 CLASS_NAMES = {0: 'namiot', 1: 'czlowiek'}
@@ -274,6 +204,20 @@ class SuasGeolocator(Node):
         # Czlowiek jest mniejszy i gorzej wykrywany, wiec zbiera mniej trafien.
         # Za wysoki prog oznaczalby, ze nigdy nie awansuje na 'best'.
         self.declare_parameter('min_obs_person', 5)
+        # Powyzej tej wysokosci NIE przyjmujemy automatycznych detekcji czlowieka.
+        # 50 m to wysokosc zrzutu, czyli najnizszy pulap misji — automat dostaje
+        # szanse dokladnie tam, gdzie ma jej najwiecej, a caly przelot ortofoto
+        # (80 m) jest odciety.
+        #
+        # Powod: czlowiek ma z nadiru ok. 0.5 m, czyli 8 px z 50 m i 5 px z 80 m —
+        # YOLO ma stride 8, wiec z pulapu ortofoto nie ma czego wykrywac i kazda
+        # detekcja stamtad jest smieciem. W symulacji model bral znacznik ArUco za
+        # czlowieka przez 166 klatek przy conf 0.53; taki klaster awansowalby na
+        # 'best' i misja poleciałaby zrzucic ladunek na znacznik.
+        #
+        # UWAGA: bramka dotyczy WYLACZNIE automatu. Klikniecie operatora dziala
+        # na kazdej wysokosci — to jest caly sens recznego oznaczania.
+        self.declare_parameter('person_max_alt', 50.0)
         self.declare_parameter('pass_gap', 3.0)          # przerwa cos>tyle s = kolejny przelot
 
         self.declare_parameter('snapshots', True)
@@ -303,6 +247,8 @@ class SuasGeolocator(Node):
         self.cluster_radius = p('cluster_radius').value
         self.min_obs = {0: p('min_obs').value,
                         1: p('min_obs_person').value}
+        self.max_alt_auto = {0: float('inf'),
+                             1: p('person_max_alt').value}
         self.pass_gap = p('pass_gap').value
         self.snapshots = p('snapshots').value
         report_period = p('report_period').value
@@ -321,7 +267,8 @@ class SuasGeolocator(Node):
         self._last_jpeg = None
         self._n_det = 0
         self._rejects = {'telemetria': 0, 'wysokosc': 0, 'przechyl': 0,
-                         'brzeg': 0, 'rozmiar': 0, 'pewnosc': 0, 'promien': 0}
+                         'brzeg': 0, 'rozmiar': 0, 'pewnosc': 0, 'promien': 0,
+                         'czlowiek_wysoko': 0}
 
         # ── 3. PLIKI ────────────────────────────────────────────────
         base = os.path.expanduser(p('save_dir').value)
@@ -373,6 +320,10 @@ class SuasGeolocator(Node):
         self.get_logger().info(
             f"klasy: {CLASS_NAMES} | rozmiary [m]: {self.size_m} | "
             f"kompensacja przechylu: {'WYLACZONA (mount stabilizowany)' if self.gimbal_stabilized else 'WLACZONA'}")
+        self.get_logger().info(
+            f"automat dla czlowieka tylko ponizej "
+            f"{self.max_alt_auto[1]:.0f} m (wyzej ma za malo pikseli); "
+            f"znaczniki operatora dzialaja na kazdej wysokosci")
         if self.lock_nadir:
             self.get_logger().warn(
                 "lock_nadir=true — NIE uruchamiaj rownolegle suas_gimbal_controller")
@@ -481,6 +432,13 @@ class SuasGeolocator(Node):
             if size_m is None:
                 continue                      # klasa spoza mapowania - ignoruj
 
+            # Limit wysokosci PER KLASA, tylko dla automatu. Z pulapu ortofoto
+            # czlowiek ma kilka pikseli, wiec to co model tam "widzi" to niemal
+            # na pewno smiec — a raz zbudowany klaster fałszywki trafilby do misji.
+            if alt > self.max_alt_auto.get(det.class_id, float('inf')):
+                self._rejects['czlowiek_wysoko'] += 1
+                continue
+
             x, y, w, h = det.bounding_box
             u = x + w / 2.0
             v = y + h / 2.0
@@ -554,11 +512,20 @@ class SuasGeolocator(Node):
         # pewnoscia, wiec znacznik reczny ciagnie srodek klastra najmocniej.
         cand = self._add_observation(int(msg.class_id), lat, lon,
                                      d_north, d_east, 1.0, now, 'operator')
+        # Logujemy DWIE rzeczy, bo to co innego: surowy punkt z klikniecia
+        # (tym weryfikujesz celnosc piksela) i srodek klastra, do ktorego klik
+        # wpadl (to jest adres, ktory pojdzie do misji). Przy trafieniu w ten
+        # sam cel co automat beda prawie identyczne — i o to chodzi.
+        mlat, mlon = meters_to_gps(lat, lon, d_north, d_east)
         clat, clon = self._latlon(cand)
         self.get_logger().info(
             f"ZNACZNIK OPERATORA [{CLASS_NAMES.get(msg.class_id, msg.class_id)}] "
-            f"#{cand.id}  {clat:.6f} {clon:.6f}  (piksel {msg.u:.0f},{msg.v:.0f} "
-            f"z wysokosci {alt:.1f} m)")
+            f"piksel ({msg.u:.0f},{msg.v:.0f}) z {alt:.1f} m -> "
+            f"{d_east:+.1f} m wschod, {d_north:+.1f} m polnoc od drona "
+            f"= {mlat:.6f} {mlon:.6f}")
+        self.get_logger().info(
+            f"   wpadl do klastra #{cand.id} ({cand.n_obs} obs) -> "
+            f"{clat:.6f} {clon:.6f}")
 
     def _add_observation(self, class_id, lat, lon, d_north, d_east,
                          conf, t, source):

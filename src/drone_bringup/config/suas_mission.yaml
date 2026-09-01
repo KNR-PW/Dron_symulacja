@@ -1,0 +1,46 @@
+# Parametry misji SUAS — te same wartosci co w suas_simple_mission.launch.py.
+#
+# Po co osobny plik: misja musi isc przez `ros2 run`, a nie z launcha,
+# bo wait_confirm czyta klawiature i potrzebuje stdin podpietego do
+# terminala. Wezel odpalony z launcha go nie ma.
+#
+# Uzycie:
+#   ros2 run drone_autonomy suas_simple_mission --ros-args \
+#       --params-file ~/ros_ws/src/drone_bringup/config/suas_mission.yaml \
+#       -p drop_after_hover:=true
+#
+# '/**' = dotyczy wezla o dowolnej nazwie, wiec ten sam plik obsluzy
+# tez suas_full_mission.
+/**:
+  ros__parameters:
+    settle_time: 3.0
+    hover_hold_time: 5.0
+    center_tol_m: 1.5
+    search_timeout: 120.0
+    finish_action: "rtl"
+    test_sweep: false
+    drop_after_hover: false
+    target_alt: 50.0
+    vfov_deg: 64.4
+    img_w: 1024
+    img_h: 1024
+    damping: 0.6
+    kp_vx: 4.0
+    kp_hover: 0.2
+    kp_alt: 0.5
+    kp_yaw: 0.3
+    max_vel: 3.0
+    max_vz: 1.5
+    max_yaw_rate: 0.5
+    ema_alpha: 0.15
+    lost_timeout: 3.0
+    hover_deadzone_m: 0.5
+    gimbal_deadzone: 0.06
+    det_confirm_frames: 4
+    det_window_frames: 8
+    det_confirm_gap: 0.5
+    require_same_track: true
+    pitch_search: -55.0
+    pitch_min: -90.0
+    pitch_max: -30.0
+    pitch_hover_thr: -83.0
