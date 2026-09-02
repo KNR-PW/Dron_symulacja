@@ -13,17 +13,14 @@ PRZEBIEG
                    spacja operatora -> centrowanie -> zrzut.
     4. RTL
 
-TRZY SCENARIUSZE NA CEL
-    A. jest waypoint i detektor potwierdzil w oknie akwizycji
-       -> pytanie o SPACJE. Potwierdzone: centrowanie i zrzut nad obiektem.
-          Brak reakcji: zrzut na waypoint, bez centrowania.
-    B. jest waypoint, ale detektor nic nie widzi
-       -> spirala wokol waypointu. Znajdzie -> jak A.
-          Nie znajdzie -> zrzut na waypoint.
-          (Zamiatanie gimbalem jest tu domyslnie wylaczone — patrz sweep_enabled.)
-    C. nie ma waypointu
-       -> grid nad zadanym obszarem. Pierwsza potwierdzona detekcja -> jak A.
-          Grid bez trafienia -> RTL z ladunkiem.
+REGULY (patrz docs/misja_scenariusze.md)
+    * Pula kandydatow obu klas, ZAWSZE od najlepszego (score geolokatora).
+    * Pytamy o SPACJE tylko, gdy operator patrzy (/operator_online z GUI).
+      Spacja = "zrzucamy tutaj" (widoczny -> centrowanie; nie -> na wspolrzedne).
+      Milczenie, gdy operator PATRZY = "to nie ten cel" -> nastepny kandydat,
+      a gdy kandydatow brak -> grid bez konca (konczy spacja albo Ctrl+C).
+    * Operatora NIE MA -> nie pytamy, zrzut na najlepszym kandydacie,
+      grid tylko raz.
 
 DLACZEGO POTWIERDZENIE BRAMKUJE PODEJSCIE, A NIE ZRZUT
 Decyzja operatora zapada wtedy, gdy ma co ocenic: widzi obiekt na podgladzie
@@ -51,6 +48,7 @@ import time
 
 import rclpy
 from rclpy.signals import SignalHandlerOptions
+from std_msgs.msg import Bool
 
 from drone_autonomy.suas_flight_controller import State, SuasFlightController
 
@@ -78,6 +76,11 @@ class SuasFullMission(SuasFlightController):
         self.declare_parameter('takeover_timeout', 1200.0)
         self.declare_parameter('arrive_tol', 3.0)       # [m] kiedy uznajemy dolot
         self.declare_parameter('approach_timeout', 90.0)
+        # Ile ciaglego SEARCH w trakcie centrowania znaczy "cel zniknal na dobre".
+        # Po naprawie gimbala (zostaje w pionie) prawdziwy cel wraca w ulamku
+        # sekundy, wiec 15 s bez detekcji to nie chwilowe przeslonieciecie, tylko
+        # brak celu — nie ma sensu czekac pelnego approach_timeout (90 s).
+        self.declare_parameter('center_lost_timeout', 15.0)
         self.declare_parameter('hover_hold_time', 3.0)
         self.declare_parameter('center_tol_m', 1.5)
         # Zamiatanie gimbalem przy ISTNIEJACYM waypoincie — domyslnie WYLACZONE.
@@ -118,6 +121,7 @@ class SuasFullMission(SuasFlightController):
         self.takeover_timeout = p('takeover_timeout').value
         self.arrive_tol = p('arrive_tol').value
         self.approach_timeout = p('approach_timeout').value
+        self.center_lost_timeout = p('center_lost_timeout').value
         self.hover_hold_time = p('hover_hold_time').value
         self.center_tol_m = p('center_tol_m').value
         self.sweep_enabled = p('sweep_enabled').value
@@ -140,6 +144,23 @@ class SuasFullMission(SuasFlightController):
         self._abort = False
         self.home = None            # (lat, lon) zapamietane przy przejeciu
 
+        # ── Obecnosc operatora ──────────────────────────────────────────
+        # suas_marker_web publikuje tu true, dopoki przegladarka przysyla puls.
+        # Pytamy o spacje TYLKO wtedy, gdy ktos naprawde patrzy — inaczej
+        # czekalibysmy confirm_timeout w prozni na kazdym celu.
+        # Brak wiadomosci (GUI nie chodzi) = operatora nie ma. To jest celowe:
+        # domyslna sciezka jest bezpieczna, wiec milczenie ma znaczyc "decyduj sam".
+        self._operator_online = False
+        self._operator_stamp = 0.0
+        self.create_subscription(Bool, '/operator_online', self._online_cb, 10)
+
+        # ── Gimbal nalezy do misji od przejecia lotu ────────────────────
+        # Geolokator w fazie ortofoto trzyma gimbal w pionie (co 2 s -90 st.).
+        # Po przejeciu to MY sterujemy gimbalem (APPROACH go pochyla), wiec
+        # blokade trzeba zwolnic — inaczej dwoch piszacych na jeden silownik
+        # i gimbal szarpany do pionu co 2 s w trakcie podejscia.
+        self._nadir_pub = self.create_publisher(Bool, '/geolocator/lock_nadir', 10)
+
         self.get_logger().info(
             f"suas_full_mission: drop_alt={self.target_alt} m | "
             f"cele z {self.targets_json} | akwizycja {self.acquire_timeout:.0f}s "
@@ -150,16 +171,47 @@ class SuasFullMission(SuasFlightController):
     # ═══════════════════════════════════════════════════════════
 
     def _install_signals(self):
-        """Ctrl+C nie zabija kontekstu ROS od razu — RTL musi jeszcze przejsc."""
+        """Zaden z tych sygnalow nie zabija kontekstu ROS od razu — RTL musi
+        jeszcze przejsc.
+
+        SIGHUP jest tu rownie wazny co SIGINT: dostajemy go, gdy zerwie sie
+        terminal (SSH, Tailscale). Bez obslugi proces ginie natychmiast, bez
+        stop_mission() i bez RTL, a dron zostaje wiszacy w GUIDED, bo
+        drone_handler ma dalej wlaczony velocity control i nikt nie wysyla mu
+        wektorow. Z obsluga — wraca do domu.
+
+        To NIE zwalnia z uruchamiania misji pod tmux (patrz docs/misja_real.md):
+        tmux sprawia, ze SIGHUP w ogole nie dolatuje i misja leci dalej sama.
+        Ta obsluga jest siatka na wypadek, gdyby jednak dolecial.
+        """
         def handler(signum, frame):
             if self._abort:
                 raise KeyboardInterrupt
             self._abort = True          # widza to tez bramki w kontrolerze
             self._alarm = True
-            self.get_logger().warn("Ctrl+C — przerywam i wracam "
-                                   "(kolejne Ctrl+C = twarde wyjscie)")
+            powod = {signal.SIGINT: "Ctrl+C",
+                     signal.SIGTERM: "SIGTERM",
+                     signal.SIGHUP: "SIGHUP (zerwany terminal)"}.get(
+                         signum, f"sygnal {signum}")
+            self.get_logger().warn(f"{powod} — przerywam i wracam "
+                                   "(kolejny sygnal = twarde wyjscie)")
         signal.signal(signal.SIGINT, handler)
         signal.signal(signal.SIGTERM, handler)
+        signal.signal(signal.SIGHUP, handler)
+
+    def _online_cb(self, msg: Bool):
+        self._operator_online = bool(msg.data)
+        self._operator_stamp = time.time()
+
+    def operator_watching(self) -> bool:
+        """Czy operator patrzy na obraz i moze cokolwiek potwierdzic.
+
+        Wymagamy SWIEZEJ wiadomosci, nie samej wartosci: gdyby wezel GUI padl
+        albo zerwalo sie polaczenie miedzy nim a misja, ostatnie 'true'
+        zostaloby w pamieci na zawsze i dron pytalby w prozni.
+        """
+        return (self._operator_online
+                and time.time() - self._operator_stamp < 5.0)
 
     def _spin(self, seconds, stop_on_abort=True):
         end = time.time() + seconds
@@ -211,7 +263,18 @@ class SuasFullMission(SuasFlightController):
         return False
 
     def read_targets(self):
-        """targets.json -> {class_id: (lat, lon, source)}.
+        """targets.json -> {class_id: [(lat, lon, source, n_obs, score), ...]}.
+
+        Zwracamy CALA liste kandydatow, nie tylko 'best'. Gdy operator odrzuci
+        cel #1 — bo z 50 m widzi, ze to atrapa, a waypoint powstal z 80 m —
+        kandydat #2 jest gotowym, policzonym punktem i lot do niego kosztuje
+        jeden przelot zamiast calego gridu.
+
+        FILTR jest tu konieczny: geolokator wypisuje takze kandydatow z 3-4
+        obserwacjami, czyli krzaki i cienie. Lot do takiego to kilkadziesiat
+        sekund za nic. Przepuszczamy wiec tylko tych, ktorzy przeszli prog
+        min_obs swojej klasy (ten sam, ktorym geolokator chroni 'best'),
+        albo zostali wskazani recznie przez operatora.
 
         Czytamy przy KAZDYM wejsciu w GUIDED, nie raz na starcie: dzieki temu
         klik wykonany po przejeciu lotu wchodzi do gry — wychodzisz z GUIDED,
@@ -223,23 +286,55 @@ class SuasFullMission(SuasFlightController):
         except Exception as e:
             self.get_logger().warn(f"nie moge odczytac {self.targets_json}: {e}")
             return {}
+
+        mins = data.get('min_obs') or {}
         out = {}
         for cid, (name, key, _topic) in TARGETS.items():
-            best = (data.get(key) or {}).get('best')
-            if best:
-                out[cid] = (best['lat'], best['lon'], best.get('source', '?'))
-                self.get_logger().info(
-                    f"cel {name}: {best['lat']:.6f} {best['lon']:.6f} "
-                    f"(zrodlo={best.get('source')}, obs={best.get('n_obs')})")
+            sec = data.get(key) or {}
+            best = sec.get('best')
+            need = mins.get(key, 10)
+            lst, seen = [], set()
+            # 'best' na czele — geolokator wybral go wg obs*conf i priorytetu
+            # operatora, wiec to nadal najlepszy pierwszy strzal.
+            for c in ([best] if best else []) + (sec.get('candidates') or []):
+                if not c or c.get('id') in seen:
+                    continue
+                if c.get('source') != 'operator' and c.get('n_obs', 0) < need:
+                    continue
+                seen.add(c.get('id'))
+                lst.append((c['lat'], c['lon'],
+                            c.get('source', '?'), c.get('n_obs', 0),
+                            float(c.get('score', 0.0))))
+            out[cid] = lst
+            if lst:
+                opis = ", ".join(f"#{i+1} {s} obs={n} score={sc:.0f}"
+                                 for i, (_la, _lo, s, n, sc) in enumerate(lst))
+                self.get_logger().info(f"cel {name}: {len(lst)} kandydat(ow) — {opis}")
             else:
                 self.get_logger().warn(f"cel {name}: BRAK — bedzie przeszukiwanie")
         return out
 
-    def descend(self, alt) -> bool:
-        """Zejscie na zadana wysokosc nad biezaca pozycja."""
-        self.get_logger().info(f"zejscie na {alt:.0f} m")
+    def descend(self, alt, tol=2.0, timeout=60.0) -> bool:
+        """Zejscie na zadana wysokosc nad biezaca pozycja — I CZEKANIE na nia.
+
+        Akcja goto_global w drone_handler konczy sie, gdy odleglosc POZIOMA
+        (haversine) spadnie ponizej 2 m. Przy tej samej lat/lon to natychmiast,
+        wiec bez wlasnego czekania "zejscie" trwaloby 0 s, a dron schodzilby
+        dopiero w trakcie dolotu do celu i okno akwizycji otwieraloby sie na
+        przypadkowej wysokosci.
+        """
+        self.get_logger().info(f"zejscie na {alt:.0f} m (jestem na {self.altitude:.0f} m)")
         self.target_alt = alt
-        return self.send_goto_global(self.global_lat, self.global_lon, alt)
+        self.send_goto_global(self.global_lat, self.global_lon, alt)
+        end = time.time() + timeout
+        while rclpy.ok() and not self._abort and time.time() < end:
+            rclpy.spin_once(self, timeout_sec=0.1)
+            if abs(self.altitude - alt) <= tol:
+                self.get_logger().info(f"na {self.altitude:.1f} m")
+                return True
+        self.get_logger().warn(
+            f"zejscie: po {timeout:.0f}s jestem na {self.altitude:.1f} m — lece dalej")
+        return False
 
     def goto(self, lat, lon) -> bool:
         """Dolot nosem do przodu, nie bokiem.
@@ -275,13 +370,30 @@ class SuasFullMission(SuasFlightController):
         # fresh=False: nie ruszamy gimbala ani okna detekcji. Cel wlasnie
         # zostal potwierdzony — przestawienie na pitch_search zgubiloby go
         # natychmiast, bo stoimy nad nim, a -55 st. patrzy daleko przed siebie.
+        # Przy zgubieniu celu gimbal ma ZOSTAC w pionie — cel jest pod nami,
+        # a odstawienie na pitch_search wyrzuciloby go poza kadr na dobre.
+        self.search_gimbal_on_lost = False
         self.run_mission(fresh=False)
         t0 = time.time()
         hold_since = None
+        search_since = None
         try:
             while rclpy.ok() and not self._abort:
                 rclpy.spin_once(self, timeout_sec=0.05)
                 now = time.time()
+                # Szybkie wyjscie, gdy cel zniknal na dobre: ciagly SEARCH dluzej
+                # niz center_lost_timeout. Chwilowa utrata konczy sie w ulamku
+                # sekundy (gimbal zostaje w pionie), wiec to nie jest falszywy alarm.
+                if self.state == State.SEARCH:
+                    if search_since is None:
+                        search_since = now
+                    elif now - search_since > self.center_lost_timeout:
+                        self.get_logger().warn(
+                            f"cel nie wrocil przez {self.center_lost_timeout:.0f}s "
+                            f"— przerywam centrowanie, ide sciezka domyslna")
+                        return False
+                else:
+                    search_since = None
                 err = None
                 if self.last_det_time > 0 and \
                         now - self.last_det_time <= self.lost_timeout:
@@ -308,6 +420,7 @@ class SuasFullMission(SuasFlightController):
                     return False
         finally:
             self.stop_mission()
+            self.search_gimbal_on_lost = True
         return False
 
     def spiral_search(self, lat, lon) -> bool:
@@ -359,56 +472,121 @@ class SuasFullMission(SuasFlightController):
         return False
 
     # ═══════════════════════════════════════════════════════════
-    #  Obsluga jednego celu
+    #  Obsluga jednego kandydata
     # ═══════════════════════════════════════════════════════════
 
-    def handle_target(self, idx, class_id, wp):
+    def visit_candidate(self, class_id, cand) -> str:
+        """Lec do jednego kandydata i rozstrzygnij, co z nim zrobic.
+
+        Zwraca:
+          'dropped'  - ladunek poszedl, klasa zalatwiona
+          'rejected' - to nie ten cel; kandydat wypada z puli, lecimy do
+                       nastepnego, a gdy pula pusta - w grid
+
+        SPACJA znaczy zawsze to samo: "tak, zrzucamy tutaj". Jesli cel jest
+        widoczny, dron najpierw sie wycentruje; jesli nie - zrzuci na
+        wspolrzedne. Milczenie operatora, gdy on PATRZY, znaczy "to nie ten
+        cel" i wysyla nas do kolejnego kandydata.
+
+        Dlaczego pytamy takze przy waypoincie z automatu: ten powstal z pulapu
+        80 m, gdzie namiot ma 30 px, a operator ocenia go z 50 m, gdzie ma
+        49 px, na ostrym obrazie. Jego dane sa wiec LEPSZE niz te, z ktorych
+        powstal waypoint. Do tego klastrowanie nie chroni przed atrapa:
+        setki zbieznych obserwacji odsiewaja szum losowy, ale obiekt
+        systematycznie brany za namiot zbuduje rownie pewny klaster.
+
+        Numer ladunku = numer klasy (namiot -> 0, czlowiek -> 1).
+        """
+        name, _key, topic = TARGETS[class_id]
+        lat, lon, src, n_obs, _score = cand
+        self.set_detection_topic(topic)
+        self.get_logger().info(
+            f"╔══ {name} ══ kandydat: zrodlo={src} obs={n_obs}, "
+            f"{self._dist_to(lat, lon):.0f} m stad")
+        self.goto(lat, lon)
+
+        widoczny = self.wait_acquire()
+        if not widoczny:
+            # ── Dolecielismy, ale detektor nic nie potwierdza ──
+            if self.sweep_enabled:
+                widoczny = self.sweep_for_target()
+            if not widoczny:
+                widoczny = self.spiral_search(lat, lon)
+
+        if self.operator_watching():
+            if widoczny:
+                monit = ("Wykryty w kadrze.\n"
+                         "[SPACJA] = wycentruj i zrzuc     "
+                         "[nic] = to nie ten cel, szukam dalej")
+            else:
+                monit = ("NIE widze celu w kadrze.\n"
+                         "[SPACJA] = zrzuc na wspolrzedne mimo to     "
+                         "[nic] = szukam dalej")
+            approved = self.wait_confirm(
+                f"=== {name} (zrodlo: {src}, obs={n_obs}) ===\n"
+                f"{monit}   ({self.confirm_timeout:.0f}s)")
+        else:
+            # Nikt nie patrzy — pytanie poszloby w prozni. Konczymy zrzutem,
+            # zeby bez nadzoru nie krecic sie w kolko po kandydatach.
+            approved = True
+            self.get_logger().warn(
+                f"{name}: operatora nie ma (brak pulsu z GUI) — nie pytam, "
+                f"zrzucam na tym kandydacie")
+
+        if not approved:
+            self.get_logger().warn(
+                f"{name}: operator NIE potwierdzil — kandydat odrzucony")
+            return 'rejected'
+
+        if widoczny and self.center_over_target():
+            self.get_logger().info(f"{name}: ZRZUT NAD WYCENTROWANYM CELEM")
+        else:
+            self.get_logger().warn(f"{name}: ZRZUT NA WSPOLRZEDNE")
+            self.goto(lat, lon)
+        self.drop(class_id)
+        return 'dropped'
+
+    def search_and_drop(self, class_id) -> bool:
+        """Grid, gdy dla klasy nie ma juz zadnego kandydata.
+
+        Kreci sie BEZ KONCA, dopoki operator patrzy — konczy go spacja albo
+        Ctrl+C (ktory robi abort i RTL). To jest bezpieczne wlasnie dlatego,
+        ze warunkiem petli jest obecnosc operatora: zawsze jest ktos, kto moze
+        ja przerwac. Gdy operatora nie ma, grid idzie RAZ, bo bez nadzoru
+        nikt by drona nie zatrzymal.
+        """
         name, _key, topic = TARGETS[class_id]
         self.set_detection_topic(topic)
-        self.get_logger().info(f"╔══ CEL {idx + 1}: {name} ══ ({topic})")
-
-        if wp is None:
-            # ── Scenariusz C ──
-            self.get_logger().info("brak waypointu — przeszukuje teren")
+        while not self._abort:
+            self.get_logger().info(
+                f"{name}: brak kandydatow — przeszukuje teren gridem")
             if not self.grid_search():
-                self.get_logger().error(
-                    f"{name}: nic nie znaleziono, ladunek zostaje na pokladzie")
+                self.get_logger().error(f"{name}: grid nic nie znalazl")
+                if not self.operator_watching():
+                    return False
+                continue                     # operator patrzy — szukamy dalej
+
+            if self.operator_watching():
+                approved = self.wait_confirm(
+                    f"=== {name} (znaleziony gridem) ===\n"
+                    f"[SPACJA] = wycentruj i zrzuc     "
+                    f"[nic] = to nie ten cel, szukam dalej   "
+                    f"({self.confirm_timeout:.0f}s)")
+            else:
+                approved = True
+
+            if approved:
+                if self.center_over_target():
+                    self.get_logger().info(
+                        f"{name}: ZRZUT NAD WYCENTROWANYM CELEM")
+                else:
+                    self.get_logger().warn(f"{name}: zrzut w miejscu wykrycia")
+                self.drop(class_id)
+                return True
+
+            if not self.operator_watching():
                 return False
-            found = True
-        else:
-            lat, lon, src = wp
-            self.goto(lat, lon)
-            found = self.wait_acquire()
-            if not found:
-                # ── Scenariusz B ──
-                if self.sweep_enabled:
-                    found = self.sweep_for_target()
-                if not found:
-                    found = self.spiral_search(lat, lon)
-                    if not found:
-                        self.get_logger().warn(
-                            f"{name}: nie widze celu — ZRZUT NA WAYPOINT")
-                        self.goto(lat, lon)
-                        self.drop(idx)
-                        return True
-
-        # ── Scenariusz A: cel widoczny, pytamy operatora ──
-        approved = self.wait_confirm(
-            f"=== CEL {idx + 1}/2: {name} ===\n"
-            f"Wykryty w kadrze.\n"
-            f"[SPACJA] = podejdz i wycentruj     "
-            f"[nic] = zrzut na waypoint za {self.confirm_timeout:.0f}s")
-
-        if approved and self.center_over_target():
-            self.get_logger().info(f"{name}: ZRZUT NAD WYCENTROWANYM CELEM")
-        elif wp is not None:
-            self.get_logger().warn(
-                f"{name}: bez centrowania — ZRZUT NA WAYPOINT")
-            self.goto(wp[0], wp[1])
-        else:
-            self.get_logger().warn(f"{name}: zrzut w miejscu wykrycia")
-        self.drop(idx)
-        return True
+        return False
 
     # ═══════════════════════════════════════════════════════════
     #  Misja
@@ -434,17 +612,38 @@ class SuasFullMission(SuasFlightController):
             return False
 
         self.home = (self.global_lat, self.global_lon)
+        # Od tej chwili gimbal jest nasz — geolokator ma przestac trzymac pion.
+        self._nadir_pub.publish(Bool(data=False))
         self.descend(self.target_alt)
 
         targets = self.read_targets()
-        # Bliższy pierwszy — mniej latania i szybciej widac, czy dziala.
-        order = sorted(TARGETS, key=lambda c: (
-            self._dist_to(*targets[c][:2]) if c in targets else 1e9))
 
-        for idx, class_id in enumerate(order):
-            if self._abort:
+        # PULA KANDYDATOW OBU KLAS, ZAWSZE OD NAJLEPSZEGO. Kolejnosc wyznacza
+        # score geolokatora (obs * conf), nie odleglosc: kandydat z 300
+        # zbieznych obserwacji jest pewniejszy niz plandeka z 15, nawet jesli
+        # plandeka lezy blizej. To samo, gdy operatora nie ma — wtedy zrzut
+        # idzie na najlepszego, a nie na najblizszego.
+        #
+        # Ladunek jest przypisany do klasy (namiot -> 0, czlowiek -> 1), wiec po
+        # zrzucie na klase jej pozostali kandydaci wypadaja z gry.
+        pool = [(cid, c) for cid, lst in targets.items() for c in lst]
+        done = set()
+
+        while not self._abort and len(done) < len(TARGETS):
+            avail = [p for p in pool if p[0] not in done]
+            if not avail:
                 break
-            self.handle_target(idx, class_id, targets.get(class_id))
+            cid, cand = max(avail, key=lambda p: p[1][4])   # najwyzszy score
+            if self.visit_candidate(cid, cand) == 'dropped':
+                done.add(cid)
+            else:
+                pool.remove((cid, cand))
+
+        # Klasy bez zrzutu, ktorym skonczyli sie kandydaci — zostaje grid.
+        for cid in TARGETS:
+            if self._abort or cid in done:
+                continue
+            self.search_and_drop(cid)
 
         self.stop_mission()
         self._spin(1.0, stop_on_abort=False)

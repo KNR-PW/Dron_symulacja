@@ -53,6 +53,7 @@ from rclpy.executors import SingleThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import CompressedImage, Image
+from std_msgs.msg import Bool
 
 from drone_interfaces.msg import OperatorMark
 
@@ -176,6 +177,14 @@ menu.addEventListener('click', async ev=>{
 document.addEventListener('keydown', ev=>{ if(ev.key==='Escape') toLive(); });
 
 fetch('/status').then(r=>r.text()).then(t=>statusEl.textContent=t);
+
+// Puls obecnosci operatora. Misja pyta o potwierdzenie TYLKO wtedy, gdy ktos
+// patrzy — a jedyny pewny dowod na to musi przyjsc OD PRZEGLADARKI.
+// Liczenie widzow po stronie serwera nie wystarcza: gdy padnie Tailscale,
+// przegladarka nie zamyka polaczenia, a TCP bez keepalive zauwaza martwy drugi
+// koniec dopiero po minutach. Puls znika w 2 s.
+setInterval(()=>{ fetch('/ping').catch(()=>{}); }, 2000);
+fetch('/ping').catch(()=>{});
 </script>
 """
 
@@ -207,6 +216,19 @@ class MarkerNode(Node):
         self.br = CvBridge()
         self.pub = self.create_publisher(OperatorMark, '/operator_mark', 10)
 
+        # ── Obecnosc operatora ──────────────────────────────────────────
+        # Misja pyta o potwierdzenie tylko wtedy, gdy ktos faktycznie patrzy.
+        # Dowodem jest PULS OD PRZEGLADARKI (GET /ping co 2 s), a nie liczba
+        # widzow po naszej stronie: gdy padnie Tailscale, przegladarka nie
+        # zamyka polaczenia, a TCP bez keepalive zauwaza to dopiero po minutach.
+        # Przy zerwanym laczu pingi znikaja i /operator_online robi sie false
+        # w ciagu ok. 3 s.
+        self.declare_parameter('operator_ping_ttl', 5.0)
+        self.ping_ttl = self.get_parameter('operator_ping_ttl').value
+        self._last_ping = 0.0
+        self.online_pub = self.create_publisher(Bool, '/operator_online', 10)
+        self.create_timer(1.0, self._publish_online)
+
         # ── Podglad: subskrypcja tylko wtedy, gdy ktos patrzy ───────────
         self._viewers = 0
         self._viewers_lock = threading.Lock()
@@ -231,6 +253,24 @@ class MarkerNode(Node):
             f"podglad z {self.preview_topic}")
         self.get_logger().info(
             "Bez otwartej strony ten wezel nie subskrybuje niczego.")
+
+    # ────────────────────── Obecnosc operatora ──────────────────────
+
+    def _publish_online(self):
+        """Czy operator patrzy: ostatni ping z przegladarki mlodszy niz ttl.
+
+        Publikujemy co sekunde niezaleznie od wyniku, zeby misja odrozniala
+        "operatora nie ma" od "wezel GUI nie chodzi" (wtedy nie ma zadnych
+        wiadomosci i misja tez uzna, ze operatora nie ma — to samo zachowanie,
+        wiec bezpiecznie).
+        """
+        online = (time.time() - self._last_ping) < self.ping_ttl
+        if online != getattr(self, '_online_last', None):
+            self._online_last = online
+            self.get_logger().info(
+                f"operator {'JEST' if online else 'NIE MA'} — misja "
+                f"{'bedzie pytac' if online else 'decyduje sama'}")
+        self.online_pub.publish(Bool(data=online))
 
     # ────────────────────── Podglad ──────────────────────
 
@@ -345,6 +385,11 @@ class MarkerNode(Node):
             def do_GET(self):
                 if self.path == '/':
                     self._send(200, 'text/html; charset=utf-8', PAGE.encode())
+                elif self.path == '/ping':
+                    # Puls obecnosci operatora. Musi przyjsc OD przegladarki —
+                    # tylko to dowodzi, ze lacze zyje i ktos patrzy.
+                    node._last_ping = time.time()
+                    self._send(200, 'text/plain', b'ok')
                 elif self.path == '/stream':
                     self._stream()
                 elif self.path == '/grab':

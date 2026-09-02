@@ -160,6 +160,14 @@ class SuasFlightController(DroneController):
         self.declare_parameter('drop_pwm_close', 1100)
         self.declare_parameter('drop_hold_s', 1.0)
 
+        # Czy przy zgubieniu celu odstawiac gimbal na pitch_search.
+        # W fazie DOLOTU tak — -55 st. patrzy przed siebie i pomaga cel znalezc.
+        # W finalnym CENTROWANIU odwrotnie: wisimy nad celem, czyli cel jest
+        # w nadirze, a -55 odchyla os kamery o 35 st. przy polowie FOV 32,2 st.
+        # — punkt pod dronem wypada POZA kadrem i cel przestaje byc odzyskiwalny.
+        # Dlatego suas_full_mission.center_over_target ustawia to na False.
+        self.declare_parameter('search_gimbal_on_lost', True)
+
         # ─── Bramki czasowe misji ─────────────────────────────
         # Ile czekamy nad waypointem, az detektor potwierdzi klase (tym samym
         # oknem M z N klatek, co przy SEARCH->APPROACH). Wynik decyduje, czy
@@ -213,6 +221,7 @@ class SuasFlightController(DroneController):
         self.drop_pwm_open = self.get_parameter('drop_pwm_open').value
         self.drop_pwm_close = self.get_parameter('drop_pwm_close').value
         self.drop_hold_s = self.get_parameter('drop_hold_s').value
+        self.search_gimbal_on_lost = self.get_parameter('search_gimbal_on_lost').value
         self.acquire_timeout = self.get_parameter('acquire_timeout').value
         self.confirm_timeout = self.get_parameter('confirm_timeout').value
         self.sweep_pitches = list(self.get_parameter('sweep_pitches').value)
@@ -472,7 +481,13 @@ class SuasFlightController(DroneController):
             if self.state != State.SEARCH:
                 self.get_logger().info("Namiot ZGUBIONY → SEARCH (hamowanie)")
                 self.state = State.SEARCH
-                self._set_gimbal(self.pitch_search)
+                if self.search_gimbal_on_lost:
+                    self._set_gimbal(self.pitch_search)
+                else:
+                    # Centrowanie: cel jest pod nami, gimbal ZOSTAJE w pionie,
+                    # zeby wrocil przy pierwszej dobrej klatce.
+                    self.get_logger().info(
+                        "gimbal zostaje w pionie (search_gimbal_on_lost=false)")
                 self._brake()
             self._reset_det_window()
 

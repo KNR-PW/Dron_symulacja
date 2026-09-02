@@ -38,7 +38,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from sensor_msgs.msg import CompressedImage
-from std_msgs.msg import Float32
+from std_msgs.msg import Bool, Float32
 
 from drone_autonomy.geometry import _project_pixel
 from drone_interfaces.msg import Telemetry, TentDetections, OperatorMark
@@ -226,6 +226,12 @@ class SuasGeolocator(Node):
         p = self.get_parameter
         self.lock_nadir = p('lock_nadir').value
         self.mount_pitch = p('mount_pitch_deg').value
+        # mount_pitch = kat, ktorym RZUTUJEMY (aktualnie zadany gimbalowi).
+        # _nadir_target = kat, ktory sami wymuszamy, gdy trzymamy blokade nadiru.
+        # Rozdzielone celowo: po przejeciu lotu misja pochyla gimbal w APPROACH,
+        # a my musimy rzutowac tym samym katem — inaczej kazde pochylenie
+        # psuloby obserwacje (rzutowanie zakladaloby -90, kamera patrzy -70).
+        self._nadir_target = float(self.mount_pitch)
         self.cam_yaw_offset = math.radians(p('cam_yaw_offset_deg').value)
         self.gimbal_stabilized = p('gimbal_stabilized').value
         self.focal_px = p('focal_px').value
@@ -305,11 +311,21 @@ class SuasGeolocator(Node):
                                      self._img_cb, img_qos)
         self._gimbal_pub = self.create_publisher(
             Float32, 'knr_hardware/gimbal_pitch', 10)
+        # Sledzimy KAZDA komende gimbala — takze cudza (misja w APPROACH) —
+        # i rzutujemy aktualnie zadanym katem. Serwo nie ma sprzezenia, wiec
+        # komenda jest najlepsza wiedza, jaka mamy; slew ~0.5 s akceptujemy.
+        self.create_subscription(Float32, 'knr_hardware/gimbal_pitch',
+                                 self._gimbal_cmd_cb, 10)
+        # Misja zwalnia blokade nadiru przy przejeciu lotu (false). Od tej
+        # chwili gimbal nalezy do niej i nie wolno nam go szarpac do pionu.
+        self.create_subscription(Bool, '/geolocator/lock_nadir', self._lock_cb, 10)
 
         # ── 5. TIMERY ───────────────────────────────────────────────
+        # Timer zawsze istnieje; publikuje tylko gdy blokada jest wlaczona,
+        # bo misja moze ja zwolnic (i teoretycznie przywrocic) w locie.
         if self.lock_nadir:
             self._set_nadir()
-            self.create_timer(2.0, self._set_nadir)
+        self.create_timer(2.0, self._set_nadir)
         self.create_timer(report_period, self._report)
 
         self.get_logger().info(
@@ -326,12 +342,30 @@ class SuasGeolocator(Node):
             f"znaczniki operatora dzialaja na kazdej wysokosci")
         if self.lock_nadir:
             self.get_logger().warn(
-                "lock_nadir=true — NIE uruchamiaj rownolegle suas_gimbal_controller")
+                "lock_nadir=true — trzymam gimbal w pionie do czasu, az misja "
+                "zwolni blokade (/geolocator/lock_nadir). NIE uruchamiaj "
+                "rownolegle suas_gimbal_controller")
 
     # ────────────────────── Gimbal ──────────────────────
 
     def _set_nadir(self):
-        self._gimbal_pub.publish(Float32(data=float(self.mount_pitch)))
+        if self.lock_nadir:
+            self._gimbal_pub.publish(Float32(data=float(self._nadir_target)))
+
+    def _gimbal_cmd_cb(self, msg: Float32):
+        new = float(msg.data)
+        if abs(new - self.mount_pitch) > 0.5:
+            self.get_logger().info(
+                f"gimbal zadany {new:+.0f} st. — rzutuje tym katem")
+        self.mount_pitch = new
+
+    def _lock_cb(self, msg: Bool):
+        want = bool(msg.data)
+        if want != self.lock_nadir:
+            self.get_logger().info(
+                "blokada nadiru " + ("WLACZONA" if want else
+                                     "ZWOLNIONA — gimbalem steruje misja"))
+        self.lock_nadir = want
 
     # ────────────────────── Telemetria ──────────────────────
 

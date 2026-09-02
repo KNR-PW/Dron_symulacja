@@ -16,7 +16,7 @@
     settle_time: 3.0
     hover_hold_time: 5.0
     center_tol_m: 1.5
-    search_timeout: 120.0
+    search_timeout: 300.0   # 4 galsy x 250 m = 1000 m, przy 5 m/s 200 s; 120 ucinalo grid na 60%
     finish_action: "rtl"
     test_sweep: false
     drop_after_hover: false
