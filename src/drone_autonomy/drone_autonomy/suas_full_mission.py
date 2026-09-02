@@ -100,6 +100,15 @@ class SuasFullMission(SuasFlightController):
         self.declare_parameter('search_w', 150.0)
         self.declare_parameter('search_h', 250.0)
         self.declare_parameter('search_overlap', 0.3)
+        # Wlasne punkty przeszukiwania zamiast liczonego gridu.
+        # search_offsets: plaska lista [E1,N1, E2,N2, ...] w METRACH wzgledem
+        #   punktu przejecia lotu. Wygodne w yamlu, bo nic nie trzeba przeliczac
+        #   na stopnie ani pilnowac sciezki do pliku.
+        # search_waypoints: sciezka do pliku (.waypoints z MP albo lat/lon).
+        #   Ma pierwszenstwo nad search_offsets.
+        # Oba puste = dron liczy siatke sam z search_w/search_h.
+        self.declare_parameter('search_waypoints', '')
+        self.declare_parameter('search_offsets', [0.0])
         self.declare_parameter('search_timeout', 300.0)
         self.declare_parameter('finish_action', 'rtl')
         # TRYB TESTOWY. W prawdziwej misji dron jest juz w powietrzu po przelocie
@@ -130,6 +139,14 @@ class SuasFullMission(SuasFlightController):
         self.search_w = p('search_w').value
         self.search_h = p('search_h').value
         self.search_overlap = p('search_overlap').value
+        self.search_waypoints = str(p('search_waypoints').value).strip()
+        # [0.0] jako domyslna, bo ROS 2 nie przyjmuje pustej listy (nie zna typu).
+        off = list(p('search_offsets').value)
+        self.search_offsets = off if len(off) >= 4 else []
+        if len(off) % 2:
+            self.get_logger().warn(
+                f"search_offsets ma nieparzysta liczbe wartosci ({len(off)}) — "
+                f"ostatnia ignoruje")
         self.search_timeout = p('search_timeout').value
         self.finish_action = str(p('finish_action').value).lower()
         self.auto_takeoff = p('auto_takeoff').value
@@ -442,11 +459,67 @@ class SuasFullMission(SuasFlightController):
         self.get_logger().warn("spirala nic nie znalazla")
         return False
 
-    def grid_search(self) -> bool:
-        """Scenariusz C: grid nad obszarem wokol punktu startowego.
+    def _load_waypoints(self, path):
+        """Wczytaj wlasne punkty przeszukiwania. Zwraca [(lat, lon), ...] albo [].
 
-        Odstep galsow liczy sie sam ze sladu kadru na tej wysokosci
-        i zadanego overlapu — nie trzeba go podawac recznie.
+        Obslugiwane sa trzy formaty, zeby nie trzeba bylo niczego konwertowac:
+
+        1. .waypoints z Mission Plannera (naglowek "QGC WPL 110").
+           Pola rozdzielone tabulatorem, lat w kolumnie 8, lon w 9.
+           Wiersz 0 to HOME i jest pomijany, tak samo komendy bez wspolrzednych
+           (lat i lon rowne 0) — czyli TAKEOFF, RTL, DO_*.
+           To jest sciezka dla realu: rysujesz siatke w MP, zapisujesz plik.
+
+        2. "lat, lon" w kazdej linii — gdy masz gotowe wspolrzedne.
+
+        3. Linia "OFFSETS", a po niej "wschod, polnoc" w METRACH wzgledem
+           PUNKTU PRZEJECIA LOTU. To jest sciezka do testow: nie trzeba
+           przeliczac stopni, wpisujesz po prostu "-75, 125".
+
+        Linie puste i zaczynajace sie od # sa pomijane.
+        """
+        try:
+            raw = open(os.path.expanduser(path)).read().splitlines()
+        except Exception as e:
+            self.get_logger().error(f"nie moge wczytac {path}: {e}")
+            return []
+
+        qgc = any(l.startswith('QGC WPL') for l in raw[:1])
+        offsets = any(l.strip().upper() == 'OFFSETS' for l in raw)
+        pts = []
+        for line in raw:
+            line = line.split('#')[0].strip()
+            if not line or line.startswith('QGC') or line.upper() == 'OFFSETS':
+                continue
+            if qgc:
+                f = line.split('\t')
+                if len(f) < 10 or f[0] == '0':          # wiersz 0 = HOME
+                    continue
+                try:
+                    lat, lon = float(f[8]), float(f[9])
+                except ValueError:
+                    continue
+                if abs(lat) < 1e-7 and abs(lon) < 1e-7:  # komenda bez pozycji
+                    continue
+                pts.append((lat, lon))
+            else:
+                try:
+                    a, b = (float(x) for x in line.replace(',', ' ').split()[:2])
+                except ValueError:
+                    continue
+                # OFFSETS: a=wschod, b=polnoc w metrach -> _offset_gps(dn, de)
+                pts.append(self._offset_gps(self.home[0], self.home[1], b, a)
+                           if offsets else (a, b))
+        if not pts:
+            self.get_logger().error(f"{path}: nie znalazlem zadnych punktow")
+        return pts
+
+    def _grid_waypoints(self):
+        """Punkty liczonego gridu: prostokat wysrodkowany na punkcie przejecia.
+
+        Odstep galsow wynika ze SLADU KADRU na biezacej wysokosci i overlapu,
+        wiec nie trzeba go podawac recznie. Punktami sa tylko NAROZNIKI galsow —
+        po dwa na gals, na przemian, zeby dron nie wracal pusty.
         """
         slad = self.img_w * self.altitude / self.focal_px
         spacing = max(5.0, slad * (1.0 - self.search_overlap))
@@ -455,20 +528,50 @@ class SuasFullMission(SuasFlightController):
             f"GRID {self.search_w:.0f}x{self.search_h:.0f} m | slad {slad:.0f} m "
             f"| odstep {spacing:.0f} m | {n} galsow")
         lat0, lon0 = self.home
-        end = time.time() + self.search_timeout
+        pts = []
         for i in range(n):
             de = -self.search_w / 2 + i * spacing
             for dn in ((self.search_h / 2, -self.search_h / 2) if i % 2 == 0
                        else (-self.search_h / 2, self.search_h / 2)):
-                if time.time() > end or self._abort:
-                    self.get_logger().warn("grid: koniec czasu")
-                    return False
-                wlat, wlon = self._offset_gps(lat0, lon0, dn, de)
-                self.goto(wlat, wlon)
-                if self.wait_acquire(timeout=1.0):
-                    self.get_logger().info(f"GRID: cel znaleziony na galsie {i+1}")
-                    return True
-        self.get_logger().warn("grid przeleciany, nic nie znaleziono")
+                pts.append(self._offset_gps(lat0, lon0, dn, de))
+        return pts
+
+    def grid_search(self) -> bool:
+        """Scenariusz C: przelot po punktach przeszukiwania.
+
+        Punkty biora sie albo z pliku (search_waypoints), albo z liczonego
+        gridu. Reszta jest wspolna: lecimy po kolei i po kazdym dolocie
+        sprawdzamy okno detekcji.
+        """
+        if self.search_waypoints:
+            pts = self._load_waypoints(self.search_waypoints)
+            if not pts:
+                return False
+            self.get_logger().info(
+                f"PRZESZUKIWANIE: {len(pts)} punktow z {self.search_waypoints}")
+        elif self.search_offsets:
+            o = self.search_offsets
+            pts = [self._offset_gps(self.home[0], self.home[1], o[i + 1], o[i])
+                   for i in range(0, len(o) - 1, 2)]
+            opis = "  ".join(f"({o[i]:+.0f}E,{o[i+1]:+.0f}N)"
+                             for i in range(0, len(o) - 1, 2))
+            self.get_logger().info(
+                f"PRZESZUKIWANIE: {len(pts)} punktow z search_offsets — {opis}")
+        else:
+            pts = self._grid_waypoints()
+
+        end = time.time() + self.search_timeout
+        for i, (wlat, wlon) in enumerate(pts, 1):
+            if time.time() > end or self._abort:
+                self.get_logger().warn(
+                    f"przeszukiwanie: koniec czasu na punkcie {i}/{len(pts)}")
+                return False
+            self.get_logger().info(f"punkt {i}/{len(pts)}")
+            self.goto(wlat, wlon)
+            if self.wait_acquire(timeout=1.0):
+                self.get_logger().info(f"cel znaleziony na punkcie {i}/{len(pts)}")
+                return True
+        self.get_logger().warn("wszystkie punkty przeleciane, nic nie znaleziono")
         return False
 
     # ═══════════════════════════════════════════════════════════
@@ -579,10 +682,22 @@ class SuasFullMission(SuasFlightController):
                 if self.center_over_target():
                     self.get_logger().info(
                         f"{name}: ZRZUT NAD WYCENTROWANYM CELEM")
-                else:
-                    self.get_logger().warn(f"{name}: zrzut w miejscu wykrycia")
-                self.drop(class_id)
-                return True
+                    self.drop(class_id)
+                    return True
+                # Centrowanie sie nie udalo, a w gridzie NIE MA waypointu, na
+                # ktory moglibysmy zrzucic w ciemno. Cel, ktory znika w trakcie
+                # centrowania, to prawie na pewno falszywka — 2026-09-02 grid
+                # potwierdzil w ten sposob drzewo. Zrzut byl wtedy najgorsza
+                # z mozliwych decyzji: ladunek poszedl obok drzewa.
+                self.get_logger().warn(
+                    f"{name}: cel zniknal w trakcie centrowania — falszywka, "
+                    f"NIE zrzucam")
+                if not self.operator_watching():
+                    self.get_logger().error(
+                        f"{name}: bez operatora nie szukam dalej — "
+                        f"ladunek zostaje na pokladzie")
+                    return False
+                continue                     # operator patrzy — szukamy dalej
 
             if not self.operator_watching():
                 return False

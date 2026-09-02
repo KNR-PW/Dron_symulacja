@@ -35,7 +35,7 @@ def generate_launch_description():
         # (detekcja chodzi ~7-14 FPS, wiec 6/8 to ok. 0.6-1.1 s potwierdzania)
         DeclareLaunchArgument("det_confirm_frames", default_value="6"),
         DeclareLaunchArgument("det_window_frames", default_value="8"),
-        DeclareLaunchArgument("det_confirm_gap", default_value="0.5"),
+        DeclareLaunchArgument("det_confirm_gap", default_value="1.5"),
         # Prog pewnosci: parametr 'conf' w launchach detekcji, nie tutaj
         DeclareLaunchArgument("require_same_track", default_value="true"),
         # Konwencja realu: 0 = poziomo, -45 = pod katem w dol/przod, -90 = prosto w dol.

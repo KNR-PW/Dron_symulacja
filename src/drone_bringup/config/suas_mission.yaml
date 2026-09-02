@@ -38,9 +38,66 @@
     gimbal_deadzone: 0.06
     det_confirm_frames: 4
     det_window_frames: 8
-    det_confirm_gap: 0.5
+    # Przerwa miedzy KLATKAMI detektora, po ktorej okno M z N jest zerowane.
+    # Detektor publikuje kazda klatke (takze pusta), wiec to mierzy jitter
+    # detektora, a nie utrate celu. W symulacji chodzi ~5 Hz z jitterem do
+    # 0.7 s, wiec 0.5 zerowalo okno w kolko i cel 31x9 px nigdy sie nie
+    # potwierdzal — dron stal nad czlowiekiem i go "nie widzial".
+    # Na realu przy 7-14 FPS wystarczy 1.0.
+    det_confirm_gap: 1.5
     require_same_track: true
     pitch_search: -55.0
     pitch_min: -90.0
     pitch_max: -30.0
     pitch_hover_thr: -83.0
+
+    # ─── ZRZUT ŁADUNKU ────────────────────────────────────────────────
+    # KANAL 0 = TRYB SYMULACJI: zrzut tylko sie loguje, nic nie jedzie na
+    # sprzet. To jest celowy bezpiecznik — dopoki nie wpiszesz prawdziwych
+    # kanalow, mozesz przelatywac cala misje bez ryzyka zgubienia ladunku.
+    #
+    # PRZED LOTEM W POLU wpisz numery kanalow serw, np. [9, 10]
+    # (namiot -> pierwszy, czlowiek -> drugi) i sprawdz PWM na ziemi.
+    # SERVOn_FUNCTION dla tych kanalow MUSI byc 0 (Disabled), inaczej
+    # ArduPilot bedzie nimi sterowal sam i nadpisze nasze DO_SET_SERVO.
+    drop_servo_ch: [0, 0]
+    drop_pwm_open: 1900
+    drop_pwm_close: 1100
+    drop_hold_s: 1.0
+
+    # ─── BRAMKI CZASOWE ───────────────────────────────────────────────
+    acquire_timeout: 5.0        # ile czekamy, az detektor potwierdzi cel
+    confirm_timeout: 15.0       # ile czekamy na spacje operatora
+    approach_timeout: 90.0      # gorny limit calego centrowania
+    center_lost_timeout: 15.0   # ciagly SEARCH tak dlugo = cel zniknal na dobre
+
+    # ─── OBSZAR PRZESZUKIWANIA (grid, gdy klasa nie ma kandydatow) ────
+    # Prostokat wysrodkowany na pozycji PRZEJECIA LOTU, nie na srodku pola.
+    # PRZED LOTEM: wpisz realny obszar po obejrzeniu terenu — 150x250 to
+    # liczby z planu zawodow, nie z pomiaru.
+    search_w: 150.0
+    search_h: 250.0
+    search_overlap: 0.3
+
+    # ─── WLASNE PUNKTY PRZESZUKIWANIA ─────────────────────────────────
+    # Plaska lista [E1,N1, E2,N2, ...] w METRACH wzgledem punktu, w ktorym
+    # misja przejela lot (przelaczenie AUTO -> GUIDED). Dron leci po nich
+    # PO KOLEI i po kazdym dolocie sprawdza, czy detektor widzi cel.
+    #
+    # Ponizsze szesc punktow to trzy galsy odlegle o 30 m: dron poleci
+    # najpierw 20 m na zachod i 40 m na polnoc, potem 60 m na poludnie,
+    # przeskoczy 30 m na wschod, wroci na polnoc — i tak dalej.
+    #
+    # Zamiast tej listy mozna podac plik: search_waypoints wskazuje na
+    # .waypoints zapisany z Mission Plannera i ma pierwszenstwo nad ta lista.
+    # Na realu to jest wlasciwa droga, bo punkty sa wtedy BEZWZGLEDNE — a te
+    # ponizej licza sie od miejsca przejecia lotu, czyli od konca trasy ortofoto.
+    #
+    # Oba puste ([0.0] i "") = dron liczy siatke sam z search_w/search_h.
+    search_offsets: [-20.0,  40.0,
+                     -20.0, -20.0,
+                      10.0, -20.0,
+                      10.0,  40.0,
+                      40.0,  40.0,
+                      40.0, -20.0]
+    search_waypoints: ""

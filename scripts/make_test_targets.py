@@ -31,11 +31,17 @@ M_LAT = 111_320.0
 
 # Offsety obiektow wzgledem SPAWNU drona w swiecie suas_field.sdf.
 # Dron rodzi sie na (10, 0); world X = wschod, Y = polnoc.
-#   namiot          (30, 0)   -> +20 E,   0 N
-#   czlowiek lezacy (45, 0)   -> +35 E,   0 N
-#   czlowiek stojacy(15, 12)  ->  +5 E, +12 N
+#   namiot                          (30, 0)  -> +20 E,   0 N
+#   person_target, lezy, rece przy ciele (15, 12) ->  +5 E, +12 N   <- TEN
+#   person_lying (Rescue Randy), rece na boki (45, 0) -> +35 E, 0 N
+#
+# Celem "czlowiek" jest person_target, NIE Randy. Zmierzone 2026-09-02 w sim:
+# MODEL5 potwierdza person_target lezacego (31x9 px na 50 m), a Randy'ego
+# (30x22 px) NIE widzi wcale — mimo wiekszej liczby pikseli. W symulacji
+# o wykryciu decyduje wyglad siatki (Randy to manekin w nietypowych
+# kolorach), nie rozmiar. Randy zostaje w swiecie jako twardy negatyw.
 TENT_E, TENT_N = 20.0, 0.0
-LYING_E, LYING_N = 35.0, 0.0
+LYING_E, LYING_N = 5.0, 12.0
 
 
 def gps(lat0, lon0, d_east, d_north):

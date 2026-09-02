@@ -43,6 +43,8 @@ zeby bez nadzoru nie krecic sie w kolko.
 | `spiral_timeout` | 45 s | `suas_full_mission.py` |
 | `search_timeout` | 120 s | yaml (kod ma 300) |
 | `operator_ping_ttl` | 5 s | `suas_marker_web.py` |
+| `det_confirm_gap` | **1,5 s** | wszedzie; 0,5 zerowalo okno przy jitterze detektora |
+| `center_lost_timeout` | 15 s | `suas_full_mission.py` |
 | `target_alt` (zrzut) | 50 m | yaml |
 | centrowanie zmierzone | 5,6 m zamkniete w 10 s | pomiar w symulacji |
 
@@ -343,6 +345,52 @@ Teraz `descend` czeka, az `|alt - cel| < 2 m` (timeout 60 s).
 
 Jesli ogladasz obraz tylko przez `web_video_server` (port 8080), misja uzna, ze
 Cie nie ma, i przestanie pytac. **Karta GUI musi byc otwarta.**
+
+### 7.11 `det_confirm_gap` zerowal okno potwierdzania — NAPRAWIONE
+
+Zmierzone 2026-09-02: dron doleciał nad lezacego czlowieka z bledem **0,1 m**
+i mimo to `okno akwizycji 5s minelo bez potwierdzenia`. W logu dwie linie
+`Przerwa w detekcjach 0.51s / 0.71s (> 0.5s) — okno potwierdzania wyzerowane`.
+
+Detektor publikuje KAZDA klatke, takze pusta, wiec `det_confirm_gap` mierzy
+jitter detektora, nie utrate celu. W symulacji detektor chodzi ~5 Hz
+z przerwami do 0,7 s, wiec prog 0,5 s zerowal okno w kolko i 4 z 8 klatek
+nigdy sie nie uzbieralo. Namiot przechodzil, bo jest wykrywany w kazdej
+klatce; czlowiek 31x9 px nie mial zapasu.
+
+Koszt tego bledu w zmierzonym przebiegu: 5 s akwizycji + 8 s spirali
++ centrowanie z 19,5 m zamiast z 1 m = **25 s straty na celu**. Cala misja
+52 s zamiast oczekiwanych 27 s.
+
+Naprawione przez ujednolicenie na **1,5 s** w czterech miejscach (domyslna
+w kodzie, `suas_mission.yaml`, oba launche) — wczesniej yaml mial jedna
+wartosc, a launche druga.
+
+### 7.12 `require_same_track` nie dzialal przy track_id = -1 — NAPRAWIONE
+
+Warunek brzmial `if good and self.require_same_track and msg.track_id >= 0:`,
+wiec przy braku ID **cala kontrola sciezki byla pomijana**, a trafienie i tak
+wpadalo do okna M z N. Zabezpieczenie nie dzialalo dokladnie w przypadku,
+przed ktorym mialo chronic.
+
+Zmierzone 2026-09-02: grid na punkcie oddalonym 14,6 m od `tree_4_a` potwierdzil
+cel jako `4/6 klatek, ID=-1`. Centrowanie gonilo ducha — pozycja skakala o 20 m
+miedzy probkami, `vx` wysycal sie na 3 m/s. Prawdziwe cele dostaja ID od razu
+(namiot 53, lezacy czlowiek 151), wiec `track_id = -1` to podpis migoczacej
+falszywki.
+
+Naprawione: brak sciezki = trafienie NIE liczy sie do okna (`good = False`),
+wiec detekcja bez ID nie odswieza tez `last_det_time` i nie wplywa na sterowanie.
+
+### 7.13 Grid zrzucal ladunek po nieudanym centrowaniu — NAPRAWIONE
+
+W trybie gridu nie ma waypointu, na ktory mozna zrzucic w ciemno. Mimo to po
+nieudanym centrowaniu leciala galaz `zrzut w miejscu wykrycia` — czyli ladunek
+szedl tam, gdzie dron akurat stal, obok falszywki.
+
+Teraz: cel, ktory znika w trakcie centrowania, jest traktowany jak falszywka.
+Operator patrzy -> szukamy dalej. Operatora nie ma -> koniec klasy, ladunek
+zostaje na pokladzie (zgodnie z regula "nie ma adresu -> nie zrzucamy").
 
 ### 7.8 Pojedynczy plik jako kanal miedzy geolokatorem a misja
 

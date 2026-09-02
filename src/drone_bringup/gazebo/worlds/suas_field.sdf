@@ -249,7 +249,14 @@
       szerokosci przy identycznej dlugosci ~30 px.
 
       Prog "sensowne minimum ~20 px" z docs/oak_kadr_detekcji.md przekracza na
-      50 m tylko person_lying. Jesli detekcja potwierdzi ktorakolwiek z tych poz,
+      50 m tylko person_lying.
+
+      WYNIK 2026-09-02 (sim, MODEL5, 50 m): person_target (31x9 px) WYKRYWANY,
+      potwierdzenie 4/4 klatek. person_lying/Randy (30x22 px) NIE wykrywany.
+      Czyli w symulacji decyduje wyglad siatki, nie liczba pikseli - Randy to
+      manekin w kolorach, ktorych model nie zna. Do testow misji celem
+      "czlowiek" jest person_target; Randy zostaje jako twardy negatyw.
+      O prawdziwych ludziach sim nic nie mowi - to sprawdza dopiero real. Jesli detekcja potwierdzi ktorakolwiek z tych poz,
       automatyczna sciezka dla czlowieka przestaje byc martwa - a to zmienia
       wnioski ze scenariusza 2 w docs/misja_scenariusze.md, gdzie wychodzi, ze
       bez lacza wracamy z jednym ladunkiem.

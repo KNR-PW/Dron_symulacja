@@ -101,7 +101,16 @@ class SuasFlightController(DroneController):
         # przegapienia detektora, dalej odrzuca pojedyncze falszywki).
         self.declare_parameter('det_confirm_frames', 6)   # M — ile trafien wymagamy
         self.declare_parameter('det_window_frames', 8)    # N — dlugosc okna
-        self.declare_parameter('det_confirm_gap', 0.5)    # dluzsza przerwa = okno nieaktualne [s]
+        # Przerwa miedzy KLATKAMI detektora, po ktorej okno M z N jest zerowane
+        # w calosci. Detektor publikuje kazda klatke — takze pusta — wiec to
+        # mierzy JITTER DETEKTORA, a nie utrate celu.
+        # 1.5 s, bo 0.5 zerowalo okno przy normalnym jitterze: w symulacji
+        # detektor chodzi ~5 Hz z przerwami do 0.7 s i cel 31x9 px NIGDY sie
+        # nie potwierdzal — dron stal nad czlowiekiem i go "nie widzial".
+        # Na realu (7-14 FPS) 1.5 jest bezpieczne: w oknie akwizycji dron wisi,
+        # wiec starsza o sekunde detekcja dotyczy tej samej sceny, a przed
+        # falszywkami chroni i tak 4 z 8 klatek oraz require_same_track.
+        self.declare_parameter('det_confirm_gap', 1.5)
         # Progu pewnosci tu NIE ma — filtruje juz detektor (parametr 'conf' w
         # launchach detekcji). Jedno pokretlo, jedno miejsce.
         # Wymagaj tego samego ID sciezki z trackera w calym oknie
@@ -390,10 +399,22 @@ class SuasFlightController(DroneController):
 
         good = bool(msg.detected)
 
-        if good and self.require_same_track and msg.track_id >= 0:
-            # Tracker widzi obiekt: liczymy tylko klatki tej samej sciezki.
-            # Skok na inne ID = inny obiekt, wiec potwierdzamy go od zera.
-            if self._cand_id < 0:
+        if good and self.require_same_track:
+            if msg.track_id < 0:
+                # BRAK SCIEZKI = nie liczymy trafienia.
+                # Tracker nadaje ID dopiero, gdy obiekt utrzyma sie miedzy
+                # klatkami. Prawdziwy cel dostaje je od razu (zmierzone:
+                # namiot ID=53, lezacy czlowiek ID=151), a track_id=-1 to
+                # podpis MIGOCZACEJ FALSZYWKI — drzewa albo cienia, ktory
+                # detektor widzi raz tu, raz tam.
+                # Wczesniej warunek brzmial "... and msg.track_id >= 0", wiec
+                # przy braku ID cala kontrola sciezki byla POMIJANA, a trafienie
+                # i tak wpadalo do okna. Zabezpieczenie nie dzialalo dokladnie
+                # w przypadku, przed ktorym mialo chronic: 2026-09-02 grid
+                # potwierdzil drzewo (4/6 klatek, ID=-1) i dron gonil duch
+                # z pozycja skaczaca o 20 m miedzy probkami.
+                good = False
+            elif self._cand_id < 0:
                 self._cand_id = msg.track_id
             elif msg.track_id != self._cand_id:
                 self.get_logger().info(

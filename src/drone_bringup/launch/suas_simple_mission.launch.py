@@ -56,7 +56,7 @@ PARAMS = [
     # Filtr falszywych detekcji: M trafien z ostatnich N klatek przed APPROACH
     ("det_confirm_frames", "4"),
     ("det_window_frames",  "8"),
-    ("det_confirm_gap",    "0.5"),
+    ("det_confirm_gap",    "1.5"),   # 0.5 zerowalo okno przy jitterze detektora
     # Prog pewnosci: parametr 'conf' w launchach detekcji, nie tutaj
     ("require_same_track", "true"),
     # Konwencja realu: 0 = poziomo, -45 = pod katem w dol/przod, -90 = prosto w dol
