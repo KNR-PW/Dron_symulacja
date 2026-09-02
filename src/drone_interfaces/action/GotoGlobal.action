@@ -1,5 +1,7 @@
-float32 lat
-float32 lon
+# float64, nie float32: przy lat/lon rzedu 50 stopni float32 ma ulp ~4e-6 deg,
+# czyli ok. 1 m kwantyzacji - tyle, ile wynosi caly budzet bledu naprowadzania.
+float64 lat
+float64 lon
 float32 alt
 ---
 int8 result

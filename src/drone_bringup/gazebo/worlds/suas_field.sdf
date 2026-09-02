@@ -1,0 +1,382 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sdf version="1.9">
+  <world name="suas_field">
+    <physics type="ode">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>1000</real_time_update_rate>
+    </physics>
+
+    <plugin filename="gz-sim-physics-system"
+      name="gz::sim::systems::Physics">
+    </plugin>
+    <plugin filename="gz-sim-sensors-system"
+      name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+    <plugin filename="gz-sim-user-commands-system"
+      name="gz::sim::systems::UserCommands">
+    </plugin>
+    <plugin filename="gz-sim-scene-broadcaster-system"
+      name="gz::sim::systems::SceneBroadcaster">
+    </plugin>
+    <plugin filename="gz-sim-imu-system"
+      name="gz::sim::systems::Imu">
+    </plugin>
+
+    <gravity>0 0 -9.8</gravity>
+    <magnetic_field>6e-06 2.3e-05 -4.2e-05</magnetic_field>
+    <atmosphere type="adiabatic"/>
+    <scene>
+      <grid>false</grid>
+      <ambient>0.4 0.4 0.4 1</ambient>
+      <background>0.7 0.7 0.7 1</background>
+      <shadows>false</shadows>
+    </scene>
+
+    <gui fullscreen='0'>
+      <plugin filename='MinimalScene' name='3D View'>
+        <gz-gui>
+          <title>3D View</title>
+          <property type='bool' key='showTitleBar'>false</property>
+          <property type='string' key='state'>docked</property>
+        </gz-gui>
+        <engine>ogre2</engine>
+        <scene>scene</scene>
+        <ambient_light>0.4 0.4 0.4</ambient_light>
+        <background_color>0.8 0.8 0.8</background_color>
+        <camera_pose>-6 0 6 0 0.5 0</camera_pose>
+      </plugin>
+      <plugin filename='GzSceneManager' name='Scene Manager'>
+        <gz-gui>
+          <property key='resizable' type='bool'>false</property>
+          <property key='width' type='double'>5</property>
+          <property key='height' type='double'>5</property>
+          <property key='state' type='string'>floating</property>
+          <property key='showTitleBar' type='bool'>false</property>
+        </gz-gui>
+      </plugin>
+      <plugin filename='InteractiveViewControl' name='Interactive view control'>
+        <gz-gui>
+          <property key='resizable' type='bool'>false</property>
+          <property key='width' type='double'>5</property>
+          <property key='height' type='double'>5</property>
+          <property key='state' type='string'>floating</property>
+          <property key='showTitleBar' type='bool'>false</property>
+        </gz-gui>
+      </plugin>
+      <plugin filename='CameraTracking' name='Camera Tracking'>
+        <gz-gui>
+          <property key='resizable' type='bool'>false</property>
+          <property key='width' type='double'>5</property>
+          <property key='height' type='double'>5</property>
+          <property key='state' type='string'>floating</property>
+          <property key='showTitleBar' type='bool'>false</property>
+        </gz-gui>
+      </plugin>
+      <plugin filename='MarkerManager' name='Marker manager'>
+        <gz-gui>
+          <property key='resizable' type='bool'>false</property>
+          <property key='width' type='double'>5</property>
+          <property key='height' type='double'>5</property>
+          <property key='state' type='string'>floating</property>
+          <property key='showTitleBar' type='bool'>false</property>
+        </gz-gui>
+      </plugin>
+      <plugin filename='SelectEntities' name='Select Entities'>
+        <gz-gui>
+          <property key='resizable' type='bool'>false</property>
+          <property key='width' type='double'>5</property>
+          <property key='height' type='double'>5</property>
+          <property key='state' type='string'>floating</property>
+          <property key='showTitleBar' type='bool'>false</property>
+        </gz-gui>
+      </plugin>
+      <plugin filename='Spawn' name='Spawn Entities'>
+        <gz-gui>
+          <property key='resizable' type='bool'>false</property>
+          <property key='width' type='double'>5</property>
+          <property key='height' type='double'>5</property>
+          <property key='state' type='string'>floating</property>
+          <property key='showTitleBar' type='bool'>false</property>
+        </gz-gui>
+      </plugin>
+      <plugin filename='VisualizationCapabilities' name='Visualization Capabilities'>
+        <gz-gui>
+          <property key='resizable' type='bool'>false</property>
+          <property key='width' type='double'>5</property>
+          <property key='height' type='double'>5</property>
+          <property key='state' type='string'>floating</property>
+          <property key='showTitleBar' type='bool'>false</property>
+        </gz-gui>
+      </plugin>
+      <plugin filename='EntityContextMenuPlugin' name='Entity context menu'>
+        <gz-gui>
+          <property key='resizable' type='bool'>false</property>
+          <property key='width' type='double'>5</property>
+          <property key='height' type='double'>5</property>
+          <property key='state' type='string'>floating</property>
+          <property key='showTitleBar' type='bool'>false</property>
+        </gz-gui>
+      </plugin>
+      <plugin name='World control' filename='WorldControl'>
+        <gz-gui>
+          <title>World control</title>
+          <property type='bool' key='showTitleBar'>false</property>
+          <property type='string' key='state'>docked</property>
+          <property type='double' key='height'>72</property>
+          <property type='double' key='width'>121</property>
+          <property type='double' key='z'>1</property>
+          <property type='string' key='anchor'>bottom</property>
+        </gz-gui>
+        <play_pause>true</play_pause>
+        <step>true</step>
+        <start_paused>true</start_paused>
+        <use_event>true</use_event>
+      </plugin>
+      <plugin name='World stats' filename='WorldStats'>
+        <gz-gui>
+          <title>World stats</title>
+          <property type='bool' key='showTitleBar'>false</property>
+          <property type='string' key='state'>docked</property>
+          <property type='double' key='height'>110</property>
+          <property type='double' key='width'>290</property>
+          <property type='double' key='z'>1</property>
+          <property type='string' key='anchor'>bottom_left</property>
+        </gz-gui>
+        <sim_time>true</sim_time>
+        <real_time>true</real_time>
+        <real_time_factor>true</real_time_factor>
+        <iterations>true</iterations>
+      </plugin>
+      <plugin name='Entity tree' filename='EntityTree'/>
+      <plugin name='Drone Camera' filename='ImageDisplay'>
+        <gz-gui>
+          <property key='state' type='string'>floating</property>
+          <property key='width' type='double'>400</property>
+          <property key='height' type='double'>300</property>
+          <property key='y' type='double'>0</property>
+          <property key='x' type='double'>0</property>
+          <property key='showTitleBar' type='bool'>true</property>
+        </gz-gui>
+        <topic>/rgb_camera/image</topic>
+      </plugin>
+    </gui>
+    <!-- Pole 400x400 m. grass_ground ma tylko 100x100 m, wiec przy ortofoto
+         nad polem 150x250 m kamera patrzylaby glownie w szare tlo. -->
+    <include>
+      <uri>model://grass_ground_big</uri>
+      <pose>0 0 0 0 0 0</pose>
+    </include>
+    <light name="sunUTC" type="directional">
+      <pose>0 0 500 0 -0 0</pose>
+      <cast_shadows>false</cast_shadows>
+      <intensity>1</intensity>
+      <direction>0.001 0.625 -0.78</direction>
+      <diffuse>0.904 0.904 0.904 1</diffuse>
+      <specular>0.271 0.271 0.271 1</specular>
+    </light>
+    <spherical_coordinates>
+      <surface_model>EARTH_WGS84</surface_model>
+      <world_frame_orientation>ENU</world_frame_orientation>
+      <latitude_deg>47.397971057728974</latitude_deg>
+      <longitude_deg> 8.546163739800146</longitude_deg>
+      <elevation>0</elevation>
+    </spherical_coordinates>
+
+    <include>
+      <uri>model://arucotag</uri>
+      <name>aruco_1</name>
+      <pose>0 0 0.01 0 0 0</pose>
+    </include>
+    <include>
+      <uri>model://arucotag</uri>
+      <name>aruco_2</name>
+      <pose>5 5 0.01 0 0 0</pose>
+    </include>
+    <include>
+      <uri>model://arucotag</uri>
+      <name>aruco_3</name>
+      <pose>-5 5 0.01 0 0 0</pose>
+    </include>
+
+    <!--
+      ============================================================
+      PRAWDA ODNIESIENIA (ground truth) - do mierzenia bledu geolokalizacji
+      ============================================================
+      Swiat PLASKI (grass_ground na z=0). Dzieki temu wysokosc z telemetrii
+      (nad punktem uzbrojenia) rowna sie wysokosci nad terenem, wiec skala
+      rzutowania GSD = alt/focal jest dokladna. Na terenie z gorkami byloby
+      to zrodlem bledu.
+
+      world X = wschod, world Y = polnoc (ENU)
+
+      UWAGA: NIE licz prawdy odniesienia ze <spherical_coordinates> tego swiata.
+      SITL ich NIE UZYWA - ma wlasny home (domyslnie CMAC pod Canberra), a wtyczka
+      ArduPilota podaje mu pozycje wzgledem punktu, w ktorym model sie zrodzil.
+      Prawde liczy sie wiec od SPAWNU DRONA, ktory jest jednoczesnie home.
+      GPS spawnu odczytaj PRZED startem z topicu /knr_hardware/telemetry
+      (pola global_lat, global_lon) i podaj go skryptowi check_targets.py
+      w opcji "home". Dokladne komendy: docs/misja_real.md.
+      (W komentarzu XML nie wolno uzyc podwojnego myslnika, stad opis slowny
+      zamiast gotowych komend z flagami.)
+
+      obiekt         |   X      Y   | od home: wschod  polnoc
+      iris (spawn)   |   10.0    0.0  |    0.0      0.0    = HOME
+      tent_target    |   30.0    0.0  |  +20.0      0.0
+      person_target  |   15.0   12.0  |   +5.0    +12.0    lezacy, rece przy ciele
+      person_lying   |   45.0    0.0  |  +35.0      0.0    lezacy, rece na boki
+      srodek namiot/person_target | 22.5  6.0 | +12.5    +6.0
+
+      Odleglosci: namiot <-> person_target 19.2 m | namiot <-> person_lying 15.0 m
+                  person_target <-> person_lying 32.3 m | dron <-> namiot 20.0 m
+      Wszystkie pary powyzej 10 m, czyli powyzej promienia klastrowania
+      geolokatora - kazdy obiekt daje osobny klaster.
+
+      DWIE POZY LEZACE - PO CO:
+      Czlowiek STOJACY ma z nadiru obrys 0.5 m, czyli 8 px na 50 m i 5 px na
+      80 m - ponizej progu YOLO (stride 8). Z pulapu misji automat nie ma go
+      jak znalezc i dlatego geolokator ma bramke person_max_alt.
+      Poza lezaca zmienia to zasadniczo, bo dlugosc ciala wchodzi w kadr:
+
+        obiekt                    obrys      80 m       50 m       30 m
+        person_target (przy ciele) 1.90x0.54  19x 6 px  31x 9 px  52x15 px
+        person_lying  (rece boki)  1.82x1.36  19x14 px  30x22 px  49x37 px
+
+      DLUGOSC MAJA PRAWIE TAKA SAMA, roznia sie SZEROKOSCIA 2.5x. To jest
+      celowe: sprawdzamy, czy model potrzebuje sylwetki z rozlozonymi rekoma,
+      czy wystarcza mu sama dlugosc. Na 50 m to porownanie 9 px do 22 px
+      szerokosci przy identycznej dlugosci ~30 px.
+
+      Prog "sensowne minimum ~20 px" z docs/oak_kadr_detekcji.md przekracza na
+      50 m tylko person_lying.
+
+      WYNIK 2026-09-02 (sim, MODEL5, 50 m): person_target (31x9 px) WYKRYWANY,
+      potwierdzenie 4/4 klatek. person_lying/Randy (30x22 px) NIE wykrywany.
+      Czyli w symulacji decyduje wyglad siatki, nie liczba pikseli - Randy to
+      manekin w kolorach, ktorych model nie zna. Do testow misji celem
+      "czlowiek" jest person_target; Randy zostaje jako twardy negatyw.
+      O prawdziwych ludziach sim nic nie mowi - to sprawdza dopiero real. Jesli detekcja potwierdzi ktorakolwiek z tych poz,
+      automatyczna sciezka dla czlowieka przestaje byc martwa - a to zmienia
+      wnioski ze scenariusza 2 w docs/misja_scenariusze.md, gdzie wychodzi, ze
+      bez lacza wracamy z jednym ladunkiem.
+
+      Kolejnosc testow: najpierw 30 m (jesli tam nie lapie, model nie zna tej
+      pozy i wyzej nie ma sensu), potem 50 m, na koncu 80 m - bo 80 m to pulap
+      ortofoto i to jest pomiar decydujacy o ksztalcie misji.
+
+      Uwaga przy testach: obie postacie to klasa 1, wiec w targets.json moga
+      powstac DWA klastry 'people'. Do 'best' trafi ten z wyzszym obs*conf.
+      ============================================================
+    -->
+
+    <!-- CEL 1: namiot (klasa 0) -->
+    <include>
+      <name>tent_target</name>
+      <pose>30 0 0.55 0 0 0</pose>
+      <uri>model://tent_green</uri>
+      <static>true</static>
+    </include>
+
+    <!-- CEL 2a: czlowiek LEZACY z rekoma PRZY CIELE (klasa 1), 13 m od startu.
+         Siatka ma 0.544 x 0.325 x 1.904 m, jednostka metrowa, origin w stopach.
+         roll +90 st. mapuje (x,y,z)->(x,-z,y): wzrost kladzie sie poziomo,
+         a pionowo staje grubosc ciala. Y siatki siega -0.252, wiec z=0.25
+         sadza cialo dokladnie na ziemi.
+         yaw 2.40 zostaje, zeby lezal pod innym katem niz Randy.
+
+         Obrys z nadiru 1.90 x 0.54 m. Dlugosc prawie taka sama jak u Randy
+         (1.82 m), ale 2.5x wezszy - to jest CELOWE. Sprawdzamy, czy model
+         potrzebuje sylwetki z rozlozonymi rekoma, czy wystarcza mu sama
+         dlugosc: na 50 m to 31 x 9 px wobec 30 x 22 px u Randy. -->
+    <include>
+      <name>person_target</name>
+      <pose>15 12 0.25 1.5708 0 2.40</pose>
+      <uri>model://Standing person</uri>
+      <static>true</static>
+    </include>
+
+    <!-- CEL 2b: czlowiek LEZACY z rozlozonymi rekoma (klasa 1).
+         15 m na wschod od namiotu, w tej samej linii - latwo doleciec lecac
+         prosto za namiot, a na 50 m oba mieszcza sie w jednym kadrze.
+
+         Rescue Randy ma w .dae jednostke centymetrowa, wiec realnie
+         1.364 (rece) x 0.357 (grubosc) x 1.821 m (wzrost), origin w stopach.
+
+         roll +90 st. klada go NA PLECACH twarza do gory: obrot Rx(90) mapuje
+         (x,y,z)->(x,-z,y), wiec wzrost (Z) idzie poziomo, rece (X) zostaja
+         poziomo, a pionowo staje grubosc ciala. Przod klatki piersiowej
+         (y>0) trafia w +Z, czyli do gory.
+         z=0.18 podnosi origin o polowe grubosci, zeby cialo lezalo NA ziemi.
+
+         Obrys z nadiru 1.82 x 1.36 m -> 30 x 22 px na 50 m, wobec 8 px
+         postaci stojacej. Po to tu jest: sprawdzamy, czy automat lapie
+         lezacego czlowieka z pulapu misji. -->
+    <include>
+      <name>person_lying</name>
+      <pose>45 0 0.18 1.5708 0 0</pose>
+      <uri>model://Rescue Randy</uri>
+      <static>true</static>
+    </include>
+
+    <!-- Zaklocacze: zrodlo false positives dla geolokatora. Prawdziwy cel
+         zbiera setki zbieznych trafien, falszywka kilka rozrzuconych - to
+         wlasnie te drzewa maja generowac. Stoja z dala od linii dron->cele,
+         wiec nie zaslaniaja. Jesli przeszkadzaja w testach, mozna je usunac
+         bez zadnych innych zmian. -->
+    <include>
+      <name>tree_1_a</name>
+      <pose>15 -22 0 0 0 0.20</pose>
+      <uri>model://tree_1</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>tree_2_a</name>
+      <pose>45 -18 0 0 0 0.90</pose>
+      <uri>model://tree_2</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>tree_3_a</name>
+      <pose>62 -4 0 0 0 1.10</pose>
+      <uri>model://tree_3</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>tree_4_a</name>
+      <pose>-6 26 0 0 0 0.70</pose>
+      <uri>model://tree_4</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>tree_5_a</name>
+      <pose>68 26 0 0 0 2.10</pose>
+      <uri>model://tree_5</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>bush_1_a</name>
+      <pose>38 -12 0 0 0 2.30</pose>
+      <uri>model://bush_1</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>bush_2_a</name>
+      <pose>34 22 0 0 0 1.50</pose>
+      <uri>model://bush_2</uri>
+      <static>true</static>
+    </include>
+    <include>
+      <name>bush_3_a</name>
+      <pose>58 6 0 0 0 0.90</pose>
+      <uri>model://bush_3</uri>
+      <static>true</static>
+    </include>
+
+    <!-- Dron na ziemi, 20 m przed namiotem, nosem w jego strone (yaw 0 = +X). -->
+    <include>
+      <uri>model://iris_with_gimbal</uri>
+      <pose degrees="true">10 0 0.195 0 0 0</pose>
+    </include>
+</world>
+</sdf>

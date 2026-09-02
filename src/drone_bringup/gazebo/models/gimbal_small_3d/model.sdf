@@ -211,11 +211,18 @@
         <update_rate>10</update_rate>
         <visualize>1</visualize>
 
-        <plugin filename="CameraZoomPlugin"
-            name="CameraZoomPlugin">
-          <max_zoom>125.0</max_zoom>
-          <slew_rate>0.42514285714</slew_rate>
-        </plugin>
+        <!-- CameraZoomPlugin USUNIETY - rozjezdzal geometrie kamery.
+             Wtyczka wola camera->SetHFOV() i renderowala obraz z polem widzenia
+             ok. 97 st. zamiast deklarowanych 64.4 st. camera_info raportowalo
+             przy tym wartosc z SDF (fx=813), wiec bledu nie dalo sie zauwazyc
+             inaczej niz mierzac geometrie: rzutowanie pikseli na ziemie wychodzilo
+             1.79x za male (tan(97/2)/tan(64.4/2) = 1.787), przez co geolokator
+             "gubil" cel razem z lotem drona.
+             Zmierzone 2026-09-01: przy Z=18.645 m namiot 3 m miał box 74 px,
+             co odpowiada focal 455 px, a nie 813.
+             Nikt w projekcie nie wysyla komend zoomu (grep cmd_zoom), wiec
+             wtyczka byla martwa, a psula i geolokalizacje, i vfov_deg
+             w suas_flight_controller. -->
         
         <plugin name="GstCameraPlugin"
             filename="GstCameraPlugin">

@@ -2,12 +2,14 @@
 
 Wariant ArduPilot + Gazebo (branch `ardupilot_gz`).
 
+wazne : zaloguj si ena ubuntu on Xorg na panelu logowania i przed wpisaniem hhasla ikona zebatki 
+
 ## Baza (symulacja)
 
 ```bash
 docker exec -it knr_drone bash
 source ~/ros_ws/install/setup.bash 
-# Panel 1 — Gazebo + drone_handler (swiat: aruco_plain, dron NA ZIEMI 20 m przed namiotem)
+# Panel 1 — Gazebo + drone_handler (swiat: aruco_plain, dron na platformie 30 m przed namiotem)
 ros2 launch drone_bringup gazeboo_ap_sim.launch.py
 
 # Panel 2 — ArduPilot SITL (z hosta)
@@ -82,47 +84,13 @@ ros2 launch drone_bringup suas_flight_controller.launch.py
 # opcje: target_alt:=8.0  kp_vx:=4.0  max_vel:=4.0 ...
 ```
 
-Log CSV: `~/suas_flight_controller_log.csv` (w kontenerze; nazwa pliku bierze
-się z nazwy węzła).
-
-## suas_simple_mission — cała misja jednym poleceniem
-
-To samo sterowanie co `suas_flight_controller`, ale z automatycznym startem
-i powrotem — bez `gui_panel`:
-
-1. **ARM** (GUIDED) → 2. **TAKEOFF** na `target_alt` → 3. zawis `settle_time` s →
-4. start maszyny stanów **SEARCH → APPROACH → HOVER** → 5. czekanie, aż dron
-naprawdę zawiśnie nad namiotem (stan HOVER **i** namiot w środku kadru,
-`|ex|,|ey| <= center_tol`, przez `hover_hold_time` s) → 6. **RTL**.
-
-Sam stan HOVER to za mało: kontroler przełącza się w niego na progu kąta
-gimbala (`pitch_hover_thr`), a dosuwanie się nad cel mikrokorektami trwa
-jeszcze kilkanaście sekund. Bez tego warunku dron zaczynał RTL z boku namiotu.
-
-Wymaga tylko działającego `drone_handler` i detektora (`suas_detect_gazebo`
-lub `suas_detect_jetson`).
-
-```bash
-# Real — domyslne wartosci, bez nadpisywania
-ros2 launch drone_bringup suas_simple_mission.launch.py
-# Gazebo — te same katy i FOV, tylko luzniejsze okno detekcji (GZ ~2-4 FPS, real 7-14)
-ros2 launch drone_bringup suas_simple_mission.launch.py det_confirm_gap:=1.5
-# opcje misji: target_alt:=8.0  hover_hold_time:=5.0  search_timeout:=120.0
-#              settle_time:=3.0  center_tol:=0.12  finish_action:=rtl|land|none
-```
-
-**Uwaga:** w SEARCH dron tylko wisi i czeka na detekcję — misja nie przeszukuje
-terenu, więc namiot musi trafić w kadr po starcie. Jeśli w `search_timeout`
-sekund nie dojdzie do zawisu nad namiotem, dron i tak wraca (`finish_action`).
-
-Log CSV: `~/suas_simple_mission_log.csv` (ten sam format co niżej).
+Log CSV: `~/suas_flight_controller_log.csv` (w kontenerze).
 
 ## Kopiowanie logów z kontenera
 
 ```bash
 # Z hosta: CSV misji do biezacego katalogu
 docker cp knr_drone:/root/suas_flight_controller_log.csv .
-docker cp knr_drone:/root/suas_simple_mission_log.csv .
 
 # Z hosta: logi ros2 launch — najpierw znajdz katalog (najnowsze na gorze),
 # potem skopiuj caly
@@ -137,39 +105,6 @@ jako `/root/ros_ws/src`, więc plik zapisany tam pojawia się od razu na hoście
 # W kontenerze — wyjscie launcha na ekran i do pliku src/flight_log.txt
 ros2 launch drone_bringup suas_flight_controller.launch.py 2>&1 | tee /root/ros_ws/src/flight_log.txt
 ```
-
-## Gimbal w symulacji — ta sama ścieżka co na realu
-
-`drone_handler` steruje gimbalem surowym PWM: `DO_SET_SERVO(7)` na **SERVO7**
-(kalibracja `1100 µs = -90°` prosto w dół, `1600 µs = -45°`). Żeby Gazebo robiło
-dokładnie to samo:
-
-- [`gazebo/models/iris_with_gimbal/model.sdf`](../src/drone_bringup/gazebo/models/iris_with_gimbal/model.sdf) —
-  pitch gimbala siedzi na **kanale 6** `ArduPilotPlugin` (= SERVO7), z mapowaniem
-  odwzorowującym tę kalibrację (`multiplier -1.2566`, `offset -1.25`).
-- [`SITL_param/gazebo_iris.parm`](../src/drone_bringup/SITL_param/gazebo_iris.parm) —
-  `SERVO7_FUNCTION 0` (bez tego `DO_SET_SERVO` jest ignorowane) oraz
-  `MNT1_TYPE 0` + `SERVO10_FUNCTION 0`, żeby mount nie walczył o ten sam przegub.
-
-Wcześniej pitch szedł przez SERVO10 i mount ArduPilota — kod dawno przeszedł na
-surowe PWM, więc kamera w symulacji po prostu stała w miejscu i patrzyła w przód,
-a `gimbal=...` w logach było tylko zmienną w Pythonie.
-
-**Dzięki temu w Gazebo i na realu obowiązują te same parametry** — żadnych
-`pitch_min:=` / `pitch_max:=` / `vfov_deg:=` do nadpisywania.
-
-Test bez lotu (Gazebo + SITL + `drone_handler` w tle):
-
-```bash
-ros2 topic pub --once /knr_hardware/gimbal_pitch std_msgs/msg/Float32 "{data: -90.0}"   # prosto w dół
-ros2 topic pub --once /knr_hardware/gimbal_pitch std_msgs/msg/Float32 "{data: -45.0}"   # skos
-ros2 topic pub --once /knr_hardware/gimbal_pitch std_msgs/msg/Float32 "{data: -18.0}"   # górny limit
-```
-W panelu SITL `status SERVO_OUTPUT_RAW` — `servo7_raw` idzie 1100 / 1600 / 1900.
-
-Uwaga przy diagnostyce: ręczne `gz topic -t /gimbal/cmd_pitch -p ...` **nic nie
-da przy podpiętym SITL** — `ArduPilotPlugin` republikuje ten topic w każdej
-iteracji, więc natychmiast nadpisuje ręczną wartość.
 
 ## Gimbal na prawdziwym dronie
 

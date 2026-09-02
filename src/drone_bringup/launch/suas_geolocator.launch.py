@@ -2,17 +2,17 @@
 Launch: zapis wspolrzednych GPS namiotu podczas przelotu ortofoto.
 
 Sam node — kamera, detektor i drone_handler musza juz chodzic. Node ustawia
-gimbal na -90 (prosto w dol), slucha /tent_detections i /knr_hardware/telemetry,
-rzutuje detekcje na ziemie i grupuje je przestrzennie. Wynik: tent_target.json.
+gimbal na -90 (prosto w dol), slucha /detections, /operator_mark i /knr_hardware/telemetry,
+rzutuje detekcje na ziemie i grupuje je przestrzennie. Wynik: targets.json (sekcje tent i people).
 
 Uzycie:
-  ros2 launch drone_bringup tent_geolocator.launch.py
-  ros2 launch drone_bringup tent_geolocator.launch.py cluster_radius:=6.0
-  ros2 launch drone_bringup tent_geolocator.launch.py lock_nadir:=false
+  ros2 launch drone_bringup suas_geolocator.launch.py
+  ros2 launch drone_bringup suas_geolocator.launch.py cluster_radius:=6.0
+  ros2 launch drone_bringup suas_geolocator.launch.py lock_nadir:=false
 
 UWAGA: przy lock_nadir:=true (domyslnie) NIE uruchamiaj rownolegle
 suas_gimbal_controller — biliby sie o kat gimbala.
-Szczegoly: docs/tent_geolocator.md
+Szczegoly: docs/suas_geolocator.md
 """
 
 import os
@@ -48,7 +48,32 @@ def generate_launch_description():
     min_obs_arg = DeclareLaunchArgument(
         "min_obs",
         default_value="10",
-        description="Tyle trafien musi zebrac klaster, zeby trafic do 'best'",
+        description="Tyle trafien musi zebrac klaster NAMIOTU, zeby trafic do 'best'",
+    )
+    min_obs_person_arg = DeclareLaunchArgument(
+        "min_obs_person",
+        default_value="5",
+        description="To samo dla czlowieka; nizej, bo jest mniejszy i gorzej wykrywany",
+    )
+    person_max_alt_arg = DeclareLaunchArgument(
+        "person_max_alt",
+        default_value="50.0",
+        description="Powyzej tej wysokosci automat NIE zapisuje czlowieka. "
+                    "50 m to wysokosc zrzutu; z pulapu ortofoto (80 m) czlowiek "
+                    "ma 5 px, wiec detekcje sa smieciem. "
+                    "Znaczniki operatora dzialaja na kazdej wysokosci",
+    )
+    person_size_m_arg = DeclareLaunchArgument(
+        "person_size_m",
+        default_value="0.6",
+        description="Rozmiar czlowieka z nadiru [m] - do bramki na rozmiar boxa",
+    )
+    gimbal_stabilized_arg = DeclareLaunchArgument(
+        "gimbal_stabilized",
+        default_value="false",
+        description="false = gimbal bez stabilizacji, rzutowanie samo odejmuje "
+                    "roll/pitch. true tylko przy stabilizowanym mouncie, inaczej "
+                    "kompensacja policzylaby sie podwojnie",
     )
     det_latency_arg = DeclareLaunchArgument(
         "det_latency",
@@ -61,10 +86,10 @@ def generate_launch_description():
         description="Zapisz klatke podgladu przy kazdym nowym kandydacie",
     )
 
-    tent_geolocator = Node(
+    suas_geolocator = Node(
         package="drone_autonomy",
-        executable="tent_geolocator",
-        name="tent_geolocator",
+        executable="suas_geolocator",
+        name="suas_geolocator",
         parameters=[
             {
                 "save_dir": LaunchConfiguration("save_dir"),
@@ -78,6 +103,14 @@ def generate_launch_description():
                     LaunchConfiguration("cluster_radius"), value_type=float),
                 "min_obs": ParameterValue(
                     LaunchConfiguration("min_obs"), value_type=int),
+                "min_obs_person": ParameterValue(
+                    LaunchConfiguration("min_obs_person"), value_type=int),
+                "person_max_alt": ParameterValue(
+                    LaunchConfiguration("person_max_alt"), value_type=float),
+                "person_size_m": ParameterValue(
+                    LaunchConfiguration("person_size_m"), value_type=float),
+                "gimbal_stabilized": ParameterValue(
+                    LaunchConfiguration("gimbal_stabilized"), value_type=bool),
                 "det_latency": ParameterValue(
                     LaunchConfiguration("det_latency"), value_type=float),
                 "snapshots": ParameterValue(
@@ -94,8 +127,12 @@ def generate_launch_description():
             mount_pitch_arg,
             cluster_radius_arg,
             min_obs_arg,
+            min_obs_person_arg,
+            person_size_m_arg,
+            person_max_alt_arg,
+            gimbal_stabilized_arg,
             det_latency_arg,
             snapshots_arg,
-            tent_geolocator,
+            suas_geolocator,
         ]
     )

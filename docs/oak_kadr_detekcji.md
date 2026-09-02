@@ -72,7 +72,7 @@ python3 - <<'EOF'
 import math, rclpy
 from sensor_msgs.msg import CameraInfo
 rclpy.init(); n = rclpy.create_node('fov'); box = []
-n.create_subscription(CameraInfo, '/oak/rgb/preview/camera_info', box.append, 10)
+n.create_subscription(CameraInfo, '/oak/rgb/camera_info', box.append, 10)
 while not box: rclpy.spin_once(n)
 m = box[0]; fx, fy = m.k[0], m.k[4]
 print(f"rozmiar = {m.width}x{m.height}")
@@ -155,11 +155,5 @@ to ~7 przelotow zamiast 2. Bez zageszczenia trajektorii przeleci sie obok celu.
 1/500 s = 1 px. Auto-exposure pod chmurami zejdzie do 1/60. **Wymus manualna
 ekspozycje**, inaczej caly zysk rozdzielczosci przepada.
 
-**Model** — `MODEL4.engine` byl trenowany na namioty. Sprawdz, czy w ogole lapie
-ludzi, **zanim** zaczniesz stroic kamere. Zaden zabieg optyczny tego nie zastapi.
 
-**FPS** — tryb 12 MP zwykle nie wyrabia 15 fps, spodziewaj sie ~10.
-Zmierz `ros2 topic hz /oak/rgb/image_raw` przed strojeniem `control_rate`.
 
-Po kazdej zmianie: `colcon build` + `source install/setup.bash` (configi ida
-przez `share/`, sam edit w `src/` nie wystarczy).
