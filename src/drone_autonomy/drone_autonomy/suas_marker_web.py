@@ -28,8 +28,10 @@ KOSZT W SPOCZYNKU — to jest glowne kryterium projektowe tego wezla:
     Subskrypcja powstaje przy pierwszym kliencie i znika przy ostatnim,
     a detektor publikuje podglad tylko przy aktywnej subskrypcji, wiec przy
     zamknietej przegladarce caly lancuch jest wylaczony,
-  * ZLAP KLATKE robi JEDNORAZOWY odbior jednej klatki z topicu kamery
-    i jeden cv2.imencode. Nic sie nie kreci w tle.
+  * ZAMROZ KLATKE oddaje ostatni gotowy JPEG z rolling-cache kamery (bajty tak,
+    jak przyszly) — bez dekodowania, bez re-encode, bez zakladania subskrypcji
+    na klik. Cache zyje z tego samego pulsu widzow co podglad. Nic sie nie kreci
+    w tle, a zamrozenie jest natychmiastowe.
 
 Zamiast Flaska idzie http.server ze standardowej biblioteki — cztery endpointy
 nie potrzebuja frameworka, a zero zaleznosci znaczy, ze to samo dziala
@@ -46,13 +48,10 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-import cv2
 import rclpy
-from cv_bridge import CvBridge
-from rclpy.executors import SingleThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
-from sensor_msgs.msg import CompressedImage, Image
+from sensor_msgs.msg import CompressedImage
 from std_msgs.msg import Bool
 
 from drone_interfaces.msg import OperatorMark
@@ -193,27 +192,25 @@ class MarkerNode(Node):
     def __init__(self):
         super().__init__('suas_marker_web')
 
-        self.declare_parameter('camera_topic', '/rgb_camera/image')
-        # Podglad bierzemy z GOTOWEGO JPEG detektora — przekazujemy bajty bez
-        # dekodowania. Klikamy natomiast w klatke z camera_topic, bo podglad jest
-        # przeskalowany do 960 px (DEBUG_MAX_WIDTH) i piksele nie przekladalyby
-        # sie 1:1 na oryginal.
+        # Klatka do ZAMRAZANIA i klikania. Preview OAK 1024x1024 (skompresowane) —
+        # DOKLADNIE ta rozdzielczosc, w ktorej geolokator liczy rzut piksela
+        # (suas_geolocator img_w=1024, cx=512), wiec u,v z klikniecia ida 1:1 bez
+        # skalowania. NIE bierzemy tu pelnej klatki /oak/rgb/image_raw (2028x1520):
+        # geolokator zrzutowalby jej piksele wg modelu 1024 i znacznik operatora
+        # trafilby w zle miejsce. Preview detektora (preview_topic) tez nie: jest
+        # przeskalowany do 960 px i ma narysowane boxy.
+        self.declare_parameter('camera_topic', '/oak/rgb/preview/image_raw/compressed')
         self.declare_parameter('preview_topic', '/tent_detections/image/compressed')
         self.declare_parameter('port', 5000)
         self.declare_parameter('host', '0.0.0.0')
-        self.declare_parameter('jpeg_quality', 90)
-        self.declare_parameter('grab_timeout', 3.0)
         self.declare_parameter('targets_json',
                                os.path.expanduser('~/suas_targets/targets.json'))
 
         p = self.get_parameter
         self.camera_topic = p('camera_topic').value
         self.preview_topic = p('preview_topic').value
-        self.jpeg_quality = p('jpeg_quality').value
-        self.grab_timeout = p('grab_timeout').value
         self.targets_json = p('targets_json').value
 
-        self.br = CvBridge()
         self.pub = self.create_publisher(OperatorMark, '/operator_mark', 10)
 
         # ── Obecnosc operatora ──────────────────────────────────────────
@@ -229,20 +226,21 @@ class MarkerNode(Node):
         self.online_pub = self.create_publisher(Bool, '/operator_online', 10)
         self.create_timer(1.0, self._publish_online)
 
-        # ── Podglad: subskrypcja tylko wtedy, gdy ktos patrzy ───────────
+        # ── Podglad + rolling-cache klatki: subskrypcje tylko gdy ktos patrzy ──
         self._viewers = 0
         self._viewers_lock = threading.Lock()
         self._preview_sub = None
         self._last_jpeg = None
         self._jpeg_event = threading.Event()
+        # Ostatnia klatka z camera_topic (gotowy JPEG + stamp). /grab oddaje ja
+        # od reki, wiec zamrozenie jest natychmiastowe — bez zakladania nowej
+        # subskrypcji i czekania na klatke przy kazdym klikniejciu.
+        self._cam_sub = None
+        self._last_cam = None
         # Tworzenie i kasowanie subskrypcji robimy w timerze, czyli w watku
         # executora — a nie w watku HTTP. Inaczej grzebalibysmy w wezle
         # rownolegle do spinu, co potrafi sie zemscic w najgorszym momencie.
-        self.create_timer(0.5, self._sync_preview_sub)
-
-        # Osobny wezel do lapania klatek: ma wlasny executor, wiec jednorazowa
-        # subskrypcja nie wchodzi w droge glownemu spinowi.
-        self._grab_node = rclpy.create_node('suas_marker_grabber')
+        self.create_timer(0.5, self._sync_subs)
 
         port = p('port').value
         host = p('host').value
@@ -274,7 +272,7 @@ class MarkerNode(Node):
 
     # ────────────────────── Podglad ──────────────────────
 
-    def _sync_preview_sub(self):
+    def _sync_subs(self):
         with self._viewers_lock:
             want = self._viewers > 0
         if want and self._preview_sub is None:
@@ -282,11 +280,16 @@ class MarkerNode(Node):
                              reliability=ReliabilityPolicy.BEST_EFFORT)
             self._preview_sub = self.create_subscription(
                 CompressedImage, self.preview_topic, self._preview_cb, qos)
+            self._cam_sub = self.create_subscription(
+                CompressedImage, self.camera_topic, self._cam_cb, qos)
             self.get_logger().info("podglad WLACZONY (ktos oglada)")
         elif not want and self._preview_sub is not None:
             self.destroy_subscription(self._preview_sub)
+            self.destroy_subscription(self._cam_sub)
             self._preview_sub = None
+            self._cam_sub = None
             self._last_jpeg = None
+            self._last_cam = None
             self.get_logger().info("podglad WYLACZONY (nikt nie oglada)")
 
     def _preview_cb(self, msg: CompressedImage):
@@ -294,38 +297,21 @@ class MarkerNode(Node):
         self._last_jpeg = bytes(msg.data)
         self._jpeg_event.set()
 
+    def _cam_cb(self, msg: CompressedImage):
+        # Gotowy JPEG prosto z kamery -> rolling-cache do zamrazania (bytes, stamp).
+        self._last_cam = (bytes(msg.data), msg.header.stamp)
+
     # ────────────────────── Lapanie klatki ──────────────────────
 
     def grab(self):
-        """Jedna klatka z kamery w pelnej jakosci + jej stamp.
+        """Ostatnia klatka z kamery (gotowy JPEG) + jej stamp — od reki.
 
-        Jednorazowa subskrypcja na osobnym wezle: powstaje, odbiera jedna
-        wiadomosc i znika. Miedzy klikniejciami nic nie chodzi.
+        Bierzemy ja z rolling-cache napelnianego subskrypcja camera_topic (patrz
+        _sync_subs), ktora zyje tylko gdy ktos patrzy. ZERO dekodowania i ZERO
+        czekania na nowa subskrypcje — dlatego zamrozenie jest natychmiastowe.
+        Bajty ida do przegladarki tak, jak przyszly z kamery (JPEG 1024x1024).
         """
-        box = []
-        qos = QoSProfile(depth=1, history=HistoryPolicy.KEEP_LAST,
-                         reliability=ReliabilityPolicy.BEST_EFFORT)
-        sub = self._grab_node.create_subscription(
-            Image, self.camera_topic, box.append, qos)
-        ex = SingleThreadedExecutor()
-        ex.add_node(self._grab_node)
-        try:
-            t0 = time.monotonic()
-            while not box and time.monotonic() - t0 < self.grab_timeout:
-                ex.spin_once(timeout_sec=0.1)
-        finally:
-            ex.remove_node(self._grab_node)
-            self._grab_node.destroy_subscription(sub)
-
-        if not box:
-            return None, None
-        msg = box[0]
-        frame = self.br.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-        ok, buf = cv2.imencode('.jpg', frame,
-                               [int(cv2.IMWRITE_JPEG_QUALITY), self.jpeg_quality])
-        if not ok:
-            return None, None
-        return buf.tobytes(), msg.header.stamp
+        return self._last_cam or (None, None)
 
     # ────────────────────── Znacznik ──────────────────────
 
@@ -452,10 +438,6 @@ class MarkerNode(Node):
     def destroy_node(self):
         try:
             self._srv.shutdown()
-        except Exception:
-            pass
-        try:
-            self._grab_node.destroy_node()
         except Exception:
             pass
         super().destroy_node()

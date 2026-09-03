@@ -87,6 +87,11 @@ def generate_launch_description():
         default_value="0.0.0.0",
         description="Interfejs nasluchu; 0.0.0.0 = wszystkie (Tailscale + LAN)",
     )
+    marker_port_arg = DeclareLaunchArgument(
+        "marker_port",
+        default_value="5000",
+        description="Port GUI recznego oznaczania celow (suas_marker_web)",
+    )
 
     # ─── YOLO detektor (Jetson) ──────────────────────────
     yolo_detector = Node(
@@ -134,6 +139,23 @@ def generate_launch_description():
         ],
     )
 
+    # ─── GUI recznego oznaczania celow ───────────────────
+    # http://<ip-jetsona>:5000/  — operator klika w obiekt, ktorego automat
+    # nie znajdzie. Klatke lapie ze skompresowanego topicu kamery, podglad
+    # bierze z /tent_detections/image/compressed (z detektora wyzej).
+    marker_web = Node(
+        package="drone_autonomy",
+        executable="suas_marker_web",
+        name="suas_marker_web",
+        parameters=[
+            {
+                "port": ParameterValue(
+                    LaunchConfiguration("marker_port"), value_type=int),
+                "host": LaunchConfiguration("web_address"),
+            }
+        ],
+    )
+
     return LaunchDescription(
         [
             # oak_config musi byc przed depthai_launch — podstawia sie w sciezke configu
@@ -146,8 +168,10 @@ def generate_launch_description():
             debug_jpeg_quality_arg,
             web_port_arg,
             web_address_arg,
+            marker_port_arg,
             depthai_launch,     # kamera OAK-D
             yolo_detector,      # detekcja YOLO
             web_video_server,   # podglad w przegladarce
+            marker_web,         # GUI recznego oznaczania celow
         ]
     )
