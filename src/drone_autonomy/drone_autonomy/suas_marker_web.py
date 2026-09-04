@@ -201,6 +201,11 @@ class MarkerNode(Node):
         # przeskalowany do 960 px i ma narysowane boxy.
         self.declare_parameter('camera_topic', '/oak/rgb/preview/image_raw/compressed')
         self.declare_parameter('preview_topic', '/tent_detections/image/compressed')
+        # Gorny limit FPS podgladu WYSYLANEGO do przegladarki. Na cienkim laczu
+        # (LTE) pelny strumien zapcha uplink i podglad zaczyna sie spozniac —
+        # widzisz klatki sprzed sekund. Rzadziej, ale zawsze najswiezsza klatka =
+        # opoznienie w ryzach. 0 = bez limitu (przekazuj kazda klatke).
+        self.declare_parameter('preview_max_fps', 4.0)
         self.declare_parameter('port', 5000)
         self.declare_parameter('host', '0.0.0.0')
         self.declare_parameter('targets_json',
@@ -210,6 +215,8 @@ class MarkerNode(Node):
         self.camera_topic = p('camera_topic').value
         self.preview_topic = p('preview_topic').value
         self.targets_json = p('targets_json').value
+        fps = p('preview_max_fps').value
+        self.preview_min_interval = 1.0 / fps if fps and fps > 0 else 0.0
 
         self.pub = self.create_publisher(OperatorMark, '/operator_mark', 10)
 
@@ -408,7 +415,13 @@ class MarkerNode(Node):
                 self._send(200, 'text/plain; charset=utf-8', txt.encode())
 
             def _stream(self):
-                """MJPEG. Subskrypcja zyje tylko na czas polaczenia."""
+                """MJPEG. Subskrypcja zyje tylko na czas polaczenia.
+
+                FPS ograniczamy do preview_max_fps: wysylamy rzadziej, ale zawsze
+                NAJSWIEZSZA klatke (_last_jpeg jest nadpisywany). Dzieki temu na
+                cienkim laczu uplink sie nie zapycha i podglad nie spoznia sie
+                o sekundy.
+                """
                 with node._viewers_lock:
                     node._viewers += 1
                 try:
@@ -417,12 +430,18 @@ class MarkerNode(Node):
                         'Content-Type',
                         'multipart/x-mixed-replace; boundary=frame')
                     self.end_headers()
+                    last = 0.0
                     while True:
                         node._jpeg_event.wait(timeout=2.0)
                         node._jpeg_event.clear()
                         jpg = node._last_jpeg
                         if jpg is None:
                             continue
+                        now = time.monotonic()
+                        if node.preview_min_interval and \
+                                now - last < node.preview_min_interval:
+                            continue          # za wczesnie — poczekamy na kolejna
+                        last = now
                         self.wfile.write(b'--frame\r\nContent-Type: image/jpeg\r\n'
                                          b'Content-Length: '
                                          + str(len(jpg)).encode()

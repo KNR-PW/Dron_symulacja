@@ -164,3 +164,87 @@ ros2 launch drone_bringup oak_video.launch.py
 ```
 Nagrywa od razu, `Ctrl+C` konczy i domyka plik `.mp4` w `~/oak_video/1`, `2`...
 
+---
+
+## 10. suas_bringup — caly stack oprocz misji, jeden terminal
+
+handler + kamera + YOLO + geolokator + marker naraz (zastepuje kroki 4 i 5).
+
+```bash
+ros2 launch drone_bringup suas_bringup.launch.py
+```
+
+Przydatne parametry (`nazwa:=wartosc`):
+
+| parametr | domyslnie | co robi |
+|---|---|---|
+| `debug_every_n` | `1` | podglad co N-ta klatka (`2` lzej na LTE) |
+| `conf` | `0.35` | prog pewnosci detekcji |
+| `fc_ip` | `/dev/ttyACM0` | port Orange Cube |
+| `lock_nadir` | `true` | geolokator trzyma gimbal w pionie |
+
+GUI oznaczania celow: http://100.84.102.43:5000/
+
+```bash
+ros2 launch drone_bringup suas_bringup.launch.py debug_every_n:=2
+```
+
+### Jakie pliki odpala i gdzie ich szukac
+
+`suas_bringup` sam nic nie liczy — wlacza inne launche i node'y. Z lewej co sie
+uruchamia, z prawej gdzie lezy plik:
+
+```
+suas_bringup.launch.py               src/drone_bringup/launch/
+├─ drone_handler                     src/drone_hardware/drone_hardware/drone_handler.py
+├─ suas_detect_jetson.launch.py      src/drone_bringup/launch/
+│  ├─ kamera OAK (depthai) + config  src/drone_bringup/config/oak_rgb.yaml
+│  ├─ yolo_detector_jetson           src/drone_detector/drone_detector/yolo_detector_jetson.py
+│  │     (wspolna baza)              src/drone_detector/drone_detector/yolo_detector_base.py
+│  ├─ web_video_server (:8080)       pakiet zewnetrzny (ROS)
+│  └─ suas_marker_web (:5000)        src/drone_autonomy/drone_autonomy/suas_marker_web.py
+└─ suas_geolocator.launch.py         src/drone_bringup/launch/
+   └─ suas_geolocator                src/drone_autonomy/drone_autonomy/suas_geolocator.py
+```
+
+Parametry: dopisz `nazwa:=wartosc` do komendy (doraznie) albo zmien `default_value`
+w danym `.launch.py` (na stale). Config kamery (rozdzielczosc, FPS, FOV) — `oak_rgb.yaml`.
+
+**Ostrzejszy podglad**, gdy lacze nie laguje:
+
+```bash
+ros2 launch drone_bringup suas_bringup.launch.py debug_jpeg_quality:=60 debug_every_n:=1
+```
+`debug_jpeg_quality` domyslnie 20 — podnies do 50-80; `debug_every_n:=1` = kazda klatka.
+
+---
+
+## 11. suas_full_mission — pelna misja (dwa cele, dwa zrzuty)
+
+Idzie przez `ros2 run`, NIE launch — czyta klawiature (spacja = potwierdzenie).
+Wymaga stacku z kroku 10.
+
+**Real** (dron juz leci ortofoto, czekasz na przelaczenie AUTO -> GUIDED):
+
+```bash
+ros2 run drone_autonomy suas_full_mission --ros-args \
+  --params-file ~/Dron_symulacja/src/drone_bringup/config/suas_mission.yaml
+```
+
+**Test bez trasy AUTO** (sam uzbraja i wznosi sie na target_alt):
+
+```bash
+ros2 run drone_autonomy suas_full_mission --ros-args \
+  --params-file ~/Dron_symulacja/src/drone_bringup/config/suas_mission.yaml \
+  -p auto_takeoff:=true
+```
+
+Przydatne parametry (`-p nazwa:=wartosc`):
+
+| parametr | domyslnie | co robi |
+|---|---|---|
+| `auto_takeoff` | `false` | `true` = sam start zamiast czekania na GUIDED (test) |
+| `target_alt` | `50.0` | wysokosc lotu/zrzutu [m] |
+| `finish_action` | `rtl` | `rtl` / `land` na koniec |
+| `targets_json` | `~/suas_targets/targets.json` | plik z celami |
+

@@ -67,6 +67,11 @@ def generate_launch_description():
         default_value="/oak/rgb/preview/image_raw",
         description="Topic obrazu wejsciowego dla YOLO (OAK-D preview)",
     )
+    debug_every_n_arg = DeclareLaunchArgument(
+        "debug_every_n",
+        default_value="1",
+        description="Publikuj podglad co N-ta klatke (1 = kazda; 2-3 lzej na LTE)",
+    )
     debug_jpeg_quality_arg = DeclareLaunchArgument(
         "debug_jpeg_quality",
         default_value="20",
@@ -114,6 +119,7 @@ def generate_launch_description():
             "model_path": LaunchConfiguration("model_path"),
             "conf": LaunchConfiguration("conf"),
             "camera_topic": LaunchConfiguration("camera_topic"),
+            "debug_every_n": LaunchConfiguration("debug_every_n"),
             "debug_jpeg_quality": LaunchConfiguration("debug_jpeg_quality"),
         }.items(),
     )
@@ -141,6 +147,7 @@ def generate_launch_description():
         model_path_arg,
         confidence_arg,
         camera_topic_arg,
+        debug_every_n_arg,
         debug_jpeg_quality_arg,
         detect_delay_arg,
         lock_nadir_arg,
