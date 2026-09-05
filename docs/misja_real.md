@@ -12,23 +12,30 @@ Bez tych trzech rzeczy nie ma sensu wozic drona na pole.
 
 ### 1.1 Kanaly i PWM serw zrzutu
 
-Domyslnie `drop_servo_ch: [0, 0]`, a **kanal 0 znaczy „tylko log, nic nie jedzie
-na sprzet"**. To jest celowy bezpiecznik: dopoki nie wpiszesz prawdziwych
-kanalow, misja przeleci caly scenariusz i wypisze `ZRZUT [SYMULACJA]` zamiast
-zwolnic ladunek.
+JEDEN serwomechanizm na oba ladunki (u nas AUX5 = **kanal 13**): wychyla sie
+w dwie strony wzgledem neutralnej — jedna strona zwalnia namiot, druga czlowieka,
+neutral trzyma oba. Domyslnie `drop_servo_ch: 0`, a **kanal 0 znaczy „tylko log,
+nic nie jedzie na sprzet"** — celowy bezpiecznik: misja przeleci caly scenariusz
+i wypisze `ZRZUT [SYMULACJA]` zamiast zwolnic ladunek.
 
-Do `config/suas_mission.yaml` trzeba dopisac:
+Do `config/suas_mission.yaml` przed lotem:
 
 ```yaml
-    drop_servo_ch: [9, 10]     # <- PRAWDZIWE kanaly serw (SERVO9, SERVO10?)
-    drop_pwm_open: 1900        # <- PWM pozycji otwartej
-    drop_pwm_close: 1100       # <- PWM pozycji zamknietej
-    drop_hold_s: 1.0           # ile trzymac otwarte
+    drop_servo_ch: 13                # <- PRAWDZIWY kanal serwa (AUX5 = 13)
+    drop_pwm_by_class: [1602, 988]   # <- PWM zrzutu [namiot, czlowiek]
+    drop_pwm_neutral: 1327           # <- pozycja spoczynkowa (trzyma oba)
+    drop_hold_s: 1.0                 # ile trzymac wychylenie
 ```
 
-Uwaga: `SERVOn_FUNCTION` dla tych kanalow musi byc **0 (Disabled)**, tak jak
-SERVO7 dla gimbala — inaczej ArduPilot bedzie nimi sterowal sam i nadpisze
-nasze `DO_SET_SERVO`.
+PWM zmierz na stanowisku (`ros2 service call /knr_hardware/set_servo
+drone_interfaces/srv/SetServo "{servo_id: 13, pwm: 1500}"`). U nas: 988 =
+czlowiek, 1327 = neutral, 1602 = namiot.
+
+Uwaga: u nas `SERVO13_FUNCTION = RCIN11` (sterowanie z radia przelacznikiem) i
+`DO_SET_SERVO` z misji i tak dziala — ale RC passthrough moze nadpisac pozycje,
+jesli przelacznik na radiu stoi w pozycji zrzutu. Trzymaj przelacznik w neutralu
+podczas lotu autonomicznego (albo ustaw `SERVO13_FUNCTION = 0`, jesli rezygnujesz
+z recznego zrzutu).
 
 **Test na ziemi, przed lotem** (dron rozbrojony, ladunki zaladowane):
 

@@ -159,14 +159,15 @@ class SuasFlightController(DroneController):
         self.declare_parameter('cam_yaw_offset_deg', 0.0)
 
         # ─── Zrzut ladunku ────────────────────────────────────
-        # Kanaly serw, po jednym na ladunek. 0 = kanal nieskonfigurowany, czyli
-        # tryb symulacji: zrzut tylko sie loguje i nic nie jedzie na sprzet.
-        # ROS 2 nie przyjmuje pustej listy jako wartosci domyslnej (nie zna
-        # wtedy typu), stad zera zamiast [].
-        # Na realu np. drop_servo_ch:=[9,10] — i pamietaj o SERVOn_FUNCTION=0.
-        self.declare_parameter('drop_servo_ch', [0, 0])
-        self.declare_parameter('drop_pwm_open', 1900)
-        self.declare_parameter('drop_pwm_close', 1100)
+        # JEDEN serwomechanizm na dwa ladunki: wychyla sie w dwie strony
+        # wzgledem pozycji neutralnej. Wychyl per klasa zwalnia dany ladunek
+        # (drop_pwm_by_class[class_id]), a pozycja neutralna trzyma pozostaly.
+        # class_id: 0 = namiot, 1 = czlowiek. PWM zmierzone na stanowisku.
+        # drop_servo_ch = 0 -> tryb symulacji: zrzut tylko sie loguje, nic nie
+        # jedzie na sprzet. Na realu = numer kanalu serwa (np. 13 = AUX5).
+        self.declare_parameter('drop_servo_ch', 0)
+        self.declare_parameter('drop_pwm_by_class', [1602, 988])
+        self.declare_parameter('drop_pwm_neutral', 1327)
         self.declare_parameter('drop_hold_s', 1.0)
 
         # Czy przy zgubieniu celu odstawiac gimbal na pitch_search.
@@ -226,9 +227,9 @@ class SuasFlightController(DroneController):
         self.tilt_comp = self.get_parameter('tilt_comp').value
         self.cam_yaw_offset = math.radians(
             self.get_parameter('cam_yaw_offset_deg').value)
-        self.drop_servo_ch = list(self.get_parameter('drop_servo_ch').value)
-        self.drop_pwm_open = self.get_parameter('drop_pwm_open').value
-        self.drop_pwm_close = self.get_parameter('drop_pwm_close').value
+        self.drop_servo_ch = self.get_parameter('drop_servo_ch').value
+        self.drop_pwm_by_class = list(self.get_parameter('drop_pwm_by_class').value)
+        self.drop_pwm_neutral = self.get_parameter('drop_pwm_neutral').value
         self.drop_hold_s = self.get_parameter('drop_hold_s').value
         self.search_gimbal_on_lost = self.get_parameter('search_gimbal_on_lost').value
         self.acquire_timeout = self.get_parameter('acquire_timeout').value
@@ -747,25 +748,35 @@ class SuasFlightController(DroneController):
         return False
 
     def drop(self, idx: int) -> bool:
-        """Zwolnij ladunek nr idx (0-based).
+        """Zwolnij ladunek klasy idx (0 = namiot, 1 = czlowiek).
 
-        Idzie ta sama droga co gimbal — DO_SET_SERVO przez drone_handler.
-        Kanal 0 = symulacja: tylko log, nic nie jedzie na sprzet.
+        JEDEN serwomechanizm na dwa ladunki: wychyl w strone danej klasy
+        (drop_pwm_by_class[idx]), przytrzymaj drop_hold_s, wroc na neutral
+        (trzyma pozostaly ladunek). Idzie ta sama droga co gimbal —
+        DO_SET_SERVO przez drone_handler.
+        drop_servo_ch = 0 -> symulacja: tylko log, nic nie jedzie na sprzet.
         """
-        ch = self.drop_servo_ch[idx] if idx < len(self.drop_servo_ch) else 0
+        ch = self.drop_servo_ch
         if ch <= 0:
             self.get_logger().warn(
-                f"ZRZUT {idx + 1} [SYMULACJA] — kanal serwa nieskonfigurowany "
-                f"(drop_servo_ch={self.drop_servo_ch}), alt={self.altitude:.1f} m")
+                f"ZRZUT klasy {idx} [SYMULACJA] — kanal serwa nieskonfigurowany "
+                f"(drop_servo_ch=0), alt={self.altitude:.1f} m")
             return False
+        if idx < 0 or idx >= len(self.drop_pwm_by_class):
+            self.get_logger().error(
+                f"ZRZUT: brak PWM dla klasy {idx} w "
+                f"drop_pwm_by_class={self.drop_pwm_by_class}")
+            return False
+        pwm = self.drop_pwm_by_class[idx]
         self.get_logger().info(
-            f"ZRZUT {idx + 1}: serwo {ch} -> {self.drop_pwm_open} us "
+            f"ZRZUT klasy {idx}: serwo {ch} -> {pwm} us, trzymam "
+            f"{self.drop_hold_s:.1f}s, potem neutral {self.drop_pwm_neutral} "
             f"(alt={self.altitude:.1f} m)")
-        self.set_servo(ch, self.drop_pwm_open)
+        self.set_servo(ch, pwm)
         end = time.time() + self.drop_hold_s
         while time.time() < end and rclpy.ok():
             rclpy.spin_once(self, timeout_sec=0.05)
-        self.set_servo(ch, self.drop_pwm_close)
+        self.set_servo(ch, self.drop_pwm_neutral)
         return True
 
     # ═══════════════════════════════════════════════════════════

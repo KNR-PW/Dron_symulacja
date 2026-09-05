@@ -44,6 +44,8 @@ Testy na biurku, bez GPS i pre-arm checkow:
 
 ```bash
 ros2 run drone_hardware drone_handler --ros-args -p dev:=true
+ros2 run drone_hardware drone_handler --ros-args -p dev:="'true'"
+
 ```
 
 ---
@@ -100,6 +102,18 @@ zakres do ok. -18):
 ```bash
 ros2 topic pub --once /knr_hardware/gimbal_pitch std_msgs/msg/Float32 "{data: -90.0}"
 ```
+reczne ustawienie dropera 
+rzut namiotu (1602):
+  ros2 service call /knr_hardware/set_servo drone_interfaces/srv/SetServo "{servo_id: 13,
+  pwm: 1602}"
+
+  Zrzut człowieka (988):
+  ros2 service call /knr_hardware/set_servo drone_interfaces/srv/SetServo "{servo_id: 13,
+  pwm: 988}"
+
+  Neutral / spoczynek (1327):
+  ros2 service call /knr_hardware/set_servo drone_interfaces/srv/SetServo "{servo_id: 13,
+  pwm: 1327}"
 
 ---
 
