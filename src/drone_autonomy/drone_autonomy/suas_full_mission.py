@@ -93,6 +93,13 @@ class SuasFullMission(SuasFlightController):
         # metrow. Spirala zostaje, bo ona RUSZA DRONEM i pokrywa nowy teren.
         self.declare_parameter('sweep_enabled', False)
         # Spirala wokol waypointu, gdy cel nie zostal potwierdzony.
+        # DOMYSLNIE WYLACZONA. Kosztuje spiral_timeout (45 s) na kazdym
+        # kandydacie, ktorego detektor nie potwierdzil, a przy waypoincie
+        # z automatu (blad 0.45 m) albo z klikniecia operatora cel jest juz
+        # gleboko w kadrze — jesli detektor go nie widzi, to z braku pikseli,
+        # a nie dlatego, ze dron stoi 20 m obok. Wlacz tylko, gdy spodziewasz
+        # sie waypointow mylnych o kilkadziesiat metrow.
+        self.declare_parameter('spiral_enabled', False)
         self.declare_parameter('spiral_step', 20.0)
         self.declare_parameter('spiral_timeout', 45.0)
         # Grid dla scenariusza C. Prostokat wysrodkowany na pozycji startowej;
@@ -110,6 +117,54 @@ class SuasFullMission(SuasFlightController):
         self.declare_parameter('search_waypoints', '')
         self.declare_parameter('search_offsets', [0.0])
         self.declare_parameter('search_timeout', 300.0)
+        # Co ile sekund w trakcie przeszukiwania zagladamy do targets.json.
+        # Geolokator pracuje NIEPRZERWANIE, takze gdy dron leci gridem, wiec
+        # nowy cel — z automatu albo z klikniecia operatora — moze sie pojawic
+        # w kazdej chwili. Bez tego pollingu misja dowiedzialaby sie o nim
+        # dopiero po zakonczeniu calego gridu.
+        # Ile czekamy na potwierdzenie detektora po dolocie do punktu gridu.
+        # NIE mylic z acquire_timeout (5 s), ktory obowiazuje nad kandydatem.
+        # Bylo tu 1.0 s i to bylo za malo: wait_acquire zaczyna od wyzerowania
+        # okna M z N, a przy detektorze chodzacym ~5 Hz z jitterem do 0.7 s
+        # w sekundzie miesci sie 2-5 klatek — mniej niz 4 wymagane trafienia.
+        # Bramka potrafila byc nieprzechodzalna niezaleznie od tego, czy cel
+        # jest pod dronem. Przy 3 s to ~15 klatek, czyli okno napelnia sie
+        # dwukrotnie. Koszt: 8 punktow x 2 s = 16 s przy budzecie search_timeout.
+        self.declare_parameter('grid_acquire_timeout', 3.0)
+        self.declare_parameter('watch_interval', 2.0)
+        # Przerwanie przelotu gridem, gdy DETEKTOR domknie okno M z N juz
+        # w locie — nie czekamy z tym do najblizszego waypointu. Okno wypelnia
+        # sie caly czas (petla akcji kreci spin_once), wiec ta wiedza istnieje;
+        # dotad byla tylko wyrzucana przez _reset_det_window() na starcie
+        # wait_acquire. Cel wchodzacy w kadr w polowie 250-metrowego galsu
+        # zatrzymuje teraz drona tam, gdzie jest, a nie 250 m dalej.
+        self.declare_parameter('grid_det_interrupt', True)
+        # Po nieudanym sprawdzeniu na stojaco tyle sekund nie sluchamy
+        # detektora. Bez tego ta sama falszywka zatrzymywalaby drona w kolko:
+        # wracamy na kurs, okno napelnia sie z tego samego krzaka i znowu stoimy.
+        self.declare_parameter('det_interrupt_cooldown', 10.0)
+        # Ile czekamy, az dron wyhamuje po przerwaniu dolotu, zanim uznamy
+        # klatki za wiarygodne. Przy 5 m/s hamowanie trwa ok. 2 s.
+        self.declare_parameter('brake_settle_time', 3.0)
+        # KTO moze wyrwac drona z gridu:
+        #   'operator' - tylko reczne oznaczenie z GUI (domyslnie)
+        #   'any'      - takze kandydat z automatu, gdy przekroczy min_obs
+        #   'off'      - nikt; grid leci do konca jak dawniej
+        # Domyslnie 'operator', bo fałszywki produkuje klastrowanie, nie klik:
+        # obiekt systematycznie brany za czlowieka (drzewo, cien, krzak) zbuduje
+        # rownie zbiezny klaster co prawdziwy cel, a operator patrzy na obraz
+        # i takiego bledu nie zrobi. Przy 'any' i NIEOBECNYM operatorze zrzut
+        # idzie bez pytania, wiec fałszywka kosztuje ladunek — a nie jeden
+        # niepotrzebny przelot, jak przy 'operator'.
+        self.declare_parameter('watch_sources', 'operator')
+        # Czy po PELNYM, nieudanym przelocie gridu siegac po kandydata z
+        # automatu. To jest kompromis miedzy dwoma zlymi skrajnosciami:
+        # automat wyrywajacy drona z trasy po kilku klatkach (fałszywki) i
+        # automat calkiem ignorowany (marnujemy jedyna informacje, jaka mamy,
+        # gdy grid przeleci wszystko i nic nie zobaczy). Po calym gridzie
+        # klastry sa zbudowane z obserwacji z WIELU przelotow, wiec drzewo ma
+        # duzo mniejsza szanse wygrac ze score prawdziwego celu.
+        self.declare_parameter('auto_after_grid', True)
         self.declare_parameter('finish_action', 'rtl')
         # TRYB TESTOWY. W prawdziwej misji dron jest juz w powietrzu po przelocie
         # ortofoto i czeka tylko na przelaczenie AUTO -> GUIDED. W symulacji nie
@@ -134,6 +189,7 @@ class SuasFullMission(SuasFlightController):
         self.hover_hold_time = p('hover_hold_time').value
         self.center_tol_m = p('center_tol_m').value
         self.sweep_enabled = p('sweep_enabled').value
+        self.spiral_enabled = p('spiral_enabled').value
         self.spiral_step = p('spiral_step').value
         self.spiral_timeout = p('spiral_timeout').value
         self.search_w = p('search_w').value
@@ -148,6 +204,13 @@ class SuasFullMission(SuasFlightController):
                 f"search_offsets ma nieparzysta liczbe wartosci ({len(off)}) — "
                 f"ostatnia ignoruje")
         self.search_timeout = p('search_timeout').value
+        self.grid_acquire_timeout = p('grid_acquire_timeout').value
+        self.watch_interval = p('watch_interval').value
+        self.grid_det_interrupt = p('grid_det_interrupt').value
+        self.det_interrupt_cooldown = p('det_interrupt_cooldown').value
+        self.brake_settle_time = p('brake_settle_time').value
+        self.watch_sources = str(p('watch_sources').value).lower()
+        self.auto_after_grid = p('auto_after_grid').value
         self.finish_action = str(p('finish_action').value).lower()
         self.auto_takeoff = p('auto_takeoff').value
         self.yaw_to_target = p('yaw_to_target').value
@@ -160,6 +223,15 @@ class SuasFullMission(SuasFlightController):
 
         self._abort = False
         self.home = None            # (lat, lon) zapamietane przy przejeciu
+
+        # Kandydaci, ktorych JUZ znamy: odwiedzeni, odrzuceni i ci widziani przy
+        # pierwszym odczycie targets.json. Grid przerywa sie tylko dla celu spoza
+        # tego zbioru, inaczej dron zawracalby w kolko do tego samego punktu.
+        self._known_ids = set()
+        self._interrupt_cand = None     # cel, ktory przerwal przeszukiwanie
+        self._last_watch = 0.0
+        self._det_interrupt = False     # detektor domknal okno jeszcze w locie
+        self._det_suppress_until = 0.0
 
         # ── Obecnosc operatora ──────────────────────────────────────────
         # suas_marker_web publikuje tu true, dopoki przegladarka przysyla puls.
@@ -279,7 +351,7 @@ class SuasFullMission(SuasFlightController):
                 return False
         return False
 
-    def read_targets(self):
+    def read_targets(self, verbose=True):
         """targets.json -> {class_id: [(lat, lon, source, n_obs, score), ...]}.
 
         Zwracamy CALA liste kandydatow, nie tylko 'best'. Gdy operator odrzuci
@@ -321,11 +393,13 @@ class SuasFullMission(SuasFlightController):
                 seen.add(c.get('id'))
                 lst.append((c['lat'], c['lon'],
                             c.get('source', '?'), c.get('n_obs', 0),
-                            float(c.get('score', 0.0))))
+                            float(c.get('score', 0.0)), c.get('id')))
             out[cid] = lst
+            if not verbose:
+                continue
             if lst:
                 opis = ", ".join(f"#{i+1} {s} obs={n} score={sc:.0f}"
-                                 for i, (_la, _lo, s, n, sc) in enumerate(lst))
+                                 for i, (_la, _lo, s, n, sc, _id) in enumerate(lst))
                 self.get_logger().info(f"cel {name}: {len(lst)} kandydat(ow) — {opis}")
             else:
                 self.get_logger().warn(f"cel {name}: BRAK — bedzie przeszukiwanie")
@@ -536,12 +610,130 @@ class SuasFullMission(SuasFlightController):
                 pts.append(self._offset_gps(lat0, lon0, dn, de))
         return pts
 
-    def grid_search(self) -> bool:
+    def _watch_new_candidate(self, class_id) -> bool:
+        """Czy w targets.json pojawil sie NOWY cel tej klasy.
+
+        Wolane z petli akcji goto (co ~0.2 s), wiec plik czytamy najwyzej raz
+        na watch_interval — reszta wywolan konczy sie na porownaniu zegara.
+
+        Nowy znaczy: id, ktorego jeszcze nie widzielismy. Kandydaci znani przy
+        przejeciu lotu i ci juz odwiedzeni siedza w _known_ids, wiec nie
+        wyrwa drona z gridu po raz drugi.
+
+        Pierwszenstwo ma zrodlo 'operator': jesli ktos wlasnie kliknal cel na
+        podgladzie, to jest najswiezsza i najlepsza informacja, jaka mamy —
+        lepsza niz klaster automatu, bo czlowiek widzial obiekt z pulapu misji.
+        """
+        now = time.time()
+        if now - self._last_watch < self.watch_interval:
+            return self._interrupt_cand is not None
+        self._last_watch = now
+
+        lst = self.read_targets(verbose=False).get(class_id) or []
+        nowe = [c for c in lst if c[5] not in self._known_ids]
+        if self.watch_sources == 'operator':
+            # Kandydaci z automatu NIE przerywaja gridu, ale zapamietujemy ich
+            # jako znanych — inaczej po powrocie do gridu ten sam klaster
+            # zglaszalby sie co 2 s przez cala reszte przeszukiwania.
+            for c in nowe:
+                if c[2] != 'operator':
+                    self._known_ids.add(c[5])
+            nowe = [c for c in nowe if c[2] == 'operator']
+        if not nowe:
+            return False
+        # operator przed automatem, a w obrebie zrodla - najwyzszy score
+        nowe.sort(key=lambda c: (c[2] != 'operator', -c[4]))
+        self._interrupt_cand = nowe[0]
+        name = TARGETS[class_id][0]
+        self.get_logger().info(
+            f"{name}: NOWY CEL w trakcie przeszukiwania "
+            f"(zrodlo={nowe[0][2]}, obs={nowe[0][3]}) — przerywam grid")
+        return True
+
+    def _best_auto_candidate(self, class_id):
+        """Najlepszy kandydat tej klasy, ktorego jeszcze nie probowalismy.
+
+        Wolane DOPIERO po pelnym przelocie gridu. W tym momencie klastry sa
+        zbudowane z obserwacji z calego przeszukiwania, a nie z jednego mignicia
+        w kadrze, wiec score (obs * conf) faktycznie cos znaczy i drzewo widziane
+        raz przegrywa z celem widzianym na kilku galsach.
+
+        Bierzemy najwyzszy score, tak samo jak pula w run() — nie najblizszego.
+        """
+        lst = self.read_targets(verbose=False).get(class_id) or []
+        nowe = [c for c in lst if c[5] not in self._known_ids]
+        if not nowe:
+            return None
+        return max(nowe, key=lambda c: c[4])
+
+    def _watch_grid(self, class_id) -> bool:
+        """Czy jest powod, zeby przerwac trwajacy dolot do punktu gridu.
+
+        Dwa niezalezne powody, sprawdzane w tej kolejnosci:
+          1. DETEKTOR domknal okno M z N — cel jest w kadrze TERAZ. Sprawdzenie
+             jest darmowe (licznik w pamieci), wiec idzie pierwsze.
+          2. W targets.json pojawil sie nowy cel (klik operatora albo automat,
+             zaleznie od watch_sources) — to wymaga odczytu pliku, wiec jest
+             ograniczone do raz na watch_interval.
+        """
+        if (self.grid_det_interrupt
+                and time.time() > self._det_suppress_until
+                and self._det_hits >= self.det_confirm_frames):
+            self._det_interrupt = True
+            self.get_logger().info(
+                f"DETEKTOR widzi cel w locie ({self._det_hits}/"
+                f"{len(self._det_window)} klatek, ID={self._cand_id}) "
+                f"— przerywam dolot")
+            return True
+        if self.watch_sources == 'off':
+            return False
+        return self._watch_new_candidate(class_id)
+
+    def _hold_and_reconfirm(self) -> bool:
+        """Zatrzymaj sie tu, gdzie jestes, i sprawdz cel na stojaco.
+
+        Konieczne, bo przerwanie akcji nie zatrzymuje drona: cel zostaje otwarty
+        po stronie serwera, a ArduPilot w GUIDED trzyma ostatni zadany punkt.
+        Bez tego dron lecialby dalej przez cale confirm_timeout (15 s), czyli
+        przy 5 m/s uciekloby mu 75 m od celu, zanim ktokolwiek zaczalby
+        centrowanie.
+
+        Ponowne sprawdzenie na stojaco jest tez filtrem: cel potwierdzony
+        w locie, ktory nie potwierdza sie po zatrzymaniu, jest podejrzany —
+        rozmycie ruchem robi z krzakow dziwne rzeczy. Hamowanie przenosi nas
+        o kilkanascie metrow za cel, ale gimbal patrzy w pion, a slad kadru
+        na 50 m ma 63 m, wiec cel zostaje w kadrze.
+        """
+        # Na czas hamowania zdejmujemy haczyk — inaczej goto na wlasna pozycje
+        # przerwaloby sie natychmiast, bo okno detekcji jest dalej pelne.
+        hook, self.action_interrupt = self.action_interrupt, None
+        try:
+            self.get_logger().info("zatrzymuje sie i sprawdzam cel na stojaco")
+            self.send_goto_global(self.global_lat, self.global_lon,
+                                  self.target_alt)
+            self._set_gimbal(self.pitch_min)
+            self._spin(self.brake_settle_time)
+            if self.wait_acquire(timeout=self.grid_acquire_timeout):
+                return True
+            self._det_suppress_until = time.time() + self.det_interrupt_cooldown
+            self.get_logger().warn(
+                f"na stojaco cel sie nie potwierdzil — wracam na kurs, "
+                f"detektora nie slucham przez {self.det_interrupt_cooldown:.0f}s")
+            return False
+        finally:
+            self.action_interrupt = hook
+
+    def grid_search(self, watch_class=None) -> bool:
         """Scenariusz C: przelot po punktach przeszukiwania.
 
         Punkty biora sie albo z pliku (search_waypoints), albo z liczonego
         gridu. Reszta jest wspolna: lecimy po kolei i po kazdym dolocie
         sprawdzamy okno detekcji.
+
+        watch_class: gdy podana, w trakcie lotu obserwujemy targets.json i
+        przerywamy grid, gdy pojawi sie nowy cel tej klasy (patrz
+        _watch_new_candidate). Wynik laduje w self._interrupt_cand, bo wartosc
+        zwracana ma tu inne znaczenie: True = cel zobaczyl DETEKTOR.
         """
         if self.search_waypoints:
             pts = self._load_waypoints(self.search_waypoints)
@@ -560,17 +752,42 @@ class SuasFullMission(SuasFlightController):
         else:
             pts = self._grid_waypoints()
 
-        end = time.time() + self.search_timeout
-        for i, (wlat, wlon) in enumerate(pts, 1):
-            if time.time() > end or self._abort:
-                self.get_logger().warn(
-                    f"przeszukiwanie: koniec czasu na punkcie {i}/{len(pts)}")
-                return False
-            self.get_logger().info(f"punkt {i}/{len(pts)}")
-            self.goto(wlat, wlon)
-            if self.wait_acquire(timeout=1.0):
-                self.get_logger().info(f"cel znaleziony na punkcie {i}/{len(pts)}")
-                return True
+        self._interrupt_cand = None
+        self._det_interrupt = False
+        self._det_suppress_until = 0.0
+        if watch_class is not None:
+            self._last_watch = 0.0
+            self.action_interrupt = lambda: self._watch_grid(watch_class)
+        try:
+            end = time.time() + self.search_timeout
+            for i, (wlat, wlon) in enumerate(pts, 1):
+                if time.time() > end or self._abort:
+                    self.get_logger().warn(
+                        f"przeszukiwanie: koniec czasu na punkcie {i}/{len(pts)}")
+                    return False
+                if self._interrupt_cand is not None:
+                    return False
+                self.get_logger().info(f"punkt {i}/{len(pts)}")
+
+                # Dolot moze byc przerwany w polowie — wtedy wracamy na kurs do
+                # TEGO SAMEGO punktu, zeby nie zgubic kawalka galsu.
+                while not self._abort and time.time() < end:
+                    self.goto(wlat, wlon)
+                    if self._interrupt_cand is not None:
+                        return False
+                    if not self._det_interrupt:
+                        break
+                    self._det_interrupt = False
+                    if self._hold_and_reconfirm():
+                        self.get_logger().info(
+                            f"cel znaleziony w locie na galsie {i}/{len(pts)}")
+                        return True
+
+                if self.wait_acquire(timeout=self.grid_acquire_timeout):
+                    self.get_logger().info(f"cel znaleziony na punkcie {i}/{len(pts)}")
+                    return True
+        finally:
+            self.action_interrupt = None
         self.get_logger().warn("wszystkie punkty przeleciane, nic nie znaleziono")
         return False
 
@@ -601,7 +818,8 @@ class SuasFullMission(SuasFlightController):
         Numer ladunku = numer klasy (namiot -> 0, czlowiek -> 1).
         """
         name, _key, topic = TARGETS[class_id]
-        lat, lon, src, n_obs, _score = cand
+        lat, lon, src, n_obs, _score, cand_id = cand
+        self._known_ids.add(cand_id)
         self.set_detection_topic(topic)
         self.get_logger().info(
             f"╔══ {name} ══ kandydat: zrodlo={src} obs={n_obs}, "
@@ -613,7 +831,7 @@ class SuasFullMission(SuasFlightController):
             # ── Dolecielismy, ale detektor nic nie potwierdza ──
             if self.sweep_enabled:
                 widoczny = self.sweep_for_target()
-            if not widoczny:
+            if not widoczny and self.spiral_enabled:
                 widoczny = self.spiral_search(lat, lon)
 
         if self.operator_watching():
@@ -657,14 +875,54 @@ class SuasFullMission(SuasFlightController):
         ze warunkiem petli jest obecnosc operatora: zawsze jest ktos, kto moze
         ja przerwac. Gdy operatora nie ma, grid idzie RAZ, bo bez nadzoru
         nikt by drona nie zatrzymal.
+
+        Trzy rzeczy moga wyrwac drona z gridu, kazda konczy sie ta sama
+        sciezka (dolot -> akwizycja -> potwierdzenie -> centrowanie -> zrzut):
+          * DETEKTOR domknal okno M z N w locie      (grid_det_interrupt)
+          * w targets.json pojawil sie nowy cel      (watch_sources)
+          * grid przelecial calosc i nic nie znalazl (auto_after_grid)
         """
         name, _key, topic = TARGETS[class_id]
         self.set_detection_topic(topic)
         while not self._abort:
             self.get_logger().info(
-                f"{name}: brak kandydatow — przeszukuje teren gridem")
-            if not self.grid_search():
+                f"{name}: brak kandydatow — przeszukuje teren gridem "
+                f"(obserwuje targets.json co {self.watch_interval:.0f}s)")
+            znalazl = self.grid_search(watch_class=class_id)
+
+            # Cel pojawil sie w trakcie lotu — z klikniecia operatora albo
+            # z automatu, ktory wlasnie przekroczyl min_obs. Wychodzimy z gridu
+            # i lecimy nad niego normalna sciezka, dokladnie tak jakbysmy mieli
+            # ten waypoint od poczatku: dolot, okno akwizycji, potwierdzenie,
+            # centrowanie, zrzut.
+            if self._interrupt_cand is not None:
+                cand = self._interrupt_cand
+                self._interrupt_cand = None
+                if self.visit_candidate(class_id, cand) == 'dropped':
+                    return True
+                continue                     # odrzucony — wracamy do gridu
+
+            if not znalazl:
                 self.get_logger().error(f"{name}: grid nic nie znalazl")
+
+                # Grid przeleciał CALOSC i nic nie zobaczyl. Dopiero teraz
+                # dopuszczamy kandydata z automatu: jego klaster zbieral sie
+                # przez caly przelot, wiec score odroznia falszywke widziana raz
+                # od celu widzianego na kilku galsach. W trakcie gridu ten sam
+                # kandydat byl swiadomie ignorowany (watch_sources).
+                if self.auto_after_grid:
+                    cand = self._best_auto_candidate(class_id)
+                    if cand is not None:
+                        self.get_logger().info(
+                            f"{name}: po pelnym gridzie biore najlepszego "
+                            f"kandydata z automatu (zrodlo={cand[2]}, "
+                            f"obs={cand[3]}, score={cand[4]:.0f})")
+                        if self.visit_candidate(class_id, cand) == 'dropped':
+                            return True
+                        # Odrzucony — siedzi juz w _known_ids, wiec kolejny
+                        # obieg wezmie nastepnego albo wroci do gridu.
+                        continue
+
                 if not self.operator_watching():
                     return False
                 continue                     # operator patrzy — szukamy dalej
@@ -693,10 +951,27 @@ class SuasFullMission(SuasFlightController):
                     f"{name}: cel zniknal w trakcie centrowania — falszywka, "
                     f"NIE zrzucam")
                 if not self.operator_watching():
-                    self.get_logger().error(
-                        f"{name}: bez operatora nie szukam dalej — "
-                        f"ladunek zostaje na pokladzie")
-                    return False
+                    # Bez operatora NIE wracamy do gridu: drugi przelot
+                    # znalazlby te sama falszywke, centrowanie znow by padlo
+                    # i petla nie mialaby jak sie skonczyc, bo nie ma nikogo,
+                    # kto by ja przerwal. Zamiast tego jedno podejscie do
+                    # najlepszego kandydata z automatu — jego klaster zbieral
+                    # sie przez caly grid, wiec jest lepsza przeslanka niz
+                    # cel, ktory wlasnie zniknal. Bez operatora to podejscie
+                    # zawsze konczy sie zrzutem, wiec petla ma gwarantowany
+                    # koniec, a ladunek nie wraca na pokladzie.
+                    cand = (self._best_auto_candidate(class_id)
+                            if self.auto_after_grid else None)
+                    if cand is None:
+                        self.get_logger().error(
+                            f"{name}: bez operatora i bez kandydata z automatu "
+                            f"— ladunek zostaje na pokladzie")
+                        return False
+                    self.get_logger().warn(
+                        f"{name}: bez operatora — zamiast powtarzac grid biore "
+                        f"kandydata z automatu (obs={cand[3]}, "
+                        f"score={cand[4]:.0f})")
+                    return self.visit_candidate(class_id, cand) == 'dropped'
                 continue                     # operator patrzy — szukamy dalej
 
             if not self.operator_watching():
@@ -732,6 +1007,12 @@ class SuasFullMission(SuasFlightController):
         self.descend(self.target_alt)
 
         targets = self.read_targets()
+        # Wszystko, co bylo w pliku PRZED przejeciem lotu, jest juz "znane" —
+        # inaczej pierwszy poll w trakcie gridu uznalby te cele za nowe i
+        # wyrwal drona z przeszukiwania do punktu, ktory wlasnie odrzucil.
+        for _lst in targets.values():
+            for _c in _lst:
+                self._known_ids.add(_c[5])
 
         # PULA KANDYDATOW OBU KLAS, ZAWSZE OD NAJLEPSZEGO. Kolejnosc wyznacza
         # score geolokatora (obs * conf), nie odleglosc: kandydat z 300
