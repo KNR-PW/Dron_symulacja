@@ -57,7 +57,7 @@ Uruchamia kamere OAK, detekcje i serwer podgladu.
 - podglad www
 
 ```bash
-ros2 launch drone_bringup suas_detect_jetson.launch.py
+ros2 launch drone_bringup suas_detect_jetson.launch.py debug_every_n:=2
 ```
 
 Detektor jest **dwuklasowy** i przy jednej inferencji publikuje trzy rzeczy:
@@ -179,6 +179,7 @@ Przydatne parametry (`nazwa:=wartosc`):
 | parametr | domyslnie | co robi |
 |---|---|---|
 | `debug_every_n` | `1` | podglad co N-ta klatka (`2` lzej na LTE) |
+| `preview_max_fps` | `4.0` | limit FPS podgladu markera (:5000); wyzej = plynniej |
 | `conf` | `0.35` | prog pewnosci detekcji |
 | `fc_ip` | `/dev/ttyACM0` | port Orange Cube |
 | `lock_nadir` | `true` | geolokator trzyma gimbal w pionie |
@@ -207,24 +208,29 @@ suas_bringup.launch.py               src/drone_bringup/launch/
    └─ suas_geolocator                src/drone_autonomy/drone_autonomy/suas_geolocator.py
 ```
 
-Parametry: dopisz `nazwa:=wartosc` do komendy (doraznie) albo zmien `default_value`
-w danym `.launch.py` (na stale). Config kamery (rozdzielczosc, FPS, FOV) — `oak_rgb.yaml`.
+Parametry:
+- dopisz `nazwa:=wartosc` do komendy (doraznie)
+- albo zmien `default_value` w danym `.launch.py` 
+Config kamery (rozdzielczosc, FPS, FOV) — `oak_rgb.yaml`.
 
-**Ostrzejszy podglad**, gdy lacze nie laguje:
+**Ostrzejszy / plynniejszy podglad**, gdy lacze nie laguje:
 
 ```bash
-ros2 launch drone_bringup suas_bringup.launch.py debug_jpeg_quality:=60 debug_every_n:=1
+ros2 launch drone_bringup suas_bringup.launch.py debug_jpeg_quality:=60 debug_every_n:=1 preview_max_fps:=10
 ```
-`debug_jpeg_quality` domyslnie 20 — podnies do 50-80; `debug_every_n:=1` = kazda klatka.
+- `debug_jpeg_quality` 20 -> 50-80 = ostrzejszy obraz
+- `debug_every_n:=1` = kazda klatka detektora (a nie co 2-3)
+- `preview_max_fps` 4 -> 10 (albo `0` = bez limitu) = plynniejszy podglad markera
+
+Sama detekcja jest ograniczona modelem (~12 FPS na Jetsonie), tego nie podniesiesz
+parametrem. FPS kamery ustawia sie w `config/oak_rgb.yaml` (`i_fps`).
 
 ---
 
 ## 11. suas_full_mission — pelna misja (dwa cele, dwa zrzuty)
 
-Idzie przez `ros2 run`, NIE launch — czyta klawiature (spacja = potwierdzenie).
 Wymaga stacku z kroku 10.
 
-**Real** (dron juz leci ortofoto, czekasz na przelaczenie AUTO -> GUIDED):
 
 ```bash
 ros2 run drone_autonomy suas_full_mission --ros-args \
