@@ -366,8 +366,9 @@ skorzysta za darmo).
   relative=False)`, dopiero potem lecimy. Nie polegamy na `WP_YAW_BEHAVIOR`
   w ArduPilocie, żeby zachowanie było takie samo w SITL i na realu. Finalne
   centrowanie zostaje translacyjne (bez obrotu) — tam obracanie tylko psuje.
-- **`drop(idx)`** w `DroneController`: `set_servo` na `drop_servo_ch[idx]`,
-  `drop_pwm_open` → pauza → `drop_pwm_close`. W symulacji log + zapis GPS.
+- **`drop(idx)`**: jeden serwomechanizm `drop_servo_ch`, `set_servo` na
+  `drop_pwm_by_class[idx]` (per klasa) → pauza → powrot na `drop_pwm_neutral`.
+  W symulacji (`drop_servo_ch=0`) log + zapis GPS.
   Zrzut następuje w zawisie, więc prędkość pozioma jest już w martwej strefie
   regulatora — nie dokładamy osobnego warunku zatrzymania.
 - **`pitch_search` -45 → -55** w `suas_flight_controller`, `suas_gimbal_controller`

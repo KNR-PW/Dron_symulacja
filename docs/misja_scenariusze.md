@@ -407,7 +407,7 @@ i nie zauwazy problemu.
 | 1 | budowa puli i kolejnosc | spreparowany `targets.json` z kilkoma kandydatami, dron na ziemi, `finish_action:=none` | log pokazuje kolejnosc wg odleglosci i filtr `min_obs` |
 | 2 | obecnosc operatora | otworz i zamknij karte GUI | `/operator_online` przechodzi na false w ~5 s |
 | 3 | zerwanie lacza | `iptables -I INPUT -p tcp --dport 5000 -j DROP` | to samo, mimo ze przegladarka nie zamknela polaczenia |
-| 4 | przejecie + zejscie + dolot | GUIDED, `drop_servo_ch:[0,0]` | schodzi na 50 m, leci nad cel, nie zrzuca |
+| 4 | przejecie + zejscie + dolot | GUIDED, `drop_servo_ch:0` | schodzi na 50 m, leci nad cel, nie zrzuca |
 | 5 | scenariusz 1 | potwierdzasz spacja oba cele | dwa `ZRZUT [SYMULACJA]` nad celami |
 | 6 | scenariusz 2 | zamknij GUI przed przejeciem | zero pytan, oba cele obsluzone automatycznie |
 | 7 | **scenariusz 3 (atrapa)** | dwa kandydaty namiotu, odrzuc pierwszy | leci do drugiego, nie do gridu |

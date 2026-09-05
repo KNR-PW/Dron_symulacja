@@ -52,17 +52,21 @@
     pitch_hover_thr: -83.0
 
     # ─── ZRZUT ŁADUNKU ────────────────────────────────────────────────
-    # KANAL 0 = TRYB SYMULACJI: zrzut tylko sie loguje, nic nie jedzie na
-    # sprzet. To jest celowy bezpiecznik — dopoki nie wpiszesz prawdziwych
-    # kanalow, mozesz przelatywac cala misje bez ryzyka zgubienia ladunku.
+    # JEDEN serwomechanizm na dwa ladunki (u nas AUX5 = kanal 13): wychyla sie
+    # w dwie strony wzgledem pozycji neutralnej. Wychyl w jedna strone zwalnia
+    # namiot, w druga czlowieka, pozycja neutralna trzyma oba.
     #
-    # PRZED LOTEM W POLU wpisz numery kanalow serw, np. [9, 10]
-    # (namiot -> pierwszy, czlowiek -> drugi) i sprawdz PWM na ziemi.
-    # SERVOn_FUNCTION dla tych kanalow MUSI byc 0 (Disabled), inaczej
-    # ArduPilot bedzie nimi sterowal sam i nadpisze nasze DO_SET_SERVO.
-    drop_servo_ch: [0, 0]
-    drop_pwm_open: 1900
-    drop_pwm_close: 1100
+    # drop_servo_ch = 0 -> TRYB SYMULACJI: zrzut tylko sie loguje, nic nie
+    # jedzie na sprzet (bezpiecznik — mozesz przelatywac cala misje bez ryzyka
+    # zgubienia ladunku). PRZED LOTEM W POLU wpisz numer kanalu serwa: 13.
+    #
+    # drop_pwm_by_class: PWM zrzutu per klasa [0=namiot, 1=czlowiek].
+    # drop_pwm_neutral: pozycja spoczynkowa (trzyma oba ladunki).
+    # Wartosci zmierzone 2026-09-05 na realu (kanal 13, SERVO13=RCIN11):
+    #   988 = czlowiek, 1327 = neutral, 1602 = namiot.
+    drop_servo_ch: 0                 # 0 = symulacja; na realu 13
+    drop_pwm_by_class: [1602, 988]   # [namiot, czlowiek]
+    drop_pwm_neutral: 1327
     drop_hold_s: 1.0
 
     # ─── BRAMKI CZASOWE ───────────────────────────────────────────────
