@@ -194,7 +194,8 @@ Przydatne parametry (`nazwa:=wartosc`):
 |---|---|---|
 | `debug_every_n` | `1` | podglad co N-ta klatka (`2` lzej na LTE) |
 | `preview_max_fps` | `4.0` | limit FPS podgladu markera (:5000); wyzej = plynniej |
-| `conf` | `0.35` | prog pewnosci detekcji |
+| `conf` | `0.45` | prog pewnosci detekcji namiotu |
+| `conf_person` | `0.4` | osobny prog dla czlowieka (`<0` = uzyj `conf`) |
 | `fc_ip` | `/dev/ttyACM0` | port Orange Cube |
 | `lock_nadir` | `true` | geolokator trzyma gimbal w pionie |
 

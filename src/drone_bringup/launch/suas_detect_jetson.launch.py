@@ -53,8 +53,14 @@ def generate_launch_description():
     )
     confidence_arg = DeclareLaunchArgument(
         "conf",
-        default_value="0.35",
-        description="Prog pewnosci detekcji (0.0-1.0)",
+        default_value="0.45",
+        description="Prog pewnosci detekcji namiotu (i domyslny dla reszty)",
+    )
+    confidence_person_arg = DeclareLaunchArgument(
+        "conf_person",
+        default_value="0.4",
+        description="Osobny prog pewnosci dla czlowieka (klasa 1); "
+                    "<0 = uzyj 'conf' dla obu klas",
     )
     camera_topic_arg = DeclareLaunchArgument(
         "camera_topic",
@@ -109,6 +115,8 @@ def generate_launch_description():
                 "camera_topic": LaunchConfiguration("camera_topic"),
                 "model_path": LaunchConfiguration("model_path"),
                 "conf": LaunchConfiguration("conf"),
+                "conf_person": ParameterValue(
+                    LaunchConfiguration("conf_person"), value_type=float),
                 # value_type=str, bo "0" launch odczytalby jako INTEGER,
                 # a node deklaruje ten parametr jako string ("0,1" tez ma dzialac)
                 "classes": ParameterValue(
@@ -170,6 +178,7 @@ def generate_launch_description():
             oak_config_arg,
             model_path_arg,
             confidence_arg,
+            confidence_person_arg,
             classes_arg,
             camera_topic_arg,
             debug_every_n_arg,

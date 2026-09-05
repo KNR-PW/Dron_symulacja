@@ -52,6 +52,10 @@ class YoloDetectorBase(Node):
         self.declare_parameter("camera_topic", "/rgb_camera/image")
         self.declare_parameter("model_path", default_model)
         self.declare_parameter("conf", 0.5)
+        # Osobny prog pewnosci dla CZLOWIEKA (klasa 1). Czlowiek z pulapu jest
+        # maly i slaby w detekcji, wiec zwykle chce sie go lapac NIZSZYM progiem
+        # niz namiot. <0 = brak osobnego progu (uzyj 'conf' dla obu klas).
+        self.declare_parameter("conf_person", -1.0)
         self.declare_parameter("input_size", 1024)
         self.declare_parameter("debug_every_n", 1)      # 1 = podglad z kazdej klatki
         self.declare_parameter("debug_jpeg_quality", 20)
@@ -63,6 +67,10 @@ class YoloDetectorBase(Node):
 
         model_path = self.get_parameter("model_path").value
         self.conf = self.get_parameter("conf").value
+        cp = self.get_parameter("conf_person").value
+        # <0 = uzyj wspolnego 'conf'. Detekcje odpalamy na NIZSZYM z progow,
+        # a nadmiar odsiewamy per klasa (ultralytics nie ma progu per-klasa).
+        self.conf_person = cp if cp >= 0 else self.conf
         self.input_size = self.get_parameter("input_size").value
         cam_topic = self.get_parameter("camera_topic").value
         self.debug_every_n = max(1, self.get_parameter("debug_every_n").value)
@@ -112,6 +120,9 @@ class YoloDetectorBase(Node):
             f"debug_every_n={self.debug_every_n} "
             f"classes={self.classes if self.classes is not None else 'wszystkie'} "
             f"| /detections + {topics}")
+        self.get_logger().info(
+            f"Prog pewnosci: namiot={self.conf}  czlowiek={self.conf_person}"
+            + ("" if self.conf_person != self.conf else " (wspolny)"))
 
     # ────────────────────────────────────────────────────────────────
     def _on_image(self, msg: Image):
@@ -119,7 +130,7 @@ class YoloDetectorBase(Node):
 
         results = self.model.track(
             frame,
-            conf=self.conf,
+            conf=min(self.conf, self.conf_person),
             persist=True,
             verbose=False,
             imgsz=self.input_size,
@@ -149,6 +160,11 @@ class YoloDetectorBase(Node):
                 # ID sciezki z trackera; None dopoki tracker nie potwierdzi sciezki.
                 det.track_id = int(box.id[0]) if box.id is not None else -1
                 det.class_id = int(box.cls[0])
+                # Prog per klasa: czlowiek (1) ma wlasny conf_person, reszta 'conf'.
+                # Detekcje odpalilismy na nizszym progu, wiec tu odsiewamy nadmiar.
+                thr = self.conf_person if det.class_id == 1 else self.conf
+                if det.confidence < thr:
+                    continue
                 dets.detections.append(det)
                 prev = best.get(det.class_id)
                 if prev is None or det.confidence > prev.confidence:
