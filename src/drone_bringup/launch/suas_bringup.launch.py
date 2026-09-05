@@ -57,8 +57,13 @@ def generate_launch_description():
     )
     confidence_arg = DeclareLaunchArgument(
         "conf",
-        default_value="0.35",
-        description="Prog pewnosci detekcji (0.0-1.0)",
+        default_value="0.45",
+        description="Prog pewnosci detekcji namiotu (i domyslny dla reszty)",
+    )
+    confidence_person_arg = DeclareLaunchArgument(
+        "conf_person",
+        default_value="0.4",
+        description="Osobny prog pewnosci dla czlowieka; <0 = uzyj 'conf'",
     )
     camera_topic_arg = DeclareLaunchArgument(
         "camera_topic",
@@ -123,6 +128,7 @@ def generate_launch_description():
         launch_arguments={
             "model_path": LaunchConfiguration("model_path"),
             "conf": LaunchConfiguration("conf"),
+            "conf_person": LaunchConfiguration("conf_person"),
             "camera_topic": LaunchConfiguration("camera_topic"),
             "debug_every_n": LaunchConfiguration("debug_every_n"),
             "debug_jpeg_quality": LaunchConfiguration("debug_jpeg_quality"),
@@ -152,6 +158,7 @@ def generate_launch_description():
         dev_arg,
         model_path_arg,
         confidence_arg,
+        confidence_person_arg,
         camera_topic_arg,
         debug_every_n_arg,
         debug_jpeg_quality_arg,
