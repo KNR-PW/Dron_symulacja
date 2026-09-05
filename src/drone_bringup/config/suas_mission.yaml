@@ -65,9 +65,9 @@
     # Wartosci zmierzone 2026-09-05 na realu (kanal 13, SERVO13=RCIN11):
     #   988 = czlowiek, 1327 = neutral, 1602 = namiot.
     drop_servo_ch: 0                 # 0 = symulacja; na realu 13
-    drop_pwm_by_class: [1602, 988]   # [namiot, czlowiek]
-    drop_pwm_neutral: 1327
-    drop_hold_s: 1.0
+    drop_pwm_by_class: [1580, 1060]   # [namiot, czlowiek]
+    drop_pwm_neutral: 1300
+    drop_hold_s: 2.0
 
     # ─── BRAMKI CZASOWE ───────────────────────────────────────────────
     acquire_timeout: 5.0        # ile czekamy, az detektor potwierdzi cel
