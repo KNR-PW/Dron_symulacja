@@ -75,6 +75,13 @@ class DroneController(Node):
         # --- State & fail‑safe ---
         self._busy = False
         self._alarm = False
+        # Haczyk przerywajacy akcje W TRAKCIE lotu. Misja podstawia tu funkcje
+        # bez argumentow; gdy odda True, _send_action przestaje czekac na koniec
+        # akcji i wraca. Bez tego dolot do waypointu jest nieprzerywalny przez
+        # cale 180 s timeoutu, a przy galsie 250 m to i minuta, w ktorej dron
+        # ignoruje wszystko, co sie w miedzyczasie wydarzylo (np. operator
+        # oznaczyl cel). None = nic nie przerywa, zachowanie jak dotad.
+        self.action_interrupt = None
         self._voltage_spikes = 0
         self._voltage_threshold = 12.0
 
@@ -323,6 +330,14 @@ class DroneController(Node):
                 return False
             if not self._busy:
                 break
+            if self.action_interrupt is not None and self.action_interrupt():
+                # Cel zostaje otwarty na serwerze, ale nastepne goto i tak go
+                # nadpisze — ArduPilot w GUIDED trzyma zawsze ostatni zadany
+                # punkt, wiec dron po prostu zawraca tam, gdzie kazemy.
+                self._busy = False
+                self.get_logger().warn(
+                    f'akcja {client._action_name} przerwana na zadanie misji')
+                return False
             if time.time() > deadline:
                 self._busy = False
                 self.get_logger().error(

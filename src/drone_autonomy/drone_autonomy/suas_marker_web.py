@@ -51,6 +51,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
+from builtin_interfaces.msg import Time
 from sensor_msgs.msg import CompressedImage
 from std_msgs.msg import Bool
 
@@ -205,6 +206,9 @@ class MarkerNode(Node):
         # (LTE) pelny strumien zapcha uplink i podglad zaczyna sie spozniac —
         # widzisz klatki sprzed sekund. Rzadziej, ale zawsze najswiezsza klatka =
         # opoznienie w ryzach. 0 = bez limitu (przekazuj kazda klatke).
+        # Ile stempel klatki moze sie roznic od zegara sciennego, zeby uznac go
+        # za wiarygodny. Wiecej = stempel z innego zegara (czas symulacji).
+        self.declare_parameter('stamp_max_skew', 30.0)
         self.declare_parameter('preview_max_fps', 4.0)
         self.declare_parameter('port', 5000)
         self.declare_parameter('host', '0.0.0.0')
@@ -215,6 +219,7 @@ class MarkerNode(Node):
         self.camera_topic = p('camera_topic').value
         self.preview_topic = p('preview_topic').value
         self.targets_json = p('targets_json').value
+        self.stamp_max_skew = p('stamp_max_skew').value
         fps = p('preview_max_fps').value
         self.preview_min_interval = 1.0 / fps if fps and fps > 0 else 0.0
 
@@ -306,7 +311,26 @@ class MarkerNode(Node):
 
     def _cam_cb(self, msg: CompressedImage):
         # Gotowy JPEG prosto z kamery -> rolling-cache do zamrazania (bytes, stamp).
-        self._last_cam = (bytes(msg.data), msg.header.stamp)
+        #
+        # Stempel musi chodzic w TYM SAMYM zegarze co telemetria, bo geolokator
+        # szuka nim pozycji drona z chwili powstania klatki (_telem_at). Most
+        # Gazebo stempluje obrazy czasem SYMULACJI, liczonym od zera — takiego
+        # stempla geolokator nie przyjmie (_frame_time odrzuca go po skew) i
+        # cofnie sie do "teraz minus det_latency", czyli do pozycji drona
+        # w chwili KLIKNIECIA. Operator patrzy na zamrozony obraz kilka sekund,
+        # a dron w tym czasie leci — stad blad kilkudziesieciu metrow wzdluz
+        # kursu, rosnacy z czasem namyslu.
+        #
+        # Dlatego stempel spoza zegara sciennego zastepujemy czasem ODBIORU
+        # klatki. Nie jest tak dokladny jak prawdziwy stempel kamery (dochodzi
+        # opoznienie transportu, rzedu setek ms), ale jest w dobrym zegarze.
+        # Kamera z prawdziwym stemplem (OAK na realu) przechodzi bez zmian.
+        st = msg.header.stamp
+        ts = st.sec + st.nanosec * 1e-9
+        now = time.time()
+        if not (ts > 0.0 and abs(ts - now) < self.stamp_max_skew):
+            st = Time(sec=int(now), nanosec=int((now % 1.0) * 1e9))
+        self._last_cam = (bytes(msg.data), st)
 
     # ────────────────────── Lapanie klatki ──────────────────────
 

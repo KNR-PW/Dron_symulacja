@@ -16,9 +16,13 @@
     settle_time: 3.0
     hover_hold_time: 5.0
     center_tol_m: 1.5
-    search_timeout: 300.0   # 4 galsy x 250 m = 1000 m, przy 5 m/s 200 s; 120 ucinalo grid na 60%
+    search_timeout: 600.0   # trasa z suas_search.waypoints ma 1132 m; 300 s starczylo tylko przy 4 m/s
     finish_action: "rtl"
     test_sweep: false
+    # Spirala wokol waypointu, gdy detektor nie potwierdzi celu po dolocie.
+    # WYLACZONA: kosztuje 45 s na kazdym niepotwierdzonym kandydacie, a nic
+    # nie wnosi przy waypoincie, ktory i tak jest celny co do metra.
+    spiral_enabled: false
     drop_after_hover: false
     target_alt: 50.0
     vfov_deg: 64.4
@@ -71,6 +75,19 @@
 
     # ─── BRAMKI CZASOWE ───────────────────────────────────────────────
     acquire_timeout: 5.0        # ile czekamy, az detektor potwierdzi cel
+    # To samo, ale po dolocie do PUNKTU GRIDU. Bylo 1.0 s i bywalo
+    # nieprzechodzalne: wait_acquire zeruje okno M z N (4 z 8 klatek), a przy
+    # detektorze ~5 Hz z jitterem w sekundzie miescily sie czasem 2 klatki.
+    grid_acquire_timeout: 3.0
+
+    # Cel zauwazony W LOCIE, miedzy punktami gridu, zatrzymuje drona tam, gdzie
+    # jest — nie czeka z tym do najblizszego waypointu. Po zatrzymaniu cel jest
+    # sprawdzany jeszcze raz na stojaco; jesli sie nie potwierdzi, przez
+    # det_interrupt_cooldown nie sluchamy detektora, zeby ta sama falszywka nie
+    # zatrzymywala drona w kolko.
+    grid_det_interrupt: true
+    det_interrupt_cooldown: 10.0
+    brake_settle_time: 3.0
     confirm_timeout: 15.0       # ile czekamy na spacje operatora
     approach_timeout: 90.0      # gorny limit calego centrowania
     center_lost_timeout: 15.0   # ciagly SEARCH tak dlugo = cel zniknal na dobre
@@ -104,4 +121,40 @@
                       10.0,  40.0,
                       40.0,  40.0,
                       40.0, -20.0]
-    search_waypoints: ""
+    search_waypoints: "/root/ros_ws/src/drone_bringup/config/suas_search.waypoints"
+
+    # Co ile sekund w trakcie przeszukiwania dron zaglada do targets.json.
+    # Geolokator liczy cele NIEPRZERWANIE, takze gdy lecimy gridem, wiec nowy
+    # cel moze sie pojawic w dowolnym momencie: z automatu (klaster przekroczyl
+    # min_obs) albo z klikniecia operatora w GUI. Gdy sie pojawi, dron przerywa
+    # galsy i leci nad niego normalna sciezka — dolot, akwizycja, potwierdzenie,
+    # centrowanie, zrzut — dokladnie tak, jakby mial ten waypoint od poczatku.
+    # Klikniecie operatora ma pierwszenstwo nad kandydatem z automatu.
+    watch_interval: 2.0
+
+    # Kto moze przerwac grid:
+    #   "operator" - tylko reczne oznaczenie w GUI (domyslnie, bezpiecznie)
+    #   "any"      - takze kandydat z automatu po przekroczeniu min_obs
+    #   "off"      - nikt, grid leci do konca
+    # Automat bywa zrodlem falszywek: obiekt systematycznie brany za czlowieka
+    # zbuduje rownie zbiezny klaster co prawdziwy cel. Gdy operator patrzy,
+    # kosztuje to tylko jeden przelot (spacja bramkuje zrzut); gdy operatora
+    # NIE MA, misja nie pyta i falszywka kosztuje ladunek. Dlatego "operator".
+    # Ustaw "any", jesli lecisz bez GUI i ufasz progowi min_obs_person.
+    watch_sources: "operator"
+
+    # Czy po PELNYM, nieudanym przelocie gridu siegac po najlepszego kandydata
+    # z automatu (najwyzszy score, czyli obs * conf).
+    #
+    # W trakcie gridu automat jest ignorowany, bo klaster ma wtedy kilkanascie
+    # obserwacji z jednego mignicia i drzewo wyglada jak czlowiek. Po calym
+    # przelocie klastry sa zbudowane z wielu galsow, wiec score faktycznie
+    # rozroznia cel od przypadku — i jest to jedyna informacja, jaka zostala,
+    # skoro grid nic nie zobaczyl.
+    #
+    # Jesli dron doleci, detektor nic nie potwierdzi i operator nie da spacji,
+    # kandydat jest ODRZUCANY (nie ma zrzutu) i wypada z puli na stale, a dron
+    # wraca do gridu. Bez operatora zrzut idzie na wspolrzedne — to ta sama
+    # regula co wszedzie: milczenie znaczy "decyduj sam".
+    auto_after_grid: true
+

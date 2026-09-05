@@ -441,7 +441,11 @@ class SuasFlightController(DroneController):
         self.drone_yaw = msg.yaw
         self.veh_roll = msg.roll
         self.veh_pitch = msg.pitch
-        self.flight_mode = msg.flight_mode
+        # drone_handler wysyla str(VehicleMode("GUIDED")), czyli "VehicleMode:GUIDED"
+        # — z prefiksem dronekita. Bez obcinania go kazde porownanie trybu
+        # (wait_for_guided) jest zawsze falszywe i misja nigdy nie przejmuje lotu.
+        mode = msg.flight_mode or ''
+        self.flight_mode = mode.rsplit(':', 1)[-1].strip()
         if msg.global_lat != 0.0 or msg.global_lon != 0.0:
             self.global_lat = msg.global_lat
             self.global_lon = msg.global_lon

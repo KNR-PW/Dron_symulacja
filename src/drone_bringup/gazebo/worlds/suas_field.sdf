@@ -162,10 +162,11 @@
         <topic>/rgb_camera/image</topic>
       </plugin>
     </gui>
-    <!-- Pole 400x400 m. grass_ground ma tylko 100x100 m, wiec przy ortofoto
-         nad polem 150x250 m kamera patrzylaby glownie w szare tlo. -->
+    <!-- Pole 800x800 m. grass_ground_big (400x400) konczylo sie, gdy trasa
+         ortofoto albo siatka przeszukiwania nie byly wysrodkowane na punkcie
+         startu drona - kamera lapala wtedy szare tlo zamiast terenu. -->
     <include>
-      <uri>model://grass_ground_big</uri>
+      <uri>model://grass_ground_huge</uri>
       <pose>0 0 0 0 0 0</pose>
     </include>
     <light name="sunUTC" type="directional">
@@ -291,14 +292,16 @@
          dlugosc: na 50 m to 31 x 9 px wobec 30 x 22 px u Randy. -->
     <include>
       <name>person_target</name>
-      <pose>15 12 0.25 1.5708 0 2.40</pose>
+      <pose>55 -95 0.25 1.5708 0 2.40</pose>
       <uri>model://Standing person</uri>
       <static>true</static>
     </include>
 
     <!-- CEL 2b: czlowiek LEZACY z rozlozonymi rekoma (klasa 1).
-         15 m na wschod od namiotu, w tej samej linii - latwo doleciec lecac
-         prosto za namiot, a na 50 m oba mieszcza sie w jednym kadrze.
+         Polnocno-zachodni rog obszaru przeszukiwania (58 m na zachod, 88 m na
+         polnoc od startu). Rozstawiony daleko OD NAMIOTU CELOWO: z pulapu
+         ortofoto (80 m) geolokator i tak go nie zapisze (person_max_alt),
+         wiec musi go znalezc grid albo klikniecie operatora.
 
          Rescue Randy ma w .dae jednostke centymetrowa, wiec realnie
          1.364 (rece) x 0.357 (grubosc) x 1.821 m (wzrost), origin w stopach.
@@ -314,7 +317,7 @@
          lezacego czlowieka z pulapu misji. -->
     <include>
       <name>person_lying</name>
-      <pose>45 0 0.18 1.5708 0 0</pose>
+      <pose>-58 88 0.18 1.5708 0 0</pose>
       <uri>model://Rescue Randy</uri>
       <static>true</static>
     </include>
