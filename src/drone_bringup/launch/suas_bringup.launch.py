@@ -77,6 +77,11 @@ def generate_launch_description():
         default_value="20",
         description="Jakosc JPEG podgladu (1-100)",
     )
+    preview_max_fps_arg = DeclareLaunchArgument(
+        "preview_max_fps",
+        default_value="4.0",
+        description="Limit FPS podgladu markera (:5000); 0 = bez limitu",
+    )
     detect_delay_arg = DeclareLaunchArgument(
         "detect_delay",
         default_value="5.0",
@@ -121,6 +126,7 @@ def generate_launch_description():
             "camera_topic": LaunchConfiguration("camera_topic"),
             "debug_every_n": LaunchConfiguration("debug_every_n"),
             "debug_jpeg_quality": LaunchConfiguration("debug_jpeg_quality"),
+            "preview_max_fps": LaunchConfiguration("preview_max_fps"),
         }.items(),
     )
 
@@ -149,6 +155,7 @@ def generate_launch_description():
         camera_topic_arg,
         debug_every_n_arg,
         debug_jpeg_quality_arg,
+        preview_max_fps_arg,
         detect_delay_arg,
         lock_nadir_arg,
         cluster_radius_arg,

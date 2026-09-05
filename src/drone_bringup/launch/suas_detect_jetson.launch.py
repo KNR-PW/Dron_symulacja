@@ -92,6 +92,12 @@ def generate_launch_description():
         default_value="5000",
         description="Port GUI recznego oznaczania celow (suas_marker_web)",
     )
+    preview_max_fps_arg = DeclareLaunchArgument(
+        "preview_max_fps",
+        default_value="4.0",
+        description="Limit FPS podgladu markera (:5000); wyzej = plynniej, ale "
+                    "wiecej danych po LTE. 0 = bez limitu",
+    )
 
     # ─── YOLO detektor (Jetson) ──────────────────────────
     yolo_detector = Node(
@@ -152,6 +158,8 @@ def generate_launch_description():
                 "port": ParameterValue(
                     LaunchConfiguration("marker_port"), value_type=int),
                 "host": LaunchConfiguration("web_address"),
+                "preview_max_fps": ParameterValue(
+                    LaunchConfiguration("preview_max_fps"), value_type=float),
             }
         ],
     )
@@ -169,6 +177,7 @@ def generate_launch_description():
             web_port_arg,
             web_address_arg,
             marker_port_arg,
+            preview_max_fps_arg,
             depthai_launch,     # kamera OAK-D
             yolo_detector,      # detekcja YOLO
             web_video_server,   # podglad w przegladarce
