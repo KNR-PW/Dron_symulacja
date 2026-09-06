@@ -36,6 +36,7 @@ setup(
             'suas_geolocator=drone_autonomy.suas_geolocator:main',
             'suas_marker_web=drone_autonomy.suas_marker_web:main',
             'suas_full_mission=drone_autonomy.suas_full_mission:main',
+            'suas_grid_mission=drone_autonomy.suas_grid_mission:main',
         ],
     },
 )

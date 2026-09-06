@@ -121,7 +121,7 @@
                       10.0,  40.0,
                       40.0,  40.0,
                       40.0, -20.0]
-    search_waypoints: "/root/ros_ws/src/drone_bringup/config/suas_search.waypoints"
+    search_waypoints: "~/Dron_symulacja/src/drone_bringup/config/suas_search.waypoints"
 
     # Co ile sekund w trakcie przeszukiwania dron zaglada do targets.json.
     # Geolokator liczy cele NIEPRZERWANIE, takze gdy lecimy gridem, wiec nowy
