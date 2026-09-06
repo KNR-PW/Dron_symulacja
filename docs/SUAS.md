@@ -269,3 +269,48 @@ Przydatne parametry (`-p nazwa:=wartosc`):
 | `finish_action` | `rtl` | `rtl` / `land` na koniec |
 | `targets_json` | `~/suas_targets/targets.json` | plik z celami |
 
+---
+
+## 12. suas_grid_mission — uproszczona misja (grid z MP, bez geolokatora)
+
+To samo zadanie co w kroku 11, ale bez geolokatora, bez GUI i bez spacji.
+Trase rysujesz w Mission Plannerze, cel potwierdza wylacznie detektor
+(okno M z N klatek), zrzut idzie tylko po udanym wycentrowaniu.
+
+Wymaga: handler + detekcja (kroki 4 i 5). Geolokator NIE jest potrzebny —
+jesli chodzi z `suas_bringup`, misja zdejmuje mu blokade nadiru.
+
+```bash
+ros2 run drone_autonomy suas_grid_mission --ros-args \
+  --params-file ~/Dron_symulacja/src/drone_bringup/config/suas_grid_mission.yaml
+```
+
+**Test bez trasy AUTO** (sam uzbraja i wznosi sie na target_alt):
+
+```bash
+ros2 run drone_autonomy suas_grid_mission --ros-args \
+  --params-file ~/Dron_symulacja/src/drone_bringup/config/suas_grid_mission.yaml \
+  -p auto_takeoff:=true
+```
+
+Przebieg: czekanie na `AUTO -> GUIDED` -> zejscie na 50 m, gimbal na -75 st. ->
+lot po punktach z `.waypoints` z obserwacja OBU klas naraz -> okno M z N
+domkniete = hamowanie w miejscu, sprawdzenie na stojaco, APPROACH + HOVER
+(`suas_flight_controller`), zrzut ladunku tej klasy -> powrot na kurs -> RTL.
+
+Cel, ktory nie potwierdzi sie na stojaco albo zniknie w trakcie centrowania,
+NIE dostaje zrzutu — klasa milczy przez `det_cooldown`, a dron wraca na trase.
+
+Przydatne parametry (`-p nazwa:=wartosc`):
+
+| parametr | domyslnie | co robi |
+|---|---|---|
+| `waypoints_file` | `config/suas_search.waypoints` | trasa z Mission Plannera (wysokosci z pliku ignorowane) |
+| `target_alt` | `50.0` | wysokosc calej misji [m] |
+| `pitch_search` | `-75.0` | kat gimbala w przeszukiwaniu [st.] |
+| `det_confirm_frames` / `det_window_frames` | `4` / `8` | M z N klatek — jedyna bramka przed zrzutem |
+| `grid_passes` | `2` | ile razy przelecec trase, gdy zostal ladunek |
+| `grid_timeout` | `900.0` | twardy budzet czasu na cale przeszukiwanie [s] |
+| `det_cooldown` | `20.0` | cisza dla klasy po falszywce [s] |
+| `auto_takeoff` | `false` | `true` = sam start zamiast czekania na GUIDED (test) |
+

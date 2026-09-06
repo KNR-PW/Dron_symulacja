@@ -1,0 +1,132 @@
+# Parametry UPROSZCZONEJ misji SUAS — suas_grid_mission.
+#
+# Wersja bez geolokatora i bez operatora: dron leci po trasie narysowanej
+# w Mission Plannerze, obie klasy obserwuje rownolegle, a cel potwierdza
+# WYLACZNIE okno M z N klatek detektora. Nie ma spacji, nie ma targets.json,
+# nie ma kandydatow.
+#
+# Uzycie:
+#   ros2 run drone_autonomy suas_grid_mission --ros-args \
+#       --params-file ~/Dron_symulacja/src/drone_bringup/config/suas_grid_mission.yaml
+#
+# Test w symulacji (sam uzbraja i wznosi sie zamiast czekac na GUIDED):
+#   ... -p auto_takeoff:=true
+#
+# '/**' = dotyczy wezla o dowolnej nazwie.
+/**:
+  ros__parameters:
+
+    # ─── WYSOKOSC I TRASA ─────────────────────────────────────────────
+    # Cala misja leci na tej wysokosci: grid, podejscie, zrzut.
+    target_alt: 50.0
+
+    # Plik .waypoints zapisany z Mission Plannera (naglowek "QGC WPL 110").
+    # Wysokosci z pliku sa IGNOROWANE — lecimy na target_alt. Wiersz HOME,
+    # TAKEOFF, RTL i DO_* (komendy bez wspolrzednych) sa pomijane.
+    # Obslugiwane sa tez pliki "lat, lon" w kazdej linii oraz plik z linia
+    # OFFSETS i para "wschod, polnoc" w metrach wzgledem punktu przejecia lotu.
+    waypoints_file: "~/Dron_symulacja/src/drone_bringup/config/suas_search.waypoints"
+
+    # Ile razy przelecec cala trase, jesli zostal niezrzucony ladunek.
+    # Kazdy kolejny przelot idzie w odwrotna strone, zeby nie wracac pusto
+    # na poczatek trasy.
+    grid_passes: 2
+    # Twardy budzet czasu na CALE przeszukiwanie (wszystkie przeloty razem).
+    # Po jego przekroczeniu dron wraca, nawet jesli ma ladunek na pokladzie.
+    grid_timeout: 900.0
+    # Ile stoimy nad kazdym punktem trasy. Dron wyhamowuje, obraz przestaje
+    # byc rozmyty ruchem i okno M z N ma szanse domknac sie na celu, ktory
+    # w locie mignal tylko w rogu kadru.
+    point_dwell: 2.0
+
+    # ─── PRZEJECIE LOTU ───────────────────────────────────────────────
+    # Misja czeka, az przelaczysz AUTO -> GUIDED. To jedyny sygnal startu.
+    takeover_timeout: 1200.0
+    auto_takeoff: false        # true = TRYB TESTOWY, sam uzbraja i startuje
+
+    finish_action: "rtl"       # "rtl" albo "land"
+
+    # ─── GIMBAL ───────────────────────────────────────────────────────
+    # -75 st. w przeszukiwaniu: przy 50 m srodek kadru wypada 13 m PRZED
+    # dronem, wiec cel jest widoczny dluzej niz przy nadirze i okno M z N ma
+    # sie z czego zapelnic, zanim dron nad nim przeleci. Pion (-90) wlacza sie
+    # sam dopiero w HOVER, nad wycentrowanym celem.
+    pitch_search: -75.0
+    pitch_min: -90.0           # najnizej: prosto w dol (HOVER)
+    pitch_max: -30.0           # najwyzej: skos w przod
+    pitch_hover_thr: -83.0     # prog APPROACH -> HOVER (7 st. od pionu)
+    gimbal_deadzone: 0.06
+    damping: 0.6
+
+    # ─── POTWIERDZANIE CELU (jedyna bramka przed zrzutem) ─────────────
+    # M trafien z ostatnich N klatek, w dodatku o tym samym ID z trackera.
+    # Te same progi obowiazuja w gridzie (obie klasy naraz) i przy podejsciu,
+    # wiec jest jedno pokretlo w jednym miejscu.
+    # Prog PEWNOSCI ustawia sam detektor (parametr 'conf' w launchu detekcji).
+    det_confirm_frames: 4      # M
+    det_window_frames: 8       # N
+    # Przerwa miedzy KLATKAMI detektora, po ktorej okno jest zerowane.
+    # Detektor publikuje kazda klatke (takze pusta), wiec to mierzy jitter
+    # detektora, a nie utrate celu. Symulacja ~5 Hz z jitterem 0.7 s -> 1.5;
+    # na realu (7-14 FPS) wystarczy 1.0.
+    det_confirm_gap: 1.5
+    require_same_track: true
+
+    # ─── CEL ZAUWAZONY W LOCIE ────────────────────────────────────────
+    # Okno domkniete w polowie galsu zatrzymuje drona TAM, GDZIE JEST —
+    # nie czekamy z tym do najblizszego punktu trasy.
+    brake_settle_time: 3.0     # ile czekamy, az dron wyhamuje (5 m/s -> ~2 s)
+    reconfirm_timeout: 3.0     # ile czekamy na potwierdzenie NA STOJACO
+    # Po nieudanym sprawdzeniu (na stojaco albo w centrowaniu) tyle sekund nie
+    # sluchamy TEJ klasy. Bez tego ta sama falszywka zatrzymywalaby drona
+    # w kolko: wracamy na kurs, okno napelnia sie z tego samego krzaka
+    # i znowu stoimy. Druga klasa jest przez ten czas obserwowana normalnie.
+    det_cooldown: 20.0
+
+    # ─── CENTROWANIE NAD CELEM ────────────────────────────────────────
+    approach_timeout: 90.0     # gorny limit calego podejscia i centrowania
+    center_lost_timeout: 15.0  # ciagly SEARCH tak dlugo = cel zniknal na dobre
+    center_tol_m: 1.5          # kiedy uznajemy cel za "pod dronem"
+    hover_hold_time: 3.0       # jak dlugo ma tak byc, zanim zrzucimy
+    lost_timeout: 3.0
+    hover_deadzone_m: 0.5
+
+    # ─── KLASY CELOW ──────────────────────────────────────────────────
+    # POZYCJA NA LISCIE = class_id = numer ladunku (drop_pwm_by_class).
+    # Nazwy sa tylko do logow; topici musza pasowac do detektora.
+    target_names:  ["NAMIOT", "CZLOWIEK"]
+    target_topics: ["/tent_detections", "/people_detections"]
+
+    # ─── REGULATORY ───────────────────────────────────────────────────
+    kp_vx: 4.0                 # predkosc do przodu w APPROACH
+    kp_hover: 0.2              # korekta pozycji w HOVER [1/s], uchyb w metrach
+    kp_alt: 0.5
+    kp_yaw: 0.3
+    max_vel: 3.0
+    max_vz: 1.5
+    max_yaw_rate: 0.5
+    ema_alpha: 0.15
+    tilt_comp: true            # odejmij przechyl ramy od uchybu obrazu
+
+    # ─── KAMERA ───────────────────────────────────────────────────────
+    # OAK-D PRO W, kwadratowe preview 1024x1024 (config/oak_rgb.yaml).
+    # Symulacja jest dociagnieta do realu — NIE nadpisywac tych wartosci.
+    vfov_deg: 64.4
+    img_w: 1024
+    img_h: 1024
+    control_rate: 10.0
+
+    # ─── ZRZUT LADUNKU ────────────────────────────────────────────────
+    # JEDEN serwomechanizm na dwa ladunki (u nas AUX5 = kanal 13): wychyla sie
+    # w dwie strony wzgledem pozycji neutralnej. Wychyl w jedna strone zwalnia
+    # namiot, w druga czlowieka, pozycja neutralna trzyma oba.
+    #
+    # drop_servo_ch = 0 -> TRYB SYMULACJI: zrzut tylko sie loguje, nic nie
+    # jedzie na sprzet. PRZED LOTEM W POLU wpisz numer kanalu serwa: 13.
+    #
+    # drop_pwm_by_class: PWM zrzutu per klasa [0=namiot, 1=czlowiek].
+    # Wartosci zmierzone 2026-09-05 na realu (kanal 13, SERVO13=RCIN11).
+    drop_servo_ch: 0                  # 0 = symulacja; na realu 13
+    drop_pwm_by_class: [1580, 1060]   # [namiot, czlowiek]
+    drop_pwm_neutral: 1300
+    drop_hold_s: 2.0
