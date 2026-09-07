@@ -271,6 +271,50 @@ Przydatne parametry (`-p nazwa:=wartosc`):
 
 ---
 
+## 11a. suas_mission — AKTUALNA misja (zastepuje 11 i 12)
+
+Pelny opis: [misja.md](misja.md). Wymaga stacku z kroku 10 (geolokator
+opcjonalnie — bez niego namiot idzie skanem).
+
+```bash
+# Jetson / host
+ros2 run drone_autonomy suas_mission --ros-args \
+  --params-file ~/Dron_symulacja/src/drone_bringup/config/misja.yaml
+
+# kontener Docker — INNA SCIEZKA (montowany jest tylko src/)
+ros2 run drone_autonomy suas_mission --ros-args \
+  --params-file /root/ros_ws/src/drone_bringup/config/misja.yaml
+```
+
+Test bez trasy AUTO:
+
+```bash
+ros2 run drone_autonomy suas_mission --ros-args \
+  --params-file ~/Dron_symulacja/src/drone_bringup/config/misja.yaml \
+  -p auto_takeoff:=true
+```
+
+Zasada: dla kazdej klasy osobno **czy mam adres?** Namiot z waypointem ->
+dolot i zrzut; namiot bez waypointu -> skan z postoju (WP1 180 st., WP2
+360 st., powrot na WP1); czlowiek bez waypointu -> nie rusza.
+
+Zeby geolokator pisal tam, gdzie misja czyta:
+
+```bash
+ros2 launch drone_bringup suas_geolocator.launch.py \
+  save_dir:=/home/jetsonknr/Dron_symulacja/src/drone_bringup/config
+```
+
+| parametr | domyslnie | co robi |
+|---|---|---|
+| `auto_takeoff` | `false` | `true` = sam start zamiast czekania na GUIDED |
+| `drop_servo_ch` | `0` | `0` = zrzut tylko w logu; **na realu 13** |
+| `scan_dwell` | `1.5` | postoj na komorke skanu [s] |
+| `scan_return_to_first` | `true` | powrot na WP1 przed RTL |
+| `finish_action` | `rtl` | `rtl` / `land` |
+
+---
+
 ## 12. suas_grid_mission — uproszczona misja (grid z MP, bez geolokatora)
 
 To samo zadanie co w kroku 11, ale bez geolokatora, bez GUI i bez spacji.

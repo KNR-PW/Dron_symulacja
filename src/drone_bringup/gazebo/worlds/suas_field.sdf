@@ -222,15 +222,45 @@
       (W komentarzu XML nie wolno uzyc podwojnego myslnika, stad opis slowny
       zamiast gotowych komend z flagami.)
 
-      obiekt         |   X      Y   | od home: wschod  polnoc
-      iris (spawn)   |   10.0    0.0  |    0.0      0.0    = HOME
-      tent_target    |   30.0    0.0  |  +20.0      0.0
-      person_target  |   15.0   12.0  |   +5.0    +12.0    lezacy, rece przy ciele
-      person_lying   |   45.0    0.0  |  +35.0      0.0    lezacy, rece na boki
-      srodek namiot/person_target | 22.5  6.0 | +12.5    +6.0
+      UKLAD POD MISJE suas_mission (skan bez geolokatora)
 
-      Odleglosci: namiot <-> person_target 19.2 m | namiot <-> person_lying 15.0 m
-                  person_target <-> person_lying 32.3 m | dron <-> namiot 20.0 m
+      obiekt         |   X       Y    | od home: wschod  polnoc
+      iris (spawn)   |   10.0     0.0 |    0.0      0.0   = HOME = WP1
+      WP2 (skan)     |   10.0   125.0 |    0.0   +125.0
+      tent_target    |  -40.0   220.0 |  -50.0   +220.0   polnocno-zachodni rog
+      person_target  |   35.0   130.0 |  +25.0   +130.0   lezacy, srodek pola
+      person_lying   |   60.0   205.0 |  +50.0   +205.0   twardy negatyw (Randy)
+
+      Obszar przeszukiwania: X od -65 do +85, Y od 0 do 250 (150 x 250 m),
+      obrysowany czerwonym pasem. WP1 lezy na srodku poludniowego brzegu,
+      WP2 w srodku obszaru - dokladnie tak, jak opisuje docs/misja.md.
+
+      PO CO NAMIOT STOI W ROGU - to jest TEST, czy potrzebny trzeci waypoint:
+
+        od WP1 (10,   0):  222 m ->  10 px  poza zasiegiem
+        od WP2 (10, 125):  107 m ->  21 px  poza zasiegiem
+        od WP3 (10, 250):   58 m ->  32 px  WYKRYWALNY
+
+      Prog 30 px to "pewne wykrycie" z docs/misja.md sekcja 5 - tyle ma namiot
+      z 80 m w nadirze, czyli z pulapu, na ktorym pracuje geolokator.
+
+      Oczekiwany wynik przy DWOCH punktach: skan konczy sie niczym i dron
+      wraca z ladunkiem. To NIE jest blad misji, tylko potwierdzenie rachunku
+      z docs/misja.md sekcja 5: z dwoch punktow widac do Y ok. 190, a pole ma
+      250 m. Jesli mimo to namiot zostanie znaleziony, znaczy to, ze realny
+      zasieg detektora jest wiekszy niz przyjete 30 px - i wtedy prog w
+      dokumentacji trzeba poprawic w dol.
+
+      TRZECI PUNKT: odkomentuj "0, 250" w misja_skan.waypoints i ustaw
+        scan_arc_deg:     [180.0, 360.0, 180.0]
+        scan_heading_deg: [0.0,   0.0,   180.0]    # ostatni patrzy na POLUDNIE
+      Ten sam swiat, ta sama misja - zmienia sie tylko trasa skanu.
+
+      czlowiek od WP2: 25 m -> 28 px (poza lezaca, dlugosc 1.9 m).
+      W tym tescie jest tylko scenografia: bez geolokatora klasa CZLOWIEK
+      nie ma adresu, a misja jej wtedy NIE szuka (docs/misja.md sekcja 1).
+
+      Odleglosci: namiot <-> person_target 111 m | namiot <-> person_lying 102 m
       Wszystkie pary powyzej 10 m, czyli powyzej promienia klastrowania
       geolokatora - kazdy obiekt daje osobny klaster.
 
@@ -271,10 +301,100 @@
       ============================================================
     -->
 
+
+    <!--
+      ============================================================
+      GRANICA OBSZARU PRZESZUKIWANIA - 150 x 250 m
+      ============================================================
+      X (wschod) od -65 do +85, Y (polnoc) od 0 do 250.
+      Wysrodkowana w poziomie na spawnie drona (X=10), zaczyna sie na jego
+      wysokosci (Y=0) i ciagnie 250 m na polnoc.
+
+      Pasy sa TYLKO wizualne - bez <collision>, zeby nic o nie nie zahaczylo
+      i zeby nie wchodzily do fizyki. Leza na z=0.02, nad trawa na z=0,
+      inaczej migotalyby przez z-fighting.
+      ============================================================
+    -->
+    <model name="granica_S">
+      <static>true</static>
+      <pose>10 0 0.02 0 0 0</pose>
+      <link name="l"><visual name="v">
+        <geometry><box><size>150 2 0.02</size></box></geometry>
+        <material>
+          <ambient>0.9 0.05 0.05 1</ambient>
+          <diffuse>0.9 0.05 0.05 1</diffuse>
+          <emissive>0.35 0 0 1</emissive>
+        </material>
+      </visual></link>
+    </model>
+    <model name="granica_N">
+      <static>true</static>
+      <pose>10 250 0.02 0 0 0</pose>
+      <link name="l"><visual name="v">
+        <geometry><box><size>150 2 0.02</size></box></geometry>
+        <material>
+          <ambient>0.9 0.05 0.05 1</ambient>
+          <diffuse>0.9 0.05 0.05 1</diffuse>
+          <emissive>0.35 0 0 1</emissive>
+        </material>
+      </visual></link>
+    </model>
+    <model name="granica_W">
+      <static>true</static>
+      <pose>-65 125 0.02 0 0 0</pose>
+      <link name="l"><visual name="v">
+        <geometry><box><size>2 250 0.02</size></box></geometry>
+        <material>
+          <ambient>0.9 0.05 0.05 1</ambient>
+          <diffuse>0.9 0.05 0.05 1</diffuse>
+          <emissive>0.35 0 0 1</emissive>
+        </material>
+      </visual></link>
+    </model>
+    <model name="granica_E">
+      <static>true</static>
+      <pose>85 125 0.02 0 0 0</pose>
+      <link name="l"><visual name="v">
+        <geometry><box><size>2 250 0.02</size></box></geometry>
+        <material>
+          <ambient>0.9 0.05 0.05 1</ambient>
+          <diffuse>0.9 0.05 0.05 1</diffuse>
+          <emissive>0.35 0 0 1</emissive>
+        </material>
+      </visual></link>
+    </model>
+
+    <!-- Punkty skanu, zolte - zeby bylo widac, gdzie dron ma stanac.
+         WP1 lezy na spawnie drona, wiec jest pod nim. -->
+    <model name="wp1_marker">
+      <static>true</static>
+      <pose>10 0 0.03 0 0 0</pose>
+      <link name="l"><visual name="v">
+        <geometry><box><size>6 6 0.02</size></box></geometry>
+        <material>
+          <ambient>0.9 0.85 0.1 1</ambient>
+          <diffuse>0.9 0.85 0.1 1</diffuse>
+          <emissive>0.35 0.32 0 1</emissive>
+        </material>
+      </visual></link>
+    </model>
+    <model name="wp2_marker">
+      <static>true</static>
+      <pose>10 125 0.03 0 0 0</pose>
+      <link name="l"><visual name="v">
+        <geometry><box><size>6 6 0.02</size></box></geometry>
+        <material>
+          <ambient>0.9 0.85 0.1 1</ambient>
+          <diffuse>0.9 0.85 0.1 1</diffuse>
+          <emissive>0.35 0.32 0 1</emissive>
+        </material>
+      </visual></link>
+    </model>
+
     <!-- CEL 1: namiot (klasa 0) -->
     <include>
       <name>tent_target</name>
-      <pose>30 0 0.55 0 0 0</pose>
+      <pose>-40 170 0.55 0 0 0.6</pose>
       <uri>model://tent_green</uri>
       <static>true</static>
     </include>
@@ -292,7 +412,7 @@
          dlugosc: na 50 m to 31 x 9 px wobec 30 x 22 px u Randy. -->
     <include>
       <name>person_target</name>
-      <pose>55 -95 0.25 1.5708 0 2.40</pose>
+      <pose>35 130 0.25 1.5708 0 2.40</pose>
       <uri>model://Standing person</uri>
       <static>true</static>
     </include>
@@ -317,7 +437,7 @@
          lezacego czlowieka z pulapu misji. -->
     <include>
       <name>person_lying</name>
-      <pose>-58 88 0.18 1.5708 0 0</pose>
+      <pose>60 205 0.18 1.5708 0 0</pose>
       <uri>model://Rescue Randy</uri>
       <static>true</static>
     </include>
@@ -376,10 +496,13 @@
       <static>true</static>
     </include>
 
-    <!-- Dron na ziemi, 20 m przed namiotem, nosem w jego strone (yaw 0 = +X). -->
+    <!-- Dron na ziemi w WP1 (srodek poludniowego brzegu obszaru).
+         yaw 90 st. = nos na POLNOC (yaw 0 = +X = wschod), czyli w glab pola.
+         Misja i tak sama ustawia sie na kurs skanu (scan_heading_deg), wiec
+         to jest tylko wygoda przy patrzeniu na start - nie zalozenie. -->
     <include>
       <uri>model://iris_with_gimbal</uri>
-      <pose degrees="true">10 0 0.195 0 0 0</pose>
+      <pose degrees="true">10 0 0.195 0 0 90</pose>
     </include>
 </world>
 </sdf>
