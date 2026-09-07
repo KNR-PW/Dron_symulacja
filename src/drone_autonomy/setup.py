@@ -37,6 +37,7 @@ setup(
             'suas_marker_web=drone_autonomy.suas_marker_web:main',
             'suas_full_mission=drone_autonomy.suas_full_mission:main',
             'suas_grid_mission=drone_autonomy.suas_grid_mission:main',
+            'suas_mission=drone_autonomy.suas_mission:main',
         ],
     },
 )
