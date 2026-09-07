@@ -11,10 +11,14 @@ i argparse wzialby ja za nazwe opcji):
 
     python3 make_test_targets.py --home=-35.363261,149.165348 --scenariusz pelny
     python3 make_test_targets.py --home=-35.363261,149.165348 --scenariusz atrapa
+    python3 make_test_targets.py --home=-35.363261,149.165348 --scenariusz sim20
 
 Scenariusze:
   pelny     namiot (auto) + lezacy czlowiek (operator). Oba istnieja w swiecie
             suas_field.sdf, wiec detektor je potwierdzi.
+  sim20     JAK pelny, ale wspolrzedne przesuniete o 20 m od prawdziwych —
+            symuluje niedokladny wynik geolokatora / operatora.
+            Namiot: 20 m na poludnie, czlowiek: 20 m na wschod.
   atrapa    dwa kandydaty namiotu: #1 to prawdziwy namiot, #2 punkt 40 m dalej,
             gdzie nic nie ma. Odrzuc #1 spacja i sprawdz, czy dron leci do #2,
             a nie od razu w grid.
@@ -29,19 +33,20 @@ import os
 
 M_LAT = 111_320.0
 
-# Offsety obiektow wzgledem SPAWNU drona w swiecie suas_field.sdf.
-# Dron rodzi sie na (10, 0); world X = wschod, Y = polnoc.
-#   namiot                          (30, 0)  -> +20 E,   0 N
-#   person_target, lezy, rece przy ciele (15, 12) ->  +5 E, +12 N   <- TEN
-#   person_lying (Rescue Randy), rece na boki (45, 0) -> +35 E, 0 N
+# ─── OFFSETY OBIEKTOW WZGLEDEM SPAWNU DRONA ──────────────────────
+# Dron rodzi sie na (10, 0) w suas_field.sdf.
+# world X = wschod (E), Y = polnoc (N), konwencja ENU.
+#
+#   obiekt          world (X, Y)    offset od drona (E, N)
+#   tent_target     (-60,   5)      -70 E,   +5 N   rog SW
+#   person_target   ( 35, 130)      +25 E, +130 N
+#   person_lying    ( 60, 205)      +50 E, +205 N   (Randy, twardy negatyw)
 #
 # Celem "czlowiek" jest person_target, NIE Randy. Zmierzone 2026-09-02 w sim:
 # MODEL5 potwierdza person_target lezacego (31x9 px na 50 m), a Randy'ego
-# (30x22 px) NIE widzi wcale — mimo wiekszej liczby pikseli. W symulacji
-# o wykryciu decyduje wyglad siatki (Randy to manekin w nietypowych
-# kolorach), nie rozmiar. Randy zostaje w swiecie jako twardy negatyw.
-TENT_E, TENT_N = 20.0, 0.0
-LYING_E, LYING_N = 5.0, 12.0
+# (30x22 px) NIE widzi wcale. Randy zostaje jako twardy negatyw.
+TENT_E, TENT_N = -70.0, 5.0
+LYING_E, LYING_N = 25.0, 130.0
 
 
 def gps(lat0, lon0, d_east, d_north):
@@ -49,9 +54,9 @@ def gps(lat0, lon0, d_east, d_north):
             lon0 + d_east / (M_LAT * math.cos(math.radians(lat0))))
 
 
-def cand(cid, lat, lon, source, n_obs, conf=0.95):
+def cand(cid, lat, lon, source, n_obs, class_id=0, conf=0.95):
     return {
-        'id': cid, 'class_id': 0, 'source': source,
+        'id': cid, 'class_id': class_id, 'source': source,
         'lat': round(lat, 7), 'lon': round(lon, 7),
         'n_obs': n_obs, 'mean_conf': conf, 'n_passes': 2,
         'score': round(n_obs * conf, 2),
@@ -68,8 +73,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--home', required=True, help='lat,lon spawnu drona')
     ap.add_argument('--scenariusz', required=True,
-                    choices=['pelny', 'atrapa', 'smiec', 'bez_czlowieka'])
-    ap.add_argument('--out', default=os.path.expanduser('~/suas_targets/targets.json'))
+                    choices=['pelny', 'sim20', 'atrapa', 'smiec', 'bez_czlowieka'])
+    ap.add_argument('--out', default=os.path.expanduser(
+        '~/Dron_symulacja/src/drone_bringup/config/targets.json'))
     a = ap.parse_args()
 
     lat0, lon0 = (float(x) for x in a.home.replace(' ', '').split(','))
@@ -79,23 +85,32 @@ def main():
     pusty = gps(lat0, lon0, TENT_E, TENT_N + 40.0)
 
     if a.scenariusz == 'pelny':
-        tents = [cand(1, *tent, 'auto', 300)]
-        people = [cand(10, *lying, 'operator', 1)]
+        tents = [cand(1, *tent, 'auto', 300, class_id=0)]
+        people = [cand(10, *lying, 'operator', 1, class_id=1)]
+
+    elif a.scenariusz == 'sim20':
+        # Oba cele przesuniete o 20 m od prawdziwych lokalizacji.
+        # Namiot: 20 m na poludnie (N -= 20).
+        # Czlowiek: 20 m na wschod (E += 20).
+        tent_off = gps(lat0, lon0, TENT_E, TENT_N - 20.0)
+        lying_off = gps(lat0, lon0, LYING_E + 20.0, LYING_N)
+        tents = [cand(1, *tent_off, 'auto', 300, class_id=0)]
+        people = [cand(10, *lying_off, 'operator', 1, class_id=1)]
+
     elif a.scenariusz == 'atrapa':
         # #1 prawdziwy namiot (odrzucasz go spacja), #2 pusty punkt.
-        tents = [cand(1, *tent, 'auto', 300),
-                 cand(2, *pusty, 'auto', 120)]
-        people = [cand(10, *lying, 'operator', 1)]
+        tents = [cand(1, *tent, 'auto', 300, class_id=0),
+                 cand(2, *pusty, 'auto', 120, class_id=0)]
+        people = [cand(10, *lying, 'operator', 1, class_id=1)]
+
     elif a.scenariusz == 'smiec':
         # ponizej min_obs (10 namiot / 5 czlowiek) -> filtr ma je wyciac
-        tents = [cand(1, *tent, 'auto', 4)]
-        people = [cand(10, *lying, 'auto', 2)]
-    else:                                    # bez_czlowieka
-        tents = [cand(1, *tent, 'auto', 300)]
-        people = []
+        tents = [cand(1, *tent, 'auto', 4, class_id=0)]
+        people = [cand(10, *lying, 'auto', 2, class_id=1)]
 
-    for c in people:
-        c['class_id'] = 1
+    else:                                    # bez_czlowieka
+        tents = [cand(1, *tent, 'auto', 300, class_id=0)]
+        people = []
 
     data = {
         'created': 'TEST',
@@ -118,7 +133,7 @@ def main():
             prog = data['min_obs']['tent' if c['class_id'] == 0 else 'people']
             ok = c['source'] == 'operator' or c['n_obs'] >= prog
             print(f"  {nazwa:9s} #{i} {c['source']:8s} obs={c['n_obs']:3d} "
-                  f"({de:+5.0f} E, {dn:+5.0f} N)  "
+                  f"({de:+6.1f} E, {dn:+6.1f} N)  "
                   f"{'przejdzie filtr' if ok else 'ODFILTROWANY (obs < %d)' % prog}")
 
 

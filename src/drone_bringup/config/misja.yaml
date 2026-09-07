@@ -43,7 +43,7 @@
     # targets_json NIE jest tak podmieniany celowo: plik z innego srodowiska
     # moze byc z poprzedniego lotu, a zrzut pod nieaktualny adres jest gorszy
     # niz brak adresu. Misja tylko powie, gdzie taki plik lezy.
-    targets_json: "~/Dron_symulacja/src/drone_bringup/config/targets.json"
+    #targets_json: "~/ros_ws/src/drone_bringup/config/targets.json"
     scan_waypoints: "misja_skan.waypoints"
 
     # ═══ PRZEJECIE LOTU ══════════════════════════════════════════════
@@ -75,67 +75,38 @@
     aim_timeout: 15.0
 
     # ═══ SKAN (namiot bez adresu) ════════════════════════════════════
-    # Krok obrotu 60 st. NIE bierze sie z FOV (64,4 st.). Pochylony kadr
-    # rozszerza sie z odlegloscia, wiec jego szerokosc w AZYMUCIE zalezy od
-    # kata gimbala i od zasiegu. Przypadek wiazacy to najdalszy zasieg przy
-    # najnizszym pochyleniu: gimbal -65 na 64 m daje 71 st., czyli krok 60
-    # zostawia 11 st. (18%) zakladki.
+    # Krok obrotu drona w osi yaw (w stopniach). 60 st. daje 11 st. zakladki.
     scan_yaw_step: 60.0
-    # Luk skanu per punkt trasy. WP1 lezy na brzegu, wiec pole jest w calosci
-    # z przodu i wystarczy 180 st. (3 pozycje x 71 = 213 st.); WP2 jest
-    # w srodku, wiec potrzebne 360 st. (6 pozycji x 71 = 426 st.).
-    scan_arc_deg: [180.0, 360.0]
-    # BEZWZGLEDNY kurs (0 = polnoc, rosnie w prawo), na ktorym luk ma byc
-    # WYSRODKOWANY. Bez tego luk zaczynalby sie od kursu, z jakim dron akurat
-    # przylecial — a na POWROCIE na WP1 przylatuje od WP2, czyli TYLEM do pola,
-    # i przeskanowalby 180 st. terenu POZA obszarem. Przy luku 360 pomijany.
-    # W swiecie suas_field pole ciagnie sie na polnoc od WP1, stad 0.
-    scan_heading_deg: [0.0, 0.0]
-    # Nadir RAZ na punkt, bez obracania: przy -90 kadr otacza punkt pod dronem
-    # ze wszystkich stron (kwadrat 63 m przy 50 m), wiec powtarzanie go na
-    # kazdej pozycji yaw byloby fotografowaniem tego samego terenu N razy.
+    # Szerokosc wachlarza skanu dla kolejnych WP. (Np. z rogu pola wystarczy 90).
+    # Jesli punktow w pliku jest wiecej, reszta uzyje ostatniej wartosci z listy.
+    scan_arc_deg: [90.0, 360.0]
+    # Azymut srodka wachlarza (0-360) dla kolejnych WP. 
+    # Jak liczyc z rogu pola dla luku 90st (patrzysz wdluz krawedzi = to Twoj azymut):
+    # - Jesli pole jest po PRAWEJ stronie (czyli lewy rog) ➔ Dodajesz 45 stopni. (Azymut + 45)
+    # - Jesli pole jest po LEWEJ stronie (czyli prawy rog) ➔ Odejmujesz 45 stopni. (Azymut - 45)
+    scan_heading_deg: [45.0, 0.0]
+    # Skan pionowo w dol (robiony raz na dany WP, obracanie drona nic tu nie zmienia).
     scan_pitch_nadir: -90.0
-    # Na kazdej pozycji yaw. Srodki kadru wypadaja na 23 i 60 m, a odstep
-    # 25 st. jest mniejszy niz polowa FOV (32 st.), wiec kadry zachodza na
-    # siebie — nie ma szczeliny miedzy pierscieniami.
+    # Zestaw pochylen gimbala dla kazdej z pozycji obrotu yaw.
     scan_pitches: [-65.0, -40.0]
-    # 1,5 s przy najgorszym przypadku 5 FPS. Detektor ma jitter do 0,7 s, wiec
-    # efektywnie miesci sie 2-5 klatek na sekunde: przy 1,0 s najgorszy
-    # przypadek to 2 klatki i bramka nie przechodzi ZADNA. Przy 1,5 s to
-    # 3 klatki, czyli dokladnie tyle, ile wymaga scan_confirm_frames.
-    # Jesli test w polu pokaze, ze komorki wypadaja — podnies do 2,0
-    # (kosztuje 10 s na cala misje).
+    # Czas postoju (s) na zebranie klatek po kazdym obrocie / zmianie kata gimbala.
     scan_dwell: 1.5
-    # Osobny od max_yaw_rate, ktory dalej ogranicza regulator w podlocie.
-    # Przy 0,5 rad/s krok 60 st. trwa 2,1 s, czyli dluzej niz sam postoj —
-    # same obroty zjadalyby 15 s ze skanu. Przy 1,0 rad/s jest to 7 s.
+    # Predkosc obrotu drona (rad/s) podczas krecenia glowa w skanie.
     scan_yaw_rate: 1.0
-    scan_settle: 0.4           # ile czekamy, az gimbal dojedzie na kat komorki
-    # Bramka skanu jest CZULSZA niz bramka kontrolera (4 z 8) i to jest celowe.
-    # Domkniecie okna w komorce niczego nie uruchamia poza sprawdzeniem — po
-    # nim ida jeszcze cztery bramki (SPRAWDZ na stojaco pelnym 4 z 8, CELUJ,
-    # SPACJA, udane centrowanie). Koszty sa niesymetryczne:
-    #   falszywe wyzwolenie -> kilka sekund na ponowne sprawdzenie
-    #   przegapiony cel     -> misja wraca z ladunkiem
-    # Zadaniem skanu jest nie przegapic; zadaniem sprawdzenia — nie dac sie
-    # oszukac.
+    scan_settle: 0.4           # Czas (s) na ustabilizowanie gimbala po zmianie kata.
+    
+    # Bramka detekcji podczas POSTOJU (czulsza). Falszywka kosztuje tylko czas na celowanie.
     scan_confirm_frames: 3
     scan_window_frames: 6
-    # Bramka na PRZELOT miedzy punktami — OSTRZEJSZA niz skanowa i to jest
-    # celowe. W skanie dron STOI: obraz jest ostry, a falszywe wyzwolenie
-    # kosztuje tylko sprawdzenie w miejscu. W locie obraz jest rozmyty ruchem
-    # (falszywek wiecej), a kazde wyzwolenie kosztuje hamowanie + sprawdzenie
-    # + 20 s ciszy. Zmierzone 2026-09-07: przelot dal falszywke 3/6 klatek,
-    # ktora na stojaco sie nie potwierdzila.
+    # Bramka detekcji w PRZELOCIE (ostrzejsza). Falszywka hamuje drona i oslepia detektor.
     transit_confirm_frames: 4
     transit_window_frames: 8
-    # Po ostatnim punkcie wroc jeszcze na pierwszy i przeskanuj go ponownie.
-    # Wartosc jest w samym przelocie: druga droga nad polem to druga szansa
-    # detektora, tym razem z przeciwnego kierunku.
+    
+    # Czy po skonczeniu trasy dron ma wrocic na poczatek (WP1) i powtorzyc skan.
     scan_return_to_first: true
     scan_timeout: 600.0
-    # Kat w przelocie miedzy punktami: ostatni, przy ktorym CALY kadr lezy na
-    # ziemi z zapasem 23 st. Powyzej -32 st. gorne wiersze pokazuja niebo.
+    
+    # Pochylenie gimbala w przelocie miedzy punktami trasy.
     pitch_transit: -55.0
     # Cisza dla klasy po falszywce — bez tego ten sam krzak zatrzymywalby
     # drona w kolko: wracamy na kurs, okno napelnia sie z tego samego miejsca

@@ -1,0 +1,75 @@
+{
+  "created": "TEST",
+  "min_obs": {
+    "tent": 10,
+    "people": 5
+  },
+  "tent": {
+    "best": {
+      "id": 1,
+      "class_id": 0,
+      "source": "auto",
+      "lat": -35.3633969,
+      "lon": 149.1645765,
+      "n_obs": 300,
+      "mean_conf": 0.95,
+      "n_passes": 2,
+      "score": 285.0,
+      "point_spread_m": 1.5,
+      "drone_spread_m": 30.0,
+      "first_seen": 0.0,
+      "last_seen": 1.0
+    },
+    "candidates": [
+      {
+        "id": 1,
+        "class_id": 0,
+        "source": "auto",
+        "lat": -35.3633969,
+        "lon": 149.1645765,
+        "n_obs": 300,
+        "mean_conf": 0.95,
+        "n_passes": 2,
+        "score": 285.0,
+        "point_spread_m": 1.5,
+        "drone_spread_m": 30.0,
+        "first_seen": 0.0,
+        "last_seen": 1.0
+      }
+    ]
+  },
+  "people": {
+    "best": {
+      "id": 10,
+      "class_id": 1,
+      "source": "operator",
+      "lat": -35.3620944,
+      "lon": 149.1658433,
+      "n_obs": 1,
+      "mean_conf": 0.95,
+      "n_passes": 2,
+      "score": 0.95,
+      "point_spread_m": 1.5,
+      "drone_spread_m": 30.0,
+      "first_seen": 0.0,
+      "last_seen": 1.0
+    },
+    "candidates": [
+      {
+        "id": 10,
+        "class_id": 1,
+        "source": "operator",
+        "lat": -35.3620944,
+        "lon": 149.1658433,
+        "n_obs": 1,
+        "mean_conf": 0.95,
+        "n_passes": 2,
+        "score": 0.95,
+        "point_spread_m": 1.5,
+        "drone_spread_m": 30.0,
+        "first_seen": 0.0,
+        "last_seen": 1.0
+      }
+    ]
+  }
+}

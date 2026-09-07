@@ -224,22 +224,22 @@
 
       UKLAD POD MISJE suas_mission (skan bez geolokatora)
 
-      obiekt         |   X       Y    | od home: wschod  polnoc
-      iris (spawn)   |   10.0     0.0 |    0.0      0.0   = HOME = WP1
-      WP2 (skan)     |   10.0   125.0 |    0.0   +125.0
-      tent_target    |  -40.0   220.0 |  -50.0   +220.0   polnocno-zachodni rog
-      person_target  |   35.0   130.0 |  +25.0   +130.0   lezacy, srodek pola
-      person_lying   |   60.0   205.0 |  +50.0   +205.0   twardy negatyw (Randy)
+       obiekt         |   X       Y    | od home: wschod  polnoc
+       iris (spawn)   |   10.0     0.0 |    0.0      0.0   = HOME
+       WP1 (skan)     |   85.0     0.0 |  +75.0      0.0   rog SE obszaru
+       WP2 (skan)     |   10.0   125.0 |    0.0   +125.0   srodek obszaru
+       tent_target    |  -60.0     5.0 |  -70.0     +5.0   rog SW obszaru
+       person_target  |   35.0   130.0 |  +25.0   +130.0   lezacy, srodek pola
+       person_lying   |   60.0   205.0 |  +50.0   +205.0   twardy negatyw (Randy)
 
-      Obszar przeszukiwania: X od -65 do +85, Y od 0 do 250 (150 x 250 m),
-      obrysowany czerwonym pasem. WP1 lezy na srodku poludniowego brzegu,
-      WP2 w srodku obszaru - dokladnie tak, jak opisuje docs/misja.md.
+       Obszar przeszukiwania: X od -65 do +85, Y od 0 do 250 (150 x 250 m),
+       obrysowany czerwonym pasem. WP1 w rogu SE, WP2 w srodku.
 
       PO CO NAMIOT STOI W ROGU - to jest TEST, czy potrzebny trzeci waypoint:
 
-        od WP1 (10,   0):  222 m ->  10 px  poza zasiegiem
-        od WP2 (10, 125):  107 m ->  21 px  poza zasiegiem
-        od WP3 (10, 250):   58 m ->  32 px  WYKRYWALNY
+        od WP1 (10,   0):  180 m ->  12 px  poza zasiegiem
+        od WP2 (10, 125):   63 m ->  30 px  WYKRYWALNY
+        od WP3 (10, 250):   93 m ->  20 px  marginalny
 
       Prog 30 px to "pewne wykrycie" z docs/misja.md sekcja 5 - tyle ma namiot
       z 80 m w nadirze, czyli z pulapu, na ktorym pracuje geolokator.
@@ -260,7 +260,7 @@
       W tym tescie jest tylko scenografia: bez geolokatora klasa CZLOWIEK
       nie ma adresu, a misja jej wtedy NIE szuka (docs/misja.md sekcja 1).
 
-      Odleglosci: namiot <-> person_target 111 m | namiot <-> person_lying 102 m
+      Odleglosci: namiot <-> person_target 83 m | namiot <-> person_lying 107 m
       Wszystkie pary powyzej 10 m, czyli powyzej promienia klastrowania
       geolokatora - kazdy obiekt daje osobny klaster.
 
@@ -365,10 +365,10 @@
     </model>
 
     <!-- Punkty skanu, zolte - zeby bylo widac, gdzie dron ma stanac.
-         WP1 lezy na spawnie drona, wiec jest pod nim. -->
+         WP1 na rogu SW obszaru, dokladnie na namiocie (-60, 5). WP2 na srodku (10, 125). -->
     <model name="wp1_marker">
       <static>true</static>
-      <pose>10 0 0.03 0 0 0</pose>
+      <pose>-60 5 0.03 0 0 0</pose>
       <link name="l"><visual name="v">
         <geometry><box><size>6 6 0.02</size></box></geometry>
         <material>
@@ -394,7 +394,7 @@
     <!-- CEL 1: namiot (klasa 0) -->
     <include>
       <name>tent_target</name>
-      <pose>-40 170 0.55 0 0 0.6</pose>
+      <pose>-60 5 0.55 0 0 0.6</pose>
       <uri>model://tent_green</uri>
       <static>true</static>
     </include>
