@@ -789,7 +789,7 @@ class SuasMission(SuasFlightController):
             f"╔══ {name} ══ DOWIEZ: {self._dist_to(lat, lon):.0f} m stad "
             f"(zrodlo={src}, obs={n_obs}), detektor milczy w drodze")
 
-        self._gimbal(self.pitch_transit)
+        self._gimbal(self.pitch_min)
         self.send_goto_global(lat, lon, self.target_alt)
 
         # Nad waypointem cel ma byc POD nami — gimbal w pion, inaczej okno

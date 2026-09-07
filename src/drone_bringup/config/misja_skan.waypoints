@@ -1,31 +1,24 @@
 # Trasa skanu dla suas_mission — pasuje do gazebo/worlds/suas_field.sdf.
 #
-#   WP1  srodek poludniowego brzegu obszaru = SPAWN DRONA   -> skan 180 st.
-#   WP2  srodek obszaru, 125 m na polnoc                    -> skan 360 st.
+#   WP1  rog SE obszaru (85, 0) — 75 m na wschod od spawnu     -> skan 90 st.
+#   WP2  srodek obszaru (10, 125)                              -> skan 360 st.
 #
 # Powrot na WP1 doklada misja sama (scan_return_to_first: true), wiec trasa
-# wychodzi WP1 -> WP2 -> WP1, a luki to 180 / 360 / 180.
+# wychodzi WP1 -> WP2 -> WP1, a luki to 90 / 360 / 90.
 #
 # Format OFFSETS: pary "wschod, polnoc" w METRACH wzgledem PUNKTU PRZEJECIA
 # LOTU, czyli miejsca przelaczenia AUTO -> GUIDED (albo spawnu przy
-# auto_takeoff:=true). W swiecie suas_field dron rodzi sie dokladnie w WP1,
-# wiec pierwszy punkt to 0,0.
+# auto_takeoff:=true). Dron rodzi sie na (10, 0).
+#
+# Z rogu SE pole jest na polnocny-zachod (azymut 315).
 
 OFFSETS
-0, 0        # WP1 — srodek brzegu, skan 180 st. wysrodkowany na polnoc
-0, 125      # WP2 — srodek obszaru, skan 360 st.
+-70, 5       # WP1 — rog SW (nad namiotem), skan 90 st. wysrodkowany na 45 (NE)
+0, 125       # WP2 — srodek obszaru, skan 360 st.
 
 # Luki i kursy skanu ustawia misja.yaml, nie ten plik:
-#   scan_arc_deg:     [180.0, 360.0]
-#   scan_heading_deg: [0.0,   0.0]     # 0 = polnoc; przy 360 st. pomijany
-#
-# ─── TRZECI PUNKT, jesli cel ma byc przy samym koncu pola ────────────
-# Z dwoch punktow widac do Y ok. 190 m, a pole ma 250 m. Zeby pokryc reszte,
-# odkomentuj ponizsze i dopisz trzeci luk oraz kurs w misja.yaml:
-#   scan_arc_deg:     [180.0, 360.0, 180.0]
-#   scan_heading_deg: [0.0,   0.0,   180.0]   # ostatni patrzy na POLUDNIE
-#
-# 0, 250    # WP3 — srodek polnocnego brzegu, skan 180 st. na poludnie
+#   scan_arc_deg:     [90.0, 360.0]
+#   scan_heading_deg: [315.0, 0.0]
 #
 # ─── NA REAL: plik z Mission Plannera ────────────────────────────────
 # Narysuj punkty w MP i zapisz jako .waypoints (naglowek "QGC WPL 110").
