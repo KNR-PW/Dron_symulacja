@@ -181,6 +181,15 @@ class SuasMission(SuasFlightController):
         # zapetlilaby pytanie: cel wraca -> pytamy -> znika -> wraca...
         p('wp_budget', 20.0)
         p('wp_acquire', 10.0)      # okno M z N nad waypointem (budzet - confirm)
+        # Gdy nad waypointem pod dronem nic nie widac: skan Z TEGO MIEJSCA,
+        # tymi samymi katami co skan bez geolokatora. Adres bywa przesuniety
+        # (slaba geolokalizacja, cel ruszyl sie miedzy ortofoto a misja),
+        # a cel oddalony o kilkadziesiat metrow jest DALEJ W ZASIEGU — tylko
+        # nie w nadirze. Bez tego jedyna reakcja na "nie widze" byl zrzut
+        # w ciemno na wspolrzedne.
+        p('wp_scan_on_miss', True)
+        p('wp_scan_arc_deg', 360.0)
+        p('wp_scan_timeout', 120.0)
 
         # ── ZAWIS (wspolny ogon obu sciezek) ────────────────────────
         # Te cztery zyja w suas_full_mission, a nie w kontrolerze bazowym —
@@ -224,8 +233,48 @@ class SuasMission(SuasFlightController):
         # kosztuje hamowanie, sprawdzenie i cooldown.
         p('transit_confirm_frames', 4)
         p('transit_window_frames', 8)
+
+        # ── NIZSZE BRAMKI DLA CZLOWIEKA ─────────────────────────────
+        # Namiot ma na 50 m 49 px i wykrywa sie w kazdej klatce. Czlowiek
+        # LEZACY ma 30x22 px, a STOJACY 8 px — detektor lapie go z przerwami,
+        # wiec te same progi co dla namiotu bywaja NIEPRZECHODZALNE i dron
+        # nigdy nie wchodzi w podlot, mimo ze cel jest w kadrze.
+        #
+        # Ryzyko falszywki rosnie, ale konsekwencja jest ograniczona: po tej
+        # bramce ida jeszcze SPRAWDZ na stojaco, CELUJ, SPACJA i UDANE
+        # centrowanie — a track_id < 0 (podpis migoczacej falszywki) jest
+        # odrzucany niezaleznie od progow.
+        #
+        # Ustaw rowne wartosciom wyzej, zeby wylaczyc nadpisanie.
+        p('person_scan_confirm_frames', 2)
+        p('person_scan_window_frames', 8)
+        p('person_transit_confirm_frames', 3)
+        p('person_transit_window_frames', 8)
+        p('person_det_confirm_frames', 2)
+        p('person_det_window_frames', 8)
+        # NAJWAZNIEJSZE dla czlowieka. require_same_track robi dwie rzeczy:
+        # odrzuca track_id < 0 (podpis migoczacej falszywki) ORAZ czysci okno
+        # przy kazdej zmianie ID. Przy celu widzianym w ~28% klatek tracker
+        # gubi sciezke i nadaje nowe ID przy kazdym powrocie, wiec okno nigdy
+        # sie nie domyka — a trafienie z track_id < 0 nie odswieza nawet
+        # last_det_time, przez co CELUJ od razu melduje "cel zniknal".
+        #
+        # UWAGA: to zdejmuje zabezpieczenie, ktore 2026-09-02 zlapalo drzewo
+        # brane za czlowieka (4/6 klatek, ID=-1). Chroni nas juz tylko reszta
+        # lancucha: SPRAWDZ na stojaco, CELUJ, SPACJA i UDANE centrowanie —
+        # cel skaczacy po kadrze nie wycentruje sie, wiec zrzut nie padnie.
+        p('person_require_same_track', False)
+        # Przerwy w detekcji czlowieka sadaja 2 s i wiecej. Przy 3.0 kontroler
+        # uznaje cel za zgubiony w srodku podlotu i wraca do SEARCH.
+        p('person_lost_timeout', 5.0)
         p('scan_return_to_first', True)  # po ostatnim punkcie wroc na pierwszy
         p('scan_timeout', 600.0)
+        # Po zrzucie na namiot: szukaj czlowieka tym samym skanem, zamiast
+        # wracac z ladunkiem. W trakcie skanu na namiot NIKT nie obserwowal
+        # klasy CZLOWIEK (watcher sluchal /tent_detections), wiec teren jest
+        # pod tym katem nieogladany — mimo ze dron nad nim przelecial.
+        p('search_person_after_tent', True)
+        p('person_scan_timeout', 300.0)
         p('pitch_transit', -55.0)        # kat w przelocie miedzy punktami
         # Cisza dla klasy po falszywce — inaczej ten sam krzak zatrzymywalby
         # drona w kolko.
@@ -249,6 +298,9 @@ class SuasMission(SuasFlightController):
         self.finish_action = str(g('finish_action').value).lower()
         self.wp_budget = g('wp_budget').value
         self.wp_acquire = g('wp_acquire').value
+        self.wp_scan_on_miss = g('wp_scan_on_miss').value
+        self.wp_scan_arc_deg = g('wp_scan_arc_deg').value
+        self.wp_scan_timeout = g('wp_scan_timeout').value
         self.approach_timeout = g('approach_timeout').value
         self.center_lost_timeout = g('center_lost_timeout').value
         self.center_tol_m = g('center_tol_m').value
@@ -268,8 +320,25 @@ class SuasMission(SuasFlightController):
         self.scan_n = g('scan_window_frames').value
         self.transit_m = g('transit_confirm_frames').value
         self.transit_n = g('transit_window_frames').value
+        self.p_scan_m = g('person_scan_confirm_frames').value
+        self.p_scan_n = g('person_scan_window_frames').value
+        self.p_transit_m = g('person_transit_confirm_frames').value
+        self.p_transit_n = g('person_transit_window_frames').value
+        self.p_det_m = g('person_det_confirm_frames').value
+        self.p_det_n = g('person_det_window_frames').value
+        self.p_same_track = g('person_require_same_track').value
+        self.p_lost_timeout = g('person_lost_timeout').value
+        # Bramka kontrolera jest MUTOWANA per klasa (_apply_class), wiec
+        # wartosci wyjsciowe trzeba zapamietac — inaczej po obsluzeniu
+        # czlowieka namiot dostalby jego, luzniejsze progi.
+        self.tent_det_m = self.det_confirm_frames
+        self.tent_det_n = self.det_window_frames
+        self.tent_same_track = self.require_same_track
+        self.tent_lost_timeout = self.lost_timeout
         self.scan_return_to_first = g('scan_return_to_first').value
         self.scan_timeout = g('scan_timeout').value
+        self.search_person_after_tent = g('search_person_after_tent').value
+        self.person_scan_timeout = g('person_scan_timeout').value
         self.pitch_transit = g('pitch_transit').value
         self.det_cooldown = g('det_cooldown').value
         self.scan_det_cooldown = g('scan_det_cooldown').value
@@ -285,6 +354,13 @@ class SuasMission(SuasFlightController):
                 f"center_tol_m({self.center_tol_m}) < hover_deadzone_m"
                 f"({self.hover_deadzone_m}) — podnosze")
             self.center_tol_m = self.hover_deadzone_m
+
+        for opis, m, n in (('person_scan', self.p_scan_m, self.p_scan_n),
+                           ('person_transit', self.p_transit_m, self.p_transit_n),
+                           ('person_det', self.p_det_m, self.p_det_n)):
+            if m > n:
+                self.get_logger().warn(
+                    f"{opis}: M({m}) > N({n}) — warunek nie do spelnienia")
 
         if self.scan_m > self.scan_n:
             self.get_logger().warn(
@@ -332,7 +408,14 @@ class SuasMission(SuasFlightController):
         self.get_logger().info(
             f"skan: krok {self.scan_yaw_step:.0f} st., luki {self.scan_arc_deg}, "
             f"nadir {self.scan_pitch_nadir:.0f} raz + {self.scan_pitches} na pozycje, "
-            f"dwell {self.scan_dwell:.1f}s, bramka {self.scan_m} z {self.scan_n}")
+            f"dwell {self.scan_dwell:.1f}s")
+        self.get_logger().info(
+            f"bramki M z N — NAMIOT: skan {self.scan_m}/{self.scan_n}, "
+            f"przelot {self.transit_m}/{self.transit_n}, "
+            f"kontroler {self.tent_det_m}/{self.tent_det_n} | "
+            f"CZLOWIEK: skan {self.p_scan_m}/{self.p_scan_n}, "
+            f"przelot {self.p_transit_m}/{self.p_transit_n}, "
+            f"kontroler {self.p_det_m}/{self.p_det_n}")
 
     # ═══════════════════════════════════════════════════════════
     #  Pomocnicze
@@ -773,6 +856,64 @@ class SuasMission(SuasFlightController):
     #  SCIEZKA B — mam adres
     # ═══════════════════════════════════════════════════════════
 
+    def _skan_z_waypointu(self, cid) -> bool:
+        """Skan Z WAYPOINTU, gdy pod dronem nic nie widac. True = zrzucone.
+
+        Po co: waypoint z geolokatora bywa przesuniety o kilkadziesiat metrow
+        (slaba geolokalizacja, cel ruszyl sie miedzy przelotem ortofoto
+        a misja). Dotad jedyna reakcja na "nie widze" byl zrzut w ciemno na
+        wspolrzedne — a cel oddalony o 40 m jest DALEJ W ZASIEGU, tylko nie
+        w nadirze. Te same katy co skan bez geolokatora siegaja ok. 78 m
+        wokol waypointu, wiec obejmuja caly realny blad adresu.
+
+        Cel znaleziony skanem jest OBOK, nie pod dronem, wiec dalsza obsluga
+        idzie sciezka A (CELUJ, potwierdzenie, PODLOT, ZAWIS) — a nie samym
+        zawisem, ktory zaklada cel w nadirze.
+        """
+        name, _key, topic = self.klasy[cid]
+        self.get_logger().info(
+            f"{name}: pod waypointem nic nie widac — skanuje "
+            f"{self.wp_scan_arc_deg:.0f} st. z tego miejsca")
+
+        # Watcher ZAWSZE swiezy: deliver woluje sie raz na klase, a stary
+        # sluchalby topicu poprzedniej (namiot vs czlowiek).
+        if self.watcher is not None:
+            try:
+                self.destroy_subscription(self.watcher.sub)
+            except Exception:
+                pass
+        self._apply_class(cid)
+        self.watcher = ScanWatcher(self, topic, *self._gate(cid, 'scan'))
+        self._deadline = time.time() + self.wp_scan_timeout
+
+        # Luk pelny, wiec kurs nie ma znaczenia — cel moze byc w dowolna strone
+        # od waypointu.
+        cells = self._build_scan_cells(self.wp_scan_arc_deg, 0.0)
+        od = 0
+        while od < len(cells) and not self._abort:
+            trafil = self.scan_at_point(cells, od)
+            if trafil is None:
+                return False
+            if self.handle_scan_target(class_id=cid,
+                                       kontekst='skanem nad waypointem'):
+                return True
+            # Falszywka: wznawiamy od NASTEPNEJ komorki zamiast porzucac
+            # reszte obwodu.
+            od = trafil + 1
+        return False
+
+    def _zrzut_na_wspolrzedne(self, cid, lat, lon) -> bool:
+        """Sciezka domyslna. Wracamy nad sam waypoint, bo skan albo centrowanie
+        mogly nas z niego zsunac, a adres jest tym, w co naprawde wierzymy."""
+        name = self.klasy[cid][0]
+        self.get_logger().warn(f"{name}: ZRZUT NA WSPOLRZEDNE")
+        self.action_interrupt = None
+        self._gimbal(self.pitch_min)
+        self.send_goto_global(lat, lon, self.target_alt)
+        self._spin(1.0)
+        self.drop(cid)
+        return True
+
     def deliver(self, cid, lat, lon, src, n_obs) -> bool:
         """Dolot na waypoint i zrzut. Zawsze konczy sie zrzutem.
 
@@ -783,6 +924,7 @@ class SuasMission(SuasFlightController):
         adresu, ktory ktos juz zweryfikowal.
         """
         name, _key, topic = self.klasy[cid]
+        self._apply_class(cid)
         self.set_detection_topic(topic)
         self.action_interrupt = None
         self.get_logger().info(
@@ -805,46 +947,89 @@ class SuasMission(SuasFlightController):
 
         widoczny = self.wait_acquire(timeout=min(self.wp_acquire, zostalo()))
 
+        # Nie ma go POD dronem. Zanim zrzucimy w ciemno — sprawdzmy, czy nie
+        # stoi OBOK (patrz _skan_z_waypointu). Skan konczy sie albo zrzutem
+        # nad wycentrowanym celem, albo niczym; w obu razach dalej juz nie
+        # pytamy, bo handle_scan_target zadal swoje pytanie.
+        if not widoczny and self.wp_scan_on_miss:
+            if self._skan_z_waypointu(cid):
+                return True
+            return self._zrzut_na_wspolrzedne(cid, lat, lon)
+
         # Pytanie zadawane RAZ. Nawet jesli cel zniknie i wroci, nie pytamy
         # drugi raz — to jest zabezpieczenie przed petla nad jednym punktem.
+        # Pytamy TYLKO gdy cel jest widoczny: przy braku detekcji spacja i tak
+        # nie zmienialaby niczego (obie odpowiedzi konczyly sie zrzutem na
+        # wspolrzedne), a kosztowala pelne confirm_timeout czekania w prozni.
         if widoczny:
-            monit = ("Widze cel w kadrze.\n"
-                     "[SPACJA] = wycentruj na nim i zrzuc     "
-                     "[nic] = zrzut na wspolrzedne waypointu")
-        else:
-            monit = ("NIE widze celu w kadrze.\n"
-                     "[SPACJA] = nic nie zmieni, i tak zrzucam na wspolrzedne     "
-                     "[nic] = zrzut na wspolrzedne")
-        czas = min(self.confirm_timeout, zostalo())
-        approved = False
-        if czas > 0.5:
-            approved = self.wait_confirm(
-                f"=== {name} (zrodlo: {src}, obs={n_obs}) ===\n{monit}   "
-                f"({czas:.0f}s)", timeout=czas)
-        else:
-            self.get_logger().warn(
-                f"{name}: budzet {self.wp_budget:.0f}s wyczerpany przed pytaniem")
+            czas = min(self.confirm_timeout, zostalo())
+            approved = False
+            if czas > 0.5:
+                approved = self.wait_confirm(
+                    f"=== {name} (zrodlo: {src}, obs={n_obs}) ===\n"
+                    f"Widze cel w kadrze.\n"
+                    f"[SPACJA] = wycentruj na nim i zrzuc     "
+                    f"[nic] = zrzut na wspolrzedne waypointu   "
+                    f"({czas:.0f}s)", timeout=czas)
+            else:
+                self.get_logger().warn(
+                    f"{name}: budzet {self.wp_budget:.0f}s wyczerpany przed pytaniem")
 
-        if approved and widoczny:
-            if self.approach_and_center(over_target=True):
-                self.get_logger().info(f"{name}: ZRZUT NAD WYCENTROWANYM CELEM")
-                self.drop(cid)
-                return True
-            self.get_logger().warn(
-                f"{name}: centrowanie sie nie udalo — schodze na wspolrzedne")
+            if approved:
+                if self.approach_and_center(over_target=True):
+                    self.get_logger().info(f"{name}: ZRZUT NAD WYCENTROWANYM CELEM")
+                    self.drop(cid)
+                    return True
+                self.get_logger().warn(
+                    f"{name}: centrowanie sie nie udalo — schodze na wspolrzedne")
 
-        # Sciezka domyslna. Wracamy nad sam waypoint, bo centrowanie moglo nas
-        # z niego zsunac, a adres jest tym, w co naprawde wierzymy.
-        self.get_logger().warn(f"{name}: ZRZUT NA WSPOLRZEDNE")
-        self.action_interrupt = None
-        self.send_goto_global(lat, lon, self.target_alt)
-        self._spin(1.0)
-        self.drop(cid)
-        return True
+        return self._zrzut_na_wspolrzedne(cid, lat, lon)
 
     # ═══════════════════════════════════════════════════════════
     #  SCIEZKA A — skan
     # ═══════════════════════════════════════════════════════════
+
+    def _gate(self, cid, faza):
+        """Progi M z N dla danej KLASY i FAZY. Czlowiek ma wlasne, nizsze."""
+        if cid == PERSON:
+            return {'scan': (self.p_scan_m, self.p_scan_n),
+                    'transit': (self.p_transit_m, self.p_transit_n),
+                    'det': (self.p_det_m, self.p_det_n)}[faza]
+        return {'scan': (self.scan_m, self.scan_n),
+                'transit': (self.transit_m, self.transit_n),
+                'det': (self.tent_det_m, self.tent_det_n)}[faza]
+
+    def _apply_class(self, cid):
+        """Przestaw KONTROLER pod dana klase: bramka M z N, wymog ciaglosci
+        ID trackera i czas, po ktorym cel uznajemy za zgubiony.
+
+        Wszystkie trzy sa w klasie bazowej jako pojedyncze wartosci, wiec
+        misja je MUTUJE przy przejsciu miedzy klasami. Wartosci wyjsciowe
+        (namiotowe) siedza w tent_*, zeby dalo sie wrocic.
+
+        Okno jest kroczacym buforem o stalej dlugosci, wiec zmiana N wymaga
+        zbudowania go od nowa — sama podmiana liczby nic by nie dala.
+        """
+        m, n = self._gate(cid, 'det')
+        same = self.p_same_track if cid == PERSON else self.tent_same_track
+        lost = self.p_lost_timeout if cid == PERSON else self.tent_lost_timeout
+        if (m, n, same, lost) == (self.det_confirm_frames, self.det_window_frames,
+                                  self.require_same_track, self.lost_timeout):
+            return
+        self.get_logger().info(
+            f"kontroler pod {self.klasy[cid][0]}: bramka {m} z {n}, "
+            f"same_track={same}, lost_timeout={lost:.1f}s")
+        self.det_confirm_frames = m
+        self.det_window_frames = n
+        self.require_same_track = same
+        self.lost_timeout = lost
+        self._det_window = deque(maxlen=n)
+        self._cand_id = -1
+
+    def _mute(self, seconds):
+        """Cisza dla obserwatora skanu — bezpieczna, gdy watchera nie ma."""
+        if self.watcher is not None:
+            self.watcher.mute(seconds)
 
     def _watch_scan(self) -> bool:
         """Haczyk dla akcji goto: czy watcher wlasnie potwierdzil cel.
@@ -1004,7 +1189,8 @@ class SuasMission(SuasFlightController):
             # nie dzialaja przy wlaczonym sterowaniu predkosciowym.
             self._vel_off()
 
-    def handle_scan_target(self, w_locie=False) -> bool:
+    def handle_scan_target(self, w_locie=False, class_id=TENT,
+                           kontekst='skanem') -> bool:
         """Cel zobaczony w skanie albo w przelocie — sciezka A z sekcji 2.
 
         STOP jest konieczny, bo przerwanie akcji NIE zatrzymuje drona:
@@ -1015,23 +1201,25 @@ class SuasMission(SuasFlightController):
         czulszym oknem skanu — skan ma nie przegapic, sprawdzenie ma sie nie
         dac oszukac.
         """
-        name, _key, topic = self.klasy[TENT]
+        name, _key, topic = self.klasy[class_id]
+        cisza = self.det_cooldown if w_locie else self.scan_det_cooldown
         self.get_logger().info(f"╔══ {name} ══ STOP i sprawdzenie na stojaco")
 
         self.action_interrupt = None
         self.send_goto_global(self.global_lat, self.global_lon, self.target_alt)
         self._spin(self.brake_settle_time)
 
+        self._apply_class(class_id)
         self.set_detection_topic(topic)
         if not self.wait_acquire(timeout=self.reconfirm_timeout):
-            self.watcher.mute(self.det_cooldown if w_locie else self.scan_det_cooldown)
+            self._mute(cisza)
             self.get_logger().warn(
                 f"{name}: na stojaco cel sie nie potwierdzil — falszywka, "
-                f"cisza {self.det_cooldown if w_locie else self.scan_det_cooldown:.0f}s")
+                f"cisza {cisza:.0f}s")
             return False
 
         if not self.aim_at_target():
-            self.watcher.mute(self.det_cooldown if w_locie else self.scan_det_cooldown)
+            self._mute(cisza)
             return False
 
         # SPACJA bramkuje PODLOT. Gdy operatora NIE MA, pytanie poszloby
@@ -1040,12 +1228,12 @@ class SuasMission(SuasFlightController):
         # w ciemno, a cel znikajacy w centrowaniu to prawie na pewno falszywka.
         if self.operator_watching():
             approved = self.wait_confirm(
-                f"=== {name} (znaleziony skanem) ===\n"
+                f"=== {name} (znaleziony {kontekst}) ===\n"
                 f"[SPACJA] = podlec i zrzuc     "
                 f"[nic] = to nie ten cel, skanuje dalej   "
                 f"({self.confirm_timeout:.0f}s)")
             if not approved:
-                self.watcher.mute(self.det_cooldown if w_locie else self.scan_det_cooldown)
+                self._mute(cisza)
                 self.get_logger().warn(
                     f"{name}: operator NIE potwierdzil — wracam do skanu")
                 return False
@@ -1055,40 +1243,114 @@ class SuasMission(SuasFlightController):
                 f"po udanym wycentrowaniu")
 
         if not self.approach_and_center(over_target=False):
-            self.watcher.mute(self.det_cooldown if w_locie else self.scan_det_cooldown)
+            self._mute(cisza)
             self._gimbal(self.pitch_transit)
             self.get_logger().warn(
                 f"{name}: cel zniknal w trakcie centrowania — falszywka, "
-                f"NIE zrzucam (cisza {self.det_cooldown:.0f}s)")
+                f"NIE zrzucam (cisza {cisza:.0f}s)")
             return False
 
         self.get_logger().info(f"{name}: ZRZUT NAD WYCENTROWANYM CELEM")
-        self.drop(TENT)
+        self.drop(class_id)
         return True
 
-    def search_tent(self) -> bool:
-        """Trasa skanu: WP1 -> WP2 -> (powrot na WP1). Detektor patrzy
-        rowniez w przelocie, bo tu nie ma lepszego adresu niz to, co widac."""
-        name, _key, topic = self.klasy[TENT]
-        pts = self._load_waypoints(self._resolve_asset(self.scan_waypoints))
-        if not pts:
-            return False
-        if self.scan_return_to_first and len(pts) > 1:
-            pts = pts + [pts[0]]
+    def _skan_punktu(self, cid, arc, hdg) -> bool:
+        """Skan z postoju na JEDNYM punkcie. True = ladunek poszedl."""
+        self.watcher.set_gate(*self._gate(cid, 'scan'))
+        # Cisza z PRZELOTU nie obowiazuje w skanie. Inaczej falszywka zlapana
+        # w drodze oslepia poczatek skanu na nowym punkcie — 2026-09-07
+        # wyciela 4 z 6 pozycji yaw, a namiot byl na 5/6.
+        self.watcher.mute_until = 0.0
+        self.watcher.reset()
+        cells = self._build_scan_cells(arc, hdg)
+        od = 0
+        while od < len(cells) and not self._abort:
+            trafil = self.scan_at_point(cells, od)
+            if trafil is None:
+                return False                   # przeszedl wszystko, nic
+            if self.handle_scan_target(class_id=cid):
+                return True
+            # Falszywka: wznawiamy od NASTEPNEJ komorki, zamiast porzucac
+            # reszte punktu.
+            od = trafil + 1
+        return False
 
+    def search_class(self, cid, skan_w_miejscu=False, budzet=None) -> bool:
+        """Skan trasy dla JEDNEJ klasy. True = ladunek poszedl.
+
+        Detektor patrzy rowniez w przelocie miedzy punktami, bo tu nie ma
+        lepszego adresu niz to, co widac.
+
+        skan_w_miejscu=True: zacznij od pelnego obrotu TU, GDZIE JESTESMY,
+        a trase zacznij od NAJBLIZSZEGO punktu i idz dalej cyklicznie.
+        Sluzy do szukania czlowieka po zrzucie na namiot: dron stoi wtedy nad
+        namiotem, czyli gdzies posrodku pola, a nie na WP1. Powrot na WP1 tylko
+        po to, zeby zaczac "od poczatku", bylby czystym przelotem bez zysku —
+        a obrot w miejscu jest darmowy, bo dron juz tam wisi.
+        """
+        name, _key, topic = self.klasy[cid]
+        bazowe = self._load_waypoints(self._resolve_asset(self.scan_waypoints))
+        if not bazowe:
+            return False
+
+        # Kazdy punkt niesie SWOJ indeks w konfiguracji, bo kolejnosc moze sie
+        # zmienic (start od najblizszego), a luk i kurs sa przypisane do
+        # PUNKTU, nie do miejsca w kolejce.
+        trasa = [(i, la, lo) for i, (la, lo) in enumerate(bazowe)]
+        if skan_w_miejscu:
+            # Kolejnosc "najblizszy sasiad": z miejsca zrzutu do najblizszego
+            # punktu, potem za kazdym razem do najblizszego z pozostalych.
+            # Cykliczne przesuniecie listy (WP3 -> WP1 -> WP2) byloby gorsze,
+            # bo trasa jest LINIA, a nie petla: przy trzech punktach dawalo
+            # 425 m przelotu zamiast 300 m.
+            zostalo, trasa = list(trasa), []
+            poz_lat, poz_lon = self.global_lat, self.global_lon
+            while zostalo:
+                j = min(range(len(zostalo)),
+                        key=lambda z: math.hypot(
+                            (zostalo[z][1] - poz_lat) * M_LAT,
+                            (zostalo[z][2] - poz_lon) * _m_per_deg_lon(poz_lat)))
+                trasa.append(zostalo[j])
+                poz_lat, poz_lon = zostalo[j][1], zostalo[j][2]
+                zostalo.pop(j)
+        elif self.scan_return_to_first and len(bazowe) > 1:
+            trasa.append((0, bazowe[0][0], bazowe[0][1]))
+
+        # Watcher ZAWSZE swiezy i na wlasciwym topicu — poprzednia klasa
+        # sluchala innego.
+        if self.watcher is not None:
+            try:
+                self.destroy_subscription(self.watcher.sub)
+            except Exception:
+                pass
+        self._apply_class(cid)
         self.set_detection_topic(topic)
-        self.watcher = ScanWatcher(self, topic, self.scan_m, self.scan_n)
-        self._deadline = time.time() + self.scan_timeout
+        self.watcher = ScanWatcher(self, topic, *self._gate(cid, 'scan'))
+        czas = budzet if budzet else self.scan_timeout
+        self._deadline = time.time() + czas
         self.get_logger().info(
-            f"{name}: SKAN — {len(pts)} punktow, budzet {self.scan_timeout:.0f}s")
+            f"{name}: SKAN — {len(trasa)} punktow, budzet {czas:.0f}s"
+            + (f", start obrotem w miejscu, potem od najblizszego "
+               f"(WP{trasa[0][0] + 1})" if skan_w_miejscu else ""))
+        if skan_w_miejscu:
+            self.get_logger().info(
+                f"{name}: kolejnosc punktow "
+                + " -> ".join(f"WP{i + 1}" for i, _la, _lo in trasa))
 
         try:
-            for i, (wlat, wlon) in enumerate(pts):
+            if skan_w_miejscu:
+                self.get_logger().info(
+                    f"{name}: obrot 360 st. w miejscu, bez przelotu")
+                if self._skan_punktu(cid, 360.0, None):
+                    return True
+
+            for nr, (idx, wlat, wlon) in enumerate(trasa, 1):
                 if self._abort or time.time() > self._deadline:
                     self.get_logger().warn("skan: koniec budzetu czasu")
                     return False
                 self.get_logger().info(
-                    f"=== punkt {i + 1}/{len(pts)} === {self._dist_to(wlat, wlon):.0f} m stad")
+                    f"=== punkt {nr}/{len(trasa)} (WP{idx + 1}) === "
+                    f"{self._dist_to(wlat, wlon):.0f} m stad")
 
                 # Dolot z obserwacja. Przerwany w polowie -> po obsluzeniu celu
                 # wracamy na kurs do TEGO SAMEGO punktu, zeby nie zgubic
@@ -1097,7 +1359,7 @@ class SuasMission(SuasFlightController):
                     if self._dist_to(wlat, wlon) <= self.arrive_tol:
                         break
                     self._gimbal(self.pitch_transit)
-                    self.watcher.set_gate(self.transit_m, self.transit_n)
+                    self.watcher.set_gate(*self._gate(cid, 'transit'))
                     self.watcher.reset()
                     self._scan_hit = False
                     self.action_interrupt = self._watch_scan
@@ -1108,34 +1370,17 @@ class SuasMission(SuasFlightController):
                     if not self._scan_hit:
                         break
                     self._scan_hit = False
-                    if self.handle_scan_target(w_locie=True):
+                    if self.handle_scan_target(w_locie=True, class_id=cid):
                         return True
 
-                # Skan z postoju. Luk per punkt; powrot na WP1 dostaje ten sam
-                # luk co WP1.
-                idx = i if i < len(pts) - 1 or not self.scan_return_to_first else 0
+                # Luk i kurs per PUNKT (indeks z konfiguracji, nie z kolejki).
                 arc = (self.scan_arc_deg[idx] if idx < len(self.scan_arc_deg)
                        else self.scan_arc_deg[-1])
-                self.watcher.set_gate(self.scan_m, self.scan_n)
-                # Cisza z PRZELOTU nie obowiazuje w skanie. Inaczej falszywka
-                # zlapana w drodze oslepia poczatek skanu na nowym punkcie —
-                # 2026-09-07 wyciela 4 z 6 pozycji yaw, a namiot byl na 5/6.
-                self.watcher.mute_until = 0.0
-                self.watcher.reset()
                 hdg = (self.scan_heading_deg[idx]
                        if idx < len(self.scan_heading_deg)
                        else self.scan_heading_deg[-1])
-                cells = self._build_scan_cells(arc, hdg)
-                od = 0
-                while od < len(cells):
-                    trafil = self.scan_at_point(cells, od)
-                    if trafil is None:
-                        break                      # przeszedl wszystko, nic
-                    if self.handle_scan_target():
-                        return True
-                    # Falszywka: wznawiamy od NASTEPNEJ komorki, zamiast
-                    # porzucac reszte punktu.
-                    od = trafil + 1
+                if self._skan_punktu(cid, arc, hdg):
+                    return True
 
             self.get_logger().error(
                 f"{name}: skan przeleciany w calosci, nic nie znaleziono — "
@@ -1204,12 +1449,23 @@ class SuasMission(SuasFlightController):
                 if self.deliver(cid, lat, lon, src, n_obs):
                     done.add(cid)
             elif cid == TENT:
-                if self.search_tent():
+                if self.search_class(TENT):
+                    done.add(cid)
+            elif self.search_person_after_tent:
+                # Obrot 360 w MIEJSCU, gdzie dron akurat stoi (po zrzucie —
+                # nad namiotem), potem trasa od NAJBLIZSZEGO punktu. Szanse sa
+                # ograniczone: na 50 m czlowiek STOJACY ma 8 px, czyli ponizej
+                # progu YOLO. Realnie liczy sie tylko lezacy (30x22 px).
+                self.get_logger().info(
+                    f"{name}: brak adresu — szukam skanem "
+                    f"({'namiot zrzucony' if TENT in done else 'namiotu tez nie bylo'})")
+                if self.search_class(PERSON, skan_w_miejscu=True,
+                                     budzet=self.person_scan_timeout):
                     done.add(cid)
             else:
                 self.get_logger().warn(
-                    f"{name}: brak adresu — nie szukam. Na 50 m czlowiek ma "
-                    f"8 px, wiec skan i tak by go nie znalazl. Ladunek wraca.")
+                    f"{name}: brak adresu, a search_person_after_tent=false "
+                    f"— nie szukam, ladunek wraca.")
 
         self._finish(done)
         return True

@@ -156,7 +156,19 @@ class SuasGeolocator(Node):
         super().__init__('suas_geolocator')
 
         # ── 1. PARAMETRY ────────────────────────────────────────────
-        self.declare_parameter('save_dir', os.path.expanduser('~/suas_targets'))
+        # Domyslnie piszemy WPROST DO REPO, do drone_bringup/config — tam,
+        # gdzie suas_mission szuka targets.json. Bylo ~/suas_targets i to byl
+        # cichy blad: katalog domowy jest INNY na hoscie i w kontenerze
+        # Dockera (montowany jest tylko src/), wiec plik zapisany po jednej
+        # stronie nie istnial po drugiej, a misja startowala z adresem
+        # z poprzedniego lotu albo bez adresu w ogole.
+        #
+        # W symulacji, gdzie ta sciezka nie istnieje, uruchamiaj geolokator
+        # osobno z wlasnym katalogiem:
+        #   ros2 launch drone_bringup suas_geolocator.launch.py \
+        #       save_dir:=/root/ros_ws/src/drone_bringup/config
+        self.declare_parameter('save_dir', os.path.expanduser(
+            '~/Dron_symulacja/src/drone_bringup/config'))
         # Gimbal: node sam pilnuje nadiru, zeby kat byl pewny takze po restarcie
         # czegokolwiek. Przy lock_nadir=true suas_gimbal_controller NIE MOZE chodzic.
         self.declare_parameter('lock_nadir', True)

@@ -4,7 +4,7 @@ Launch: caly stack SUAS OPROCZ misji (Jetson, real).
 Jeden terminal zamiast czterech z docs/plan_testow_suas.md:
   - drone_handler        (MAVLink do Orange Cube: telemetria, gimbal_pitch, serwa)
   - suas_detect_jetson   (kamera OAK-D + YOLO + web_video_server + marker_web)
-  - suas_geolocator      (rzutuje /*_detections na ziemie -> ~/suas_targets/targets.json)
+  - suas_geolocator      (rzutuje /*_detections na ziemie -> config/targets.json)
 
 Misji (suas_full_mission) TU NIE MA — ona musi isc osobno przez `ros2 run`, bo
 czyta klawiature (wait_confirm) i potrzebuje stdin podpietego do terminala.
