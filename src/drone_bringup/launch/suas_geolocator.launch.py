@@ -27,8 +27,13 @@ from launch_ros.parameter_descriptions import ParameterValue
 def generate_launch_description():
     save_dir_arg = DeclareLaunchArgument(
         "save_dir",
-        default_value=os.path.expanduser("~/suas_targets"),
-        description="Katalog wynikow; tent_target.json + podkatalog na kazdy lot",
+        # MUSI byc to samo co domyslna w suas_geolocator.py — launch podaje
+        # save_dir jawnie jako parametr, wiec ta wartosc NADPISUJE tamta.
+        default_value=os.path.expanduser(
+            "~/Dron_symulacja/src/drone_bringup/config"),
+        description=("Katalog wynikow: targets.json (czyta go suas_mission) "
+                     "+ podkatalog na kazdy lot. W symulacji podaj wlasny, "
+                     "np. /root/ros_ws/src/drone_bringup/config"),
     )
     lock_nadir_arg = DeclareLaunchArgument(
         "lock_nadir",

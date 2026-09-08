@@ -63,6 +63,20 @@
     #   dalej   ZAWIS (wlasny limit) albo ZRZUT NA WSPOLRZEDNE
     wp_budget: 20.0
     wp_acquire: 10.0
+
+    # Gdy nad waypointem pod dronem NIC nie widac — skan z tego miejsca,
+    # tymi samymi katami co skan bez geolokatora, zamiast zrzutu w ciemno.
+    # Adres bywa przesuniety (slaba geolokalizacja, cel ruszyl sie miedzy
+    # przelotem ortofoto a misja), a cel oddalony o kilkadziesiat metrow jest
+    # DALEJ W ZASIEGU — tylko nie w nadirze. Skan siega ok. 78 m wokol
+    # waypointu, czyli obejmuje caly realny blad adresu.
+    #
+    # Cel znaleziony tym skanem jest OBOK, nie pod dronem, wiec obsluga idzie
+    # sciezka A (CELUJ -> SPACJA -> PODLOT -> ZAWIS), a nie samym zawisem.
+    # Nic nie znalazl -> zrzut na wspolrzedne, tak jak dotad.
+    wp_scan_on_miss: true
+    wp_scan_arc_deg: 360.0
+    wp_scan_timeout: 120.0
     confirm_timeout: 10.0
 
     # ═══ SCIEZKA A — CELUJ (obrot na cel przed podlotem) ═════════════
@@ -101,10 +115,77 @@
     # Bramka detekcji w PRZELOCIE (ostrzejsza). Falszywka hamuje drona i oslepia detektor.
     transit_confirm_frames: 4
     transit_window_frames: 8
+
+    # ─── NIZSZE BRAMKI DLA CZLOWIEKA ─────────────────────────────────
+    # Namiot ma na 50 m 49 px i wykrywa sie w kazdej klatce. Czlowiek LEZACY
+    # ma 30x22 px, a STOJACY 8 px — detektor lapie go z przerwami, wiec te
+    # same progi co dla namiotu bywaja NIEPRZECHODZALNE: cel jest w kadrze,
+    # a dron nigdy nie wchodzi w podlot.
+    #
+    # Dzialaja w trzech miejscach, kazde ma swoja pare:
+    #   scan     - obserwator na postoju: czy warto sie zatrzymac i sprawdzic
+    #   transit  - obserwator w przelocie (ostrzejszy: obraz rozmyty ruchem)
+    #   det      - bramka KONTROLERA: SPRAWDZ na stojaco oraz SEARCH -> APPROACH
+    #              (to ta decyduje o wejsciu w podlot i centrowanie)
+    #
+    # Ryzyko falszywki rosnie, ale konsekwencja jest ograniczona: po tych
+    # bramkach ida jeszcze SPRAWDZ na stojaco, CELUJ, SPACJA i UDANE
+    # centrowanie. Detekcja bez ID trackera (podpis migoczacej falszywki)
+    # jest odrzucana niezaleznie od progow.
+    #
+    # Ustaw rowne wartosciom wyzej, zeby wylaczyc nadpisanie dla danej fazy.
+    # Zmierzone 2026-09-08 na realu: gdy czlowiek JEST w kadrze, detektor
+    # lapie go w ~28% klatek (skrajnie 12-44%) przy 7-8 FPS. Szansa domkniecia
+    # okna przy tej skutecznosci:
+    #     4 z 8 -> 25%      3 z 8 -> 52%      2 z 8 -> 80%
+    # Stad 2 z 8 tam, gdzie bramka BLOKUJE podlot.
+    person_scan_confirm_frames: 2      # zamiast 3
+    person_scan_window_frames: 8       # szersze okno = wiecej szans w komorce
+    # W przelocie zostaje ostrzej: falszywy stop kosztuje hamowanie
+    # + sprawdzenie + cisze, a czlowieka i tak lapiemy glownie na postoju.
+    person_transit_confirm_frames: 3   # zamiast 4
+    person_transit_window_frames: 8
+    person_det_confirm_frames: 2       # zamiast 4 — to ta wpuszcza w podlot
+    person_det_window_frames: 8
+
+    # NAJWAZNIEJSZE z calej tej sekcji. require_same_track odrzuca track_id < 0
+    # ORAZ czysci okno przy kazdej zmianie ID. Przy celu widzianym w 28% klatek
+    # tracker gubi sciezke i nadaje nowe ID przy kazdym powrocie, wiec okno
+    # NIGDY sie nie domyka — a trafienie z track_id < 0 nie odswieza nawet
+    # last_det_time, przez co CELUJ od razu melduje "cel zniknal".
+    #
+    # UWAGA: to zdejmuje zabezpieczenie, ktore 2026-09-02 zlapalo drzewo brane
+    # za czlowieka (4/6 klatek, ID=-1). Zostaje reszta lancucha: SPRAWDZ na
+    # stojaco, CELUJ, SPACJA i UDANE centrowanie — cel skaczacy po kadrze sie
+    # nie wycentruje, wiec zrzut nie padnie. Dla NAMIOTU zabezpieczenie
+    # zostaje wlaczone (require_same_track wyzej).
+    person_require_same_track: false
+
+    # Przerwy w detekcji czlowieka siegaja 2 s (ciagi 0/16 w logu), a dwie pod
+    # rzad to 4,4 s. Przy 3.0 kontroler uznaje cel za zgubiony w srodku
+    # podlotu i wraca do SEARCH. Cena: przez te 5 s dron leci na OSTATNIA
+    # znana pozycje celu, wiec przy falszywce moze zjechac kilkanascie metrow.
+    person_lost_timeout: 5.0
     
     # Czy po skonczeniu trasy dron ma wrocic na poczatek (WP1) i powtorzyc skan.
     scan_return_to_first: true
     scan_timeout: 600.0
+
+    # Po zrzucie na namiot — szukaj czlowieka tym samym skanem, zamiast wracac
+    # z ladunkiem. Ma sens, bo w trakcie skanu na namiot NIKT nie obserwowal
+    # klasy CZLOWIEK (watcher sluchal tylko /tent_detections), wiec teren jest
+    # pod tym katem nieogladany, mimo ze dron nad nim przelecial.
+    #
+    # Przebieg: obrot 360 st. W MIEJSCU (dron stoi nad namiotem, obrot jest
+    # darmowy) -> lot do NAJBLIZSZEGO punktu trasy -> jego skonfigurowany skan
+    # -> dalej cyklicznie (np. WP2, WP3, WP1). Powrot na WP1 tylko po to, zeby
+    # zaczac "od poczatku", bylby czystym przelotem bez zysku.
+    #
+    # Szanse sa ograniczone fizyka, nie kodem: na 50 m czlowiek STOJACY ma
+    # 8 px, czyli ponizej progu YOLO. Realnie liczy sie tylko lezacy
+    # (30x22 px na 50 m) — patrz docs/misja.md sekcja 5.
+    search_person_after_tent: true
+    person_scan_timeout: 300.0
     
     # Pochylenie gimbala w przelocie miedzy punktami trasy.
     pitch_transit: -55.0

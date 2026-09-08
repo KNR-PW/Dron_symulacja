@@ -18,12 +18,35 @@ Dla kazdej klasy osobno misja zadaje jedno pytanie: **czy mam adres?**
 
 ```
 NAMIOT   ma waypoint z geolokatora?  TAK -> DOWIEZ      NIE -> SZUKAJ
-CZLOWIEK ma waypoint z geolokatora?  TAK -> DOWIEZ      NIE -> nie rusza, ladunek wraca
+CZLOWIEK ma waypoint z geolokatora?  TAK -> DOWIEZ      NIE -> SZUKAJ (od miejsca,
+                                                               w ktorym stoi)
 ```
 
 To jest cala logika wysokiego poziomu. Nie ma puli kandydatow, nie ma
 rankingu po score, nie ma odrzucania kandydata #1 na rzecz #2, nie ma gridu
 bez konca.
+
+**Czlowiek bez adresu tez jest szukany** — ale dopiero po namiocie i inaczej
+zaczyna. Powod jest prosty: w trakcie skanu na namiot NIKT nie obserwowal
+klasy CZLOWIEK (obserwator sluchal tylko `/tent_detections`), wiec teren jest
+pod tym katem nieogladany, mimo ze dron nad nim przelecial.
+
+Skan dla czlowieka zaczyna sie **obrotem 360 st. W MIEJSCU**, tam gdzie dron
+akurat stoi — czyli po zrzucie nad namiotem. Ten obrot jest darmowy, bo dron
+juz tam wisi. Dopiero potem leci do **najblizszego** punktu trasy i dalej
+kolejnoscia najblizszego sasiada. Powrot na WP1 tylko po to, zeby zaczac
+"od poczatku", bylby czystym przelotem bez zysku.
+
+Kolejnosc liczy sie zachlannie, a nie cyklicznym przesunieciem listy, bo
+trasa jest LINIA, a nie petla: przy trzech punktach i dronie przy WP3
+cykliczne WP3 -> WP1 -> WP2 to 425 m, a WP3 -> WP2 -> WP1 tylko 300 m.
+
+Kazdy punkt zachowuje przy tym **swoj** luk i kurs z `scan_arc_deg` /
+`scan_heading_deg` — sa przypisane do punktu, nie do miejsca w kolejce.
+
+**Ile to realnie daje:** na 50 m czlowiek STOJACY ma 8 px, czyli ponizej progu
+YOLO (sekcja 5). Ta sciezka ma szanse tylko przy czlowieku LEZACYM (30x22 px).
+Wylaczyc: `search_person_after_tent: false`.
 
 **Dlaczego tak.** Adres z geolokatora to albo klaster z setek zbieznych
 obserwacji (zmierzony blad 0,45 m), albo klik operatora, ktory patrzyl na
@@ -113,9 +136,26 @@ jako zero, czyli "wycentrowany", dokladnie wtedy, gdy nie jest.
   1. DOLOT         detektor MILCZY przez cala droge
   2. STOP          nad waypointem, gimbal w pion       <- start budzetu 20 s
   3. OKNO M z N    max 10 s — czy jest co centrowac
-  4. SPACJA        10 s, zadane RAZ
-  5. ZAWIS + ZRZUT      albo      ZRZUT NA WSPOLRZEDNE
+     widzi   -> 4. SPACJA 10 s, zadane RAZ -> ZAWIS + ZRZUT / na wspolrzedne
+     nie widzi -> 3b. SKAN 360 st. Z WAYPOINTU (wp_scan_on_miss)
+                     znalazl -> sciezka A: CELUJ -> SPACJA -> PODLOT -> ZAWIS
+                     nie     -> ZRZUT NA WSPOLRZEDNE
 ```
+
+**Krok 3b istnieje, bo adres bywa przesuniety.** Slaba geolokalizacja albo cel,
+ktory ruszyl sie miedzy przelotem ortofoto a misja, daja waypoint obok celu.
+Dotad jedyna reakcja na "nie widze" byl zrzut w ciemno na wspolrzedne — a cel
+oddalony o 40 m jest DALEJ W ZASIEGU, tylko nie w nadirze. Skan tymi samymi
+katami co w trybie SZUKAJ siega ok. 78 m wokol waypointu, czyli obejmuje caly
+realny blad adresu.
+
+Cel znaleziony tym skanem jest **OBOK, nie pod dronem**, wiec dalej idzie
+sciezka A (z krokiem CELUJ), a nie sam ZAWIS — ten zaklada cel w nadirze.
+
+**Pytania nie zadajemy, gdy celu nie widac.** Wczesniej misja pytala takze
+wtedy, ale monit brzmial "[SPACJA] = nic nie zmieni, i tak zrzucam na
+wspolrzedne" — obie odpowiedzi konczyly sie tak samo, a czekanie kosztowalo
+pelne `confirm_timeout`. Teraz ten czas idzie na skan, ktory moze cos zmienic.
 
 **Budzet 20 s od dolotu i pytanie zadane RAZ** — to sa dwa zabezpieczenia
 przed ta sama petla: detekcja przychodzi, pytamy, cel znika, detekcja wraca,
@@ -179,7 +219,9 @@ okno M z N, max 10 s
 zapytaj RAZ, 10 s:
     SPACJA        -> ZAWIS na detekcji i zrzut tam
     nic przez 10s -> ZRZUT NA WSPOLRZEDNE
-    brak detekcji -> ZRZUT NA WSPOLRZEDNE
+brak detekcji -> SKAN 360 st. z waypointu
+    znalazl   -> CELUJ, SPACJA, PODLOT, ZAWIS, zrzut nad celem
+    nie       -> ZRZUT NA WSPOLRZEDNE
 nastepna klasa
 ```
 
@@ -595,6 +637,9 @@ bledem** — znaczy tyle, ze zadna klasa nie ma adresu i namiot idzie skanem.
 wp_budget:      20.0     # od dolotu do decyzji
 wp_acquire:     10.0     # okno M z N nad waypointem
 confirm_timeout:10.0     # pytanie zadawane RAZ
+wp_scan_on_miss: true    # nie widze pod dronem -> skan zamiast zrzutu w ciemno
+wp_scan_arc_deg: 360.0
+wp_scan_timeout: 120.0
 
 # CELUJ
 aim_tol_px:     0.06     # kiedy cel jest w srodku kadru
@@ -611,6 +656,8 @@ scan_yaw_rate:   1.0                    # rad/s TYLKO na skan
 scan_confirm_frames: 3                  # czulsza bramka skanu (M)
 scan_window_frames:  6                  # (N)
 scan_return_to_first: true
+search_person_after_tent: true          # skan na czlowieka po zrzucie na namiot
+person_scan_timeout: 300.0
 pitch_transit:  -55.0                   # kat w przelocie
 ```
 
