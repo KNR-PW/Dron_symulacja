@@ -58,11 +58,16 @@
     # ostateczna, wiec budzet to drugie, niezalezne zabezpieczenie.
     #
     #   t=0     dolot, gimbal w pion
-    #   t<=10   okno M z N (wp_acquire)
-    #   t<=20   pytanie, RAZ (confirm_timeout)
-    #   dalej   ZAWIS (wlasny limit) albo ZRZUT NA WSPOLRZEDNE
+    #   t<=5    okno M z N (wp_acquire)
+    #   dalej   ZAWIS (hover_timeout) albo ZRZUT NA WSPOLRZEDNE
+    # Przy operator_confirm=false pytania nie ma, wiec wp_budget nie ogranicza
+    # juz niczego poza wp_acquire — zostaje jako siatka bezpieczenstwa.
     wp_budget: 20.0
-    wp_acquire: 10.0
+    # 5.0, a nie 10.0: jesli cel jest pod dronem, bramka 4 z 8 domyka sie
+    # w ulamku sekundy. Dziesiec sekund milczenia detektora nie znaczy "zaraz
+    # go zlapie", tylko "nie ma go w kadrze" — a wtedy i tak konczy sie zrzutem
+    # na wspolrzedne. Skrocenie oszczedza 5 s na kazdej klasie.
+    wp_acquire: 5.0
 
     # Gdy nad waypointem pod dronem NIC nie widac — skan z tego miejsca,
     # tymi samymi katami co skan bez geolokatora, zamiast zrzutu w ciemno.
@@ -74,10 +79,41 @@
     # Cel znaleziony tym skanem jest OBOK, nie pod dronem, wiec obsluga idzie
     # sciezka A (CELUJ -> SPACJA -> PODLOT -> ZAWIS), a nie samym zawisem.
     # Nic nie znalazl -> zrzut na wspolrzedne, tak jak dotad.
-    wp_scan_on_miss: true
+    # false = pod waypointem nic nie widac -> OD RAZU zrzut na wspolrzedne,
+    # bez skanu 360 z tego miejsca. Ufamy adresowi z geolokatora: skan kosztuje
+    # do wp_scan_timeout i ma sens tylko wtedy, gdy adres bywa przesuniety
+    # o kilkadziesiat metrow. Wlacz (true), jesli geolokator zacznie sie mylic.
+    wp_scan_on_miss: false
     wp_scan_arc_deg: 360.0
     wp_scan_timeout: 120.0
     confirm_timeout: 10.0
+
+    # ═══ CENTROWANIE NAD CELEM Z ADRESU ══════════════════════════════
+    # Dotyczy WYLACZNIE dolotu na waypoint z targets.json (sciezka B).
+    # false = detektor widzi cel pod dronem, ale misja i tak zrzuca na
+    # wspolrzedne z adresu, bez zawisu z centrowaniem.
+    #
+    # NAMIOT true: bramka 4 z 8 z ciagloscia track_id, 49 px na 50 m — jak
+    # detektor mowi "widze", to widzi, a centrowanie realnie poprawia celnosc.
+    #
+    # CZLOWIEK false: bramka jest rozluzniona do 2 z 8 BEZ ciaglosci ID (bez
+    # tego lezacy czlowiek nigdy by jej nie przeszedl), wiec "widzialem" moze
+    # znaczyc dwie klatki cienia. Adres z geolokatora to klaster setek
+    # obserwacji albo klik operatora — mocniejsza przeslanka niz taka detekcja.
+    # Oszczedza tez do hover_timeout sekund na tej klasie.
+    center_on_tent: true
+    center_on_person: false
+
+    # ═══ POTWIERDZANIE SPACJA ════════════════════════════════════════
+    # false = misja NIGDY nie pyta i nie czeka na SPACJE, dokladnie tak, jakby
+    # suas_marker_web nie byl podlaczony. W obu miejscach, ktore dotad pytaly,
+    # decyduje detektor:
+    #   * cel ze skanu -> zrzut WYLACZNIE po udanym wycentrowaniu,
+    #   * cel z adresu w targets.json widoczny w kadrze -> centrowanie na tym,
+    #     co widac; dopiero nieudane centrowanie schodzi na wspolrzedne.
+    # Oszczedza do confirm_timeout na kazdym celu.
+    # true = wroc do pytania (i tak zadziala tylko przy zywym /operator_online).
+    operator_confirm: false
 
     # ═══ SCIEZKA A — CELUJ (obrot na cel przed podlotem) ═════════════
     # Warunek w PIKSELACH, nie w metrach: przy wysoko podniesionym gimbalu
@@ -106,8 +142,15 @@
     # Czas postoju (s) na zebranie klatek po kazdym obrocie / zmianie kata gimbala.
     scan_dwell: 1.5
     # Predkosc obrotu drona (rad/s) podczas krecenia glowa w skanie.
-    scan_yaw_rate: 1.0
-    scan_settle: 0.4           # Czas (s) na ustabilizowanie gimbala po zmianie kata.
+    # 0.4 (23 st./s), a nie 1.0 (57 st./s). Petla _turn_to konczy sie, gdy uchyb
+    # spadnie ponizej 3 st. - czyli W RUCHU, przy pelnej predkosci. Potem leci
+    # zero i dron dohamowuje wybiegiem: przy 57 st./s samo hamowanie to ~6 st.,
+    # a opoznienie telemetrii (10 Hz) doklada drugie tyle, wiec krok 60 st.
+    # konczyl sie na ~70 st. Przy 23 st./s przestrzelenie spada do ~4-5 st.
+    scan_yaw_rate: 0.4         # bylo 1.0
+    # 0.8, a nie 0.4: okno detekcji zeruje sie DOPIERO po tym czasie, wiec dluzszy
+    # settle sprawia, ze klatki nie licza sie, gdy dron jeszcze buja po obrocie.
+    scan_settle: 0.8           # Czas (s) na ustabilizowanie gimbala po zmianie kata.
     
     # Bramka detekcji podczas POSTOJU (czulsza). Falszywka kosztuje tylko czas na celowanie.
     scan_confirm_frames: 3
@@ -205,17 +248,41 @@
     arrive_tol: 3.0
 
     # ═══ CENTROWANIE NAD CELEM ═══════════════════════════════════════
-    approach_timeout: 90.0     # gorny limit calego podejscia i centrowania
+    approach_timeout: 90.0     # gorny limit PODLOTU + centrowania (sciezka A)
+    # Limit SAMEGO ZAWISU, gdy dron stoi juz nad celem (sciezka B — dolot na
+    # waypoint z targets.json). Nie ma tu czego przelatywac, wiec 90 s znaczylo
+    # w praktyce "buja sie w kolko az do konca budzetu": przy oscylacji wokol
+    # center_tol_m licznik hover_hold_time kasuje sie w nieskonczonosc.
+    # Po tym czasie misja przestaje probowac i schodzi na zrzut po
+    # wspolrzednych — ladunek pada w KAZDYM wypadku.
+    #
+    # 10 s to okolo piec okien hover_hold_time (2 s). Jesli w tylu podejsciach
+    # licznik ani razu nie doszedl do konca, to nie jest kwestia sekundy —
+    # to oscylacja wokol progu i dalsze czekanie nic nie da.
+    #
+    # UWAGA: center_lost_timeout (15 s) jest teraz WIEKSZY, wiec przy celu,
+    # ktory zniknal, zadziala ten limit, a nie tamten. Oba i tak koncza sie
+    # zrzutem na wspolrzedne, wiec roznica jest tylko w tresci komunikatu.
+    hover_timeout: 10.0
     center_lost_timeout: 15.0  # ciagly SEARCH tak dlugo = cel zniknal na dobre
-    center_tol_m: 1.5          # kiedy uznajemy cel za "pod dronem"
-    # 5.0, a nie 3.0 — ta sama wartosc co w suas_simple_mission, gdzie caly
-    # lancuch SEARCH -> APPROACH -> HOVER jest oblatany. Sam HOVER nie znaczy
-    # jeszcze "wycentrowany": kontroler wchodzi w ten stan, gdy gimbal dojdzie
-    # do pionu, a dron moze byc wtedy dalej w ruchu. Dopiero utrzymanie celu
-    # w center_tol_m przez te 5 s znaczy, ze naprawde wisi nad celem.
-    hover_hold_time: 5.0       # jak dlugo ma tak byc, zanim zrzucimy
+    # 3.0, a nie 1.5. Licznik "trzymam N s" jest KASOWANY przy kazdej iteracji,
+    # w ktorej uchyb wyjdzie poza te tolerancje. Przy oscylacji o amplitudzie
+    # wiekszej niz tolerancja zegar startuje od nowa co pol sekundy i zawis
+    # konczy sie approach_timeout zamiast zrzutem. Ciasniejsze pasmo i tak nie
+    # kupuje celnosci: zrzut z 50 m ma rozrzut balistyczny wiekszy niz 2 m.
+    center_tol_m: 3.0          # bylo 1.5
+    # 2.0, a nie 5.0. Sam HOVER nie znaczy jeszcze "wycentrowany" - kontroler
+    # wchodzi w ten stan, gdy gimbal dojdzie do pionu, a dron moze byc wtedy
+    # dalej w ruchu; dlatego licznik w ogole istnieje. Ale przy szerszym
+    # center_tol_m 2 s wystarcza na potwierdzenie, ze dron nie przelatuje.
+    hover_hold_time: 2.0       # bylo 5.0
     lost_timeout: 3.0
-    hover_deadzone_m: 0.5
+    # 1.5, a nie 0.5. Ponizej tej odleglosci regulator zeruje vx/vy, wiec
+    # przestaje gonic szum rzutowania - a ten przy 50 m ma rzad metra. To jest
+    # ten parametr, ktory gasi oscylacje w zawisie u zrodla, a nie tylko
+    # rozszerza pasmo zaliczenia. MUSI byc <= center_tol_m, inaczej misja
+    # podniesie tolerancje sama, z ostrzezeniem przy starcie.
+    hover_deadzone_m: 1.5      # bylo 0.5
     acquire_timeout: 5.0
 
     # ═══ GIMBAL ══════════════════════════════════════════════════════
@@ -277,7 +344,7 @@
     # jedzie na sprzet. PRZED LOTEM W POLU wpisz numer kanalu serwa: 13.
     #
     # Wartosci zmierzone 2026-09-05 na realu (kanal 13, SERVO13=RCIN11).
-    drop_servo_ch: 0                  # 0 = symulacja; na realu 13
+    drop_servo_ch: 13                  # 0 = symulacja; na realu 13
     drop_pwm_by_class: [1580, 1060]   # [namiot, czlowiek]
     drop_pwm_neutral: 1300
     drop_hold_s: 2.0

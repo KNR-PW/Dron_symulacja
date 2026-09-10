@@ -85,6 +85,23 @@ def generate_launch_description():
         default_value="0.20",
         description="Szacowane opoznienie detekcji [s] — o tyle cofamy telemetrie",
     )
+    stamp_max_skew_arg = DeclareLaunchArgument(
+        "stamp_max_skew",
+        default_value="60.0",
+        description="Do ilu sekund roznicy od zegara sciennego ufamy stemplowi "
+                    "klatki [s]. Sluzy do wykrycia zegara Gazebo (rozjazd ~1.8 "
+                    "mld s), NIE do oceny swiezosci klatki - za niska wartosc "
+                    "cicho przelacza klik operatora na telemetrie z chwili "
+                    "KLIKNIECIA zamiast z chwili klatki",
+    )
+    telemetry_samples_arg = DeclareLaunchArgument(
+        "telemetry_samples",
+        default_value="300",
+        description="Ile probek telemetrii trzymamy w buforze; przy 10 Hz "
+                    "300 = 30 s historii. To okresla, jak dlugo operator moze "
+                    "patrzec na zamrozona klatke, zanim klik nie ma juz czym "
+                    "byc policzony",
+    )
     snapshots_arg = DeclareLaunchArgument(
         "snapshots",
         default_value="true",
@@ -118,6 +135,10 @@ def generate_launch_description():
                     LaunchConfiguration("gimbal_stabilized"), value_type=bool),
                 "det_latency": ParameterValue(
                     LaunchConfiguration("det_latency"), value_type=float),
+                "stamp_max_skew": ParameterValue(
+                    LaunchConfiguration("stamp_max_skew"), value_type=float),
+                "telemetry_samples": ParameterValue(
+                    LaunchConfiguration("telemetry_samples"), value_type=int),
                 "snapshots": ParameterValue(
                     LaunchConfiguration("snapshots"), value_type=bool),
             }
@@ -137,6 +158,8 @@ def generate_launch_description():
             person_max_alt_arg,
             gimbal_stabilized_arg,
             det_latency_arg,
+            stamp_max_skew_arg,
+            telemetry_samples_arg,
             snapshots_arg,
             suas_geolocator,
         ]

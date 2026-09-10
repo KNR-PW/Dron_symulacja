@@ -178,6 +178,15 @@ class SuasGridMission(SuasFlightController):
         # w locie mignal tylko w rogu kadru.
         self.declare_parameter('point_dwell', 2.0)
 
+        # Predkosc przelotu miedzy punktami gridu [m/s]. 0 = nie ruszaj, czyli
+        # zostaje WPNAV_SPEED z ArduPilota. Dotyczy TYLKO lotu po trasie
+        # (goto_global); podejscie do celu chodzi na velocity control i tam
+        # predkosc wyznacza kp_vx z max_vel.
+        # Wyzej = szybszy grid, ale i wieksze rozmycie ruchem: przy 8 m/s cel
+        # przelatuje przez kadr o 63 m w 8 s, wiec okno M z N (4 z 8 klatek,
+        # detektor ~5-12 Hz) zdazy sie domknac. Ponizej ok. 10 m/s to bezpieczne.
+        self.declare_parameter('cruise_speed', 0.0)
+
         # ── Przejecie lotu ───────────────────────────────────────
         # Ile czekamy na przelaczenie AUTO -> GUIDED, zanim uznamy, ze cos
         # poszlo nie tak. Zawieszona misja nie moze wisiec w nieskonczonosc.
@@ -225,6 +234,7 @@ class SuasGridMission(SuasFlightController):
         self.grid_passes = max(1, int(p('grid_passes').value))
         self.grid_timeout = p('grid_timeout').value
         self.point_dwell = p('point_dwell').value
+        self.cruise_speed = p('cruise_speed').value
         self.takeover_timeout = p('takeover_timeout').value
         self.auto_takeoff = p('auto_takeoff').value
         self.brake_settle_time = p('brake_settle_time').value
@@ -717,6 +727,11 @@ class SuasGridMission(SuasFlightController):
         self.home = (self.global_lat, self.global_lon)
         self._nadir_pub.publish(Bool(data=False))
         self._gimbal_search(force=True)
+        # Predkosc przelotu ustawiamy RAZ, po przejeciu lotu. Dziala tylko na
+        # goto_global (dronekit: vehicle.groundspeed), wiec podejscia do celu
+        # to nie dotyczy — tam predkosc liczy kp_vx.
+        if self.cruise_speed > 0.0:
+            self.set_speed(self.cruise_speed)
         self.descend(self.target_alt)
 
         pts = self._load_waypoints(self.waypoints_file)

@@ -31,7 +31,27 @@ PARAMS = [
     ("search_timeout",  "120.0"),  # limit na caly podlot, potem powrot [s]
     ("finish_action",   "rtl"),    # rtl | land | none
     ("test_sweep",       "false"),  # zamiatanie gimbalem przed szukaniem
-    ("drop_after_hover", "false"),  # potwierdzenie + zrzut po zawisie
+
+    # ─── ZRZUT LADUNKU NAMIOTU (klasa 0) ──────────────────
+    # drop_after_hover:=true wlacza zrzut po potwierdzonym zawisie nad celem.
+    # drop_confirm:=false zrzuca BEZ pytania o spacje — i tylko tak zrzut
+    # zadziala z launcha, bo wezel odpalony przez `ros2 launch` nie ma stdin
+    # (przy drop_confirm:=true zostaje `ros2 topic pub --once /mission_confirm
+    # std_msgs/msg/Empty {}` z drugiego terminala).
+    ("drop_after_hover", "false"),
+    ("drop_confirm",     "true"),
+    ("confirm_timeout",  "15.0"),   # ile czekamy na spacje / topic
+    # JEDEN serwomechanizm na dwa ladunki, u nas AUX5 = kanal 13 (SERVO13 =
+    # RCIN11). Wychyl w jedna strone zwalnia namiot, w druga czlowieka,
+    # neutral trzyma oba. Ta misja zna tylko namiot, czyli drop_pwm_by_class[0].
+    #
+    # 0 = TRYB SYMULACJI: zrzut tylko sie loguje, nic nie jedzie na sprzet.
+    # Zostawione jako 13, bo o to chodzi w tej misji — do prob w Gazebo
+    # podaj drop_servo_ch:=0.
+    ("drop_servo_ch",      "13"),
+    ("drop_pwm_by_class",  "[1580, 1060]"),   # [namiot, czlowiek]
+    ("drop_pwm_neutral",   "1300"),
+    ("drop_hold_s",        "2.0"),
 
     # ─── Kontroler (jak w suas_flight_controller.launch.py) ─
     ("target_alt",   "50.0"),       # wysokosc startu I trzymana w locie

@@ -66,8 +66,20 @@ class SuasSimpleMission(SuasFlightController):
         # sweep_pitches. Widac wtedy, czy gimbal faktycznie jedzie i czy detekcja
         # lapie cel przy ktoryms z katow.
         self.declare_parameter('test_sweep', False)
-        # drop_after_hover: po "NAD CELEM" zapytaj o spacje i zrzuc ladunek.
+        # drop_after_hover: po "NAD CELEM" zrzuc ladunek namiotu (klasa 0).
+        # Kanal serwa i PWM-y bierze z parametrow rodzica: drop_servo_ch
+        # (0 = symulacja, na realu 13), drop_pwm_by_class, drop_pwm_neutral.
         self.declare_parameter('drop_after_hover', False)
+        # Czy przed zrzutem pytac o SPACJE.
+        #   true  - jak dotad: bramka dla czlowieka, sensowna przy pierwszych
+        #           testach dropera w powietrzu
+        #   false - zrzut idzie sam, zaraz po potwierdzonym zawisie (tak jak
+        #           w suas_grid_mission)
+        # To NIE jest kosmetyka: wezel odpalony przez `ros2 launch` nie ma stdin
+        # podpietego do terminala, wiec spacja tam nie dziala w ogole i przy
+        # drop_confirm=true zrzut z launcha nie mialby jak sie odbyc — zostaje
+        # tylko `ros2 topic pub --once /mission_confirm std_msgs/msg/Empty {}`.
+        self.declare_parameter('drop_confirm', True)
 
         self.settle_time     = self.get_parameter('settle_time').value
         self.hover_hold_time = self.get_parameter('hover_hold_time').value
@@ -76,6 +88,7 @@ class SuasSimpleMission(SuasFlightController):
         self.center_tol_m    = self.get_parameter('center_tol_m').value
         self.test_sweep      = self.get_parameter('test_sweep').value
         self.drop_after_hover = self.get_parameter('drop_after_hover').value
+        self.drop_confirm     = self.get_parameter('drop_confirm').value
 
         # Ponizej hover_deadzone_m kontroler przestaje korygowac, wiec ciasniejsza
         # tolerancja to warunek nie do spelnienia (czekalby do timeoutu).
@@ -98,6 +111,13 @@ class SuasSimpleMission(SuasFlightController):
             f"SuasSimpleMission: takeoff={self.target_alt}m settle={self.settle_time}s "
             f"hover_hold={self.hover_hold_time}s timeout={self.search_timeout}s "
             f"center_tol={self.center_tol_m} m finish={self.finish_action}")
+        if self.drop_after_hover:
+            gdzie = (f"serwo {self.drop_servo_ch} -> "
+                     f"{self.drop_pwm_by_class[0]} us"
+                     if self.drop_servo_ch > 0 else "SYMULACJA (tylko log)")
+            self.get_logger().warn(
+                f"ZRZUT NAMIOTU WLACZONY: {gdzie}, "
+                f"potwierdzenie spacja: {'TAK' if self.drop_confirm else 'NIE'}")
 
     # ═══════════════════════════════════════════════════════════
     #  Pomocnicze
@@ -231,6 +251,18 @@ class SuasSimpleMission(SuasFlightController):
         self.get_logger().info("=== START MISJI: suas_simple_mission ===")
         self._install_signals()
 
+        # ─── 0. Droper w pozycji spoczynkowej ─────────────────
+        # Robimy to NA ZIEMI, przed uzbrojeniem, i tylko gdy kanal jest
+        # skonfigurowany. Neutral to pozycja, ktora TRZYMA ladunek, wiec ruch
+        # w to miejsce jest bezpieczny — a bez niego misja startuje z serwem
+        # tam, gdzie zostawil je poprzedni test albo boot autopilota.
+        if self.drop_after_hover and self.drop_servo_ch > 0:
+            self.get_logger().info(
+                f"droper: serwo {self.drop_servo_ch} -> neutral "
+                f"{self.drop_pwm_neutral} us (trzyma ladunek)")
+            self.set_servo(self.drop_servo_ch, self.drop_pwm_neutral)
+            self._spin_for(0.5)
+
         # ─── 1. ARM ───────────────────────────────────────────
         if not self.arm():
             if self._abort:
@@ -271,12 +303,22 @@ class SuasSimpleMission(SuasFlightController):
         # ─── 5. Czekaj na zawis nad namiotem ──────────────────
         reached = self._wait_for_hover()
 
-        # ─── 5b. (opcjonalnie) Potwierdzenie i zrzut ──────────
+        # ─── 5b. (opcjonalnie) Zrzut ladunku namiotu ──────────
+        # Numer ladunku = numer klasy, a ta misja zna tylko namiot -> drop(0).
+        # Ten sam serwomechanizm i te same PWM-y co w suas_grid_mission,
+        # bo obsluguje je drop() z suas_flight_controller.
         if reached and self.drop_after_hover:
             err = self._tent_error()
             gdzie = (f"przod {err[0]:+.1f} prawo {err[1]:+.1f} m" if err
                      else "brak swiezej detekcji")
-            if self.wait_confirm(
+            if not self.drop_confirm:
+                # Tak samo jak w gridzie: potwierdzeniem jest sam fakt, ze dron
+                # utrzymal cel w srodku kadru przez hover_hold_time.
+                self.get_logger().info(
+                    f"NAMIOT: zrzut bez pytania ({gdzie}, "
+                    f"alt={self.altitude:.1f} m)")
+                self.drop(0)
+            elif self.wait_confirm(
                     "=== CEL: NAMIOT ===\n"
                     f"Nad celem ({gdzie}), alt={self.altitude:.1f} m.\n"
                     f"[SPACJA] = zrzuc ladunek     "
