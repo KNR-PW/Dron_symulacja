@@ -204,11 +204,28 @@ class SuasGeolocator(Node):
         self.declare_parameter('size_tol_lo', 0.3)
         self.declare_parameter('size_tol_hi', 3.0)
         self.declare_parameter('telemetry_max_age', 0.5)
+        # Ile probek telemetrii trzymamy. Przy 10 Hz 300 probek = 30 s historii.
+        # Bylo 64, czyli 6.4 s - za malo dla ZNACZNIKA OPERATORA: pelny przebieg
+        # w GUI (zamroz -> wskaz punkt -> wybierz klase) trwa realnie 6-10 s,
+        # wiec klik wypadal poza bufor i konczyl sie "bez telemetrii". Automatowi
+        # dlugosc bufora jest obojetna, siega wstecz o ulamek sekundy.
+        self.declare_parameter('telemetry_samples', 300)
         # Ile stempel klatki moze sie roznic od zegara sciennego, zeby uznac go
         # za ten sam zegar. Most z Gazebo podaje czas symulacji liczony od zera,
         # wiec bez tej bramki mieszalibysmy dwa zegary i rzutowanie sypaloby sie
         # po cichu. Powyzej progu wracamy do stalego szacunku det_latency.
-        self.declare_parameter('stamp_max_skew', 5.0)
+        #
+        # Bylo 5 s i to bylo ZA MALO. Ta bramka nie odroznia "stempel z innego
+        # zegara" od "stempel sprzed kilku sekund", wiec zamrozona klatka starsza
+        # niz prog wygladala jak czas z Gazebo i klik operatora liczyl sie
+        # telemetria z chwili KLIKNIECIA - czyli dokladnie tym bledem, ktoremu
+        # caly mechanizm stempla ma zapobiegac. Test na biurku (sztuczna
+        # telemetria, skok pozycji o 50 m): kazde klikniecie wypadalo w nowej
+        # pozycji, bez slowa ostrzezenia, bo przebieg w GUI nie miesci sie w 5 s.
+        # Zegar Gazebo rozni sie od sciennego o ~1.8 mld sekund, wiec do jego
+        # rozpoznania minuta wystarcza z ogromnym zapasem. Gorna granica wieku
+        # klatki wynika teraz z dlugosci bufora telemetrii, a nie stad.
+        self.declare_parameter('stamp_max_skew', 60.0)
 
         # Klastrowanie
         self.declare_parameter('cluster_radius', 10.0)   # m; z grubsza 0.12 * H
@@ -261,6 +278,7 @@ class SuasGeolocator(Node):
         self.size_tol_lo = p('size_tol_lo').value
         self.size_tol_hi = p('size_tol_hi').value
         self.telemetry_max_age = p('telemetry_max_age').value
+        telemetry_samples = max(2, int(p('telemetry_samples').value))
         self.stamp_max_skew = p('stamp_max_skew').value
         self.cluster_radius = p('cluster_radius').value
         self.min_obs = {0: p('min_obs').value,
@@ -274,13 +292,16 @@ class SuasGeolocator(Node):
         # ── 2. STAN ─────────────────────────────────────────────────
         # Bufor telemetrii: potrzebny, bo detekcja przychodzi ~det_latency po
         # zrobieniu zdjecia, a telemetria leci 10 Hz. Interpolujemy wstecz.
-        self._telem = deque(maxlen=64)     # (t, lat, lon, alt, roll, pitch, yaw)
-        self._telem_t = deque(maxlen=64)   # te same t, osobno pod bisect
+        self._telem = deque(maxlen=telemetry_samples)   # (t, lat, lon, alt, r, p, y)
+        self._telem_t = deque(maxlen=telemetry_samples)  # te same t, pod bisect
         self.origin = None                 # (lat, lon) pierwszego fixa
         self.candidates = []
         self._next_cid = 1
         self._best_id = {}      # class_id -> id kandydata
-        self._stamp_mode = None  # log raz: 'stamp klatki' czy 'det_latency'
+        # Log raz na ZRODLO: 'stamp klatki' czy 'det_latency'. Osobno dla detekcji
+        # i dla znacznikow, bo wspolny stan kasowal ostrzezenie o kliknieciu przy
+        # nastepnej klatce detektora - w logu zostawal 30-milisekundowy przebłysk.
+        self._stamp_mode = {}
         self._last_cid = -1      # do kolumny cluster_id w CSV
         self._last_jpeg = None
         self._n_det = 0
@@ -348,6 +369,11 @@ class SuasGeolocator(Node):
         self.get_logger().info(
             f"klasy: {CLASS_NAMES} | rozmiary [m]: {self.size_m} | "
             f"kompensacja przechylu: {'WYLACZONA (mount stabilizowany)' if self.gimbal_stabilized else 'WLACZONA'}")
+        self.get_logger().info(
+            f"stempel klatki ufany do {self.stamp_max_skew:.0f} s rozjazdu "
+            f"zegara | bufor telemetrii {telemetry_samples} probek "
+            f"(~{telemetry_samples / 10.0:.0f} s przy 10 Hz) = tyle czasu ma "
+            f"operator od zamrozenia do wyboru klasy")
         self.get_logger().info(
             f"automat dla czlowieka tylko ponizej "
             f"{self.max_alt_auto[1]:.0f} m (wyzej ma za malo pikseli); "
@@ -420,26 +446,30 @@ class SuasGeolocator(Node):
 
     # ────────────────────── Detekcje ──────────────────────
 
-    def _frame_time(self, header, now):
+    def _frame_time(self, header, now, kind='detekcji'):
         """Czas klatki uzywany do wyszukania telemetrii.
 
-        Wolimy header.stamp, bo niesie moment powstania klatki i zdejmuje
-        zgadywanie opoznienia inferencji. Ale stamp moze chodzic w INNYM zegarze
-        niz time.time() - most z Gazebo podaje czas symulacji liczony od zera -
-        wiec akceptujemy go tylko, gdy jest zbiezny z zegarem sciennym.
-        Inaczej wracamy do stalego szacunku det_latency.
+        Zwraca (t, ze_stempla). Wolimy header.stamp, bo niesie moment powstania
+        klatki i zdejmuje zgadywanie opoznienia inferencji. Ale stamp moze
+        chodzic w INNYM zegarze niz time.time() - most z Gazebo podaje czas
+        symulacji liczony od zera - wiec akceptujemy go tylko, gdy jest zbiezny
+        z zegarem sciennym. Inaczej wracamy do stalego szacunku det_latency.
+
+        Flaga `ze_stempla` istnieje, bo dla ZNACZNIKA OPERATORA to cofniecie
+        jest bezuzyteczne: klik dotyczy klatki sprzed kilku sekund, wiec
+        "teraz minus det_latency" wskazuje pozycje, w ktorej dron JEST, a nie te,
+        z ktorej zrobil zdjecie. Wywolujacy sam decyduje, czy taki czas przyjac.
         """
         ts = header.stamp.sec + header.stamp.nanosec * 1e-9
         if ts > 0.0 and abs(ts - now) < self.stamp_max_skew:
-            mode = 'stamp klatki'
-            t = ts
+            mode, t, ze_stempla = 'stamp klatki', ts, True
         else:
             mode = f'det_latency={self.det_latency:.2f}s (stamp w innym zegarze)'
-            t = now - self.det_latency
-        if self._stamp_mode != mode:
-            self._stamp_mode = mode
-            self.get_logger().info(f"czas detekcji brany z: {mode}")
-        return t
+            t, ze_stempla = now - self.det_latency, False
+        if self._stamp_mode.get(kind) != mode:
+            self._stamp_mode[kind] = mode
+            self.get_logger().info(f"czas {kind} brany z: {mode}")
+        return t, ze_stempla
 
     def _det_cb(self, msg: TentDetections):
         """Cala klatka naraz: wspolne bramki liczymy raz, boxy po kolei."""
@@ -447,7 +477,8 @@ class SuasGeolocator(Node):
             return
         now = time.time()
 
-        tel = self._telem_at(self._frame_time(msg.header, now))
+        t_frame, _ = self._frame_time(msg.header, now)
+        tel = self._telem_at(t_frame)
         if tel is None:
             self._rejects['telemetria'] += len(msg.detections)
             return
@@ -539,9 +570,25 @@ class SuasGeolocator(Node):
         a nie w to, co dron widzi teraz.
         """
         now = time.time()
-        tel = self._telem_at(self._frame_time(msg.header, now))
+        t_frame, ze_stempla = self._frame_time(msg.header, now, 'znacznika')
+        if not ze_stempla:
+            # NIE liczymy tego "teraznijszoscia". Dron przez czas namyslu
+            # operatora przelecial predkosc*czas metrow, wiec taki punkt byłby
+            # cicho przesuniety wzdluz kursu - a znacznik operatora ma
+            # pierwszenstwo nad automatem i poszedlby do misji jako adres zrzutu.
+            ts = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+            wiek = (f"{now - ts:.1f} s" if ts > 0.0 else "brak stempla")
+            self.get_logger().warn(
+                f"znacznik odrzucony: nie umiem ustalic chwili klatki "
+                f"(wiek stempla {wiek}, prog stamp_max_skew="
+                f"{self.stamp_max_skew:.0f} s). Zamroz i oznacz jeszcze raz")
+            return
+        tel = self._telem_at(t_frame)
         if tel is None:
-            self.get_logger().warn("znacznik operatora bez telemetrii — pomijam")
+            self.get_logger().warn(
+                f"znacznik operatora bez telemetrii — pomijam "
+                f"(klatka sprzed {now - t_frame:.1f} s, bufor ma "
+                f"{len(self._telem)} probek)")
             return
         _, lat, lon, alt, roll, pitch, yaw = tel
 

@@ -39,6 +39,11 @@
     # w locie mignal tylko w rogu kadru.
     point_dwell: 2.0
 
+    # Predkosc przelotu miedzy punktami gridu [m/s]. 0 = zostaw WPNAV_SPEED
+    # z ArduPilota. Dotyczy TYLKO lotu po trasie — podejscie do celu chodzi na
+    # velocity control i tam predkosc wyznacza kp_vx z max_vel.
+    cruise_speed: 6.0
+
     # ─── PRZEJECIE LOTU ───────────────────────────────────────────────
     # Misja czeka, az przelaczysz AUTO -> GUIDED. To jedyny sygnal startu.
     takeover_timeout: 1200.0
@@ -86,8 +91,12 @@
     # ─── CENTROWANIE NAD CELEM ────────────────────────────────────────
     approach_timeout: 90.0     # gorny limit calego podejscia i centrowania
     center_lost_timeout: 15.0  # ciagly SEARCH tak dlugo = cel zniknal na dobre
-    center_tol_m: 1.5          # kiedy uznajemy cel za "pod dronem"
-    hover_hold_time: 3.0       # jak dlugo ma tak byc, zanim zrzucimy
+    # 2.0 zamiast 1.5. W locie 2026-09-06 okno "trzymam 3s" startowalo od nowa
+    # SZESC razy, bo uchyb skakal miedzy 1.0 a 4.6 m — samo centrowanie zajelo
+    # przez to 12 s zamiast 4. Zrzut z 50 m ma i tak rozrzut wiekszy niz 2 m,
+    # wiec ciasniejsza tolerancja niczego nie kupuje, a kosztuje sekundy.
+    center_tol_m: 2.0          # bylo 1.5
+    hover_hold_time: 2.0       # bylo 3.0
     lost_timeout: 3.0
     hover_deadzone_m: 0.5
 
@@ -98,14 +107,33 @@
     target_topics: ["/tent_detections", "/people_detections"]
 
     # ─── REGULATORY ───────────────────────────────────────────────────
-    kp_vx: 4.0                 # predkosc do przodu w APPROACH
-    kp_hover: 0.2              # korekta pozycji w HOVER [1/s], uchyb w metrach
+    # Nastawy podniesione wzgledem suas_simple_mission po locie 2026-09-06,
+    # w ktorym podejscie do namiotu trwalo 40 s. Zeby wrocic do wartosci
+    # sprawdzonych w prostej misji, wpisz liczby z komentarzy "bylo".
+    #
+    # kp_vx mnozy forward_ratio, czyli POLOZENIE GIMBALA w zakresie
+    # pitch_min..pitch_max, a nie odleglosc do celu. Przy -82 st. ratio wynosi
+    # 0.13, wiec przy kp_vx=4 ostatnie metry dron pelzl po 0.5 m/s (12 s na
+    # 8 m). Przy 6.0 to samo miejsce daje 0.8 m/s, a hamowanie nadal jest
+    # automatyczne, bo ratio spada do zera w pionie.
+    kp_vx: 6.0                 # bylo 4.0
+    # W APPROACH vy jest WYLACZONE — na cel z boku dron celuje wylacznie
+    # obrotem. Przy kp_yaw=0.3 obrot z ex=-0.88 trwal 7 s i przez ten czas dron
+    # lecial do przodu OBOK celu (odleglosc urosla z 16 do 30 m). 0.6 wykorzystuje
+    # limit max_yaw_rate, ktory i tak ucina obrot na 0.5 rad/s (29 st./s).
+    kp_yaw: 0.6                # bylo 0.3
+    # Ostroznie: to jest wzmocnienie, przy ktorym gimbal niestabilizowany
+    # potrafi domknac dodatnie sprzezenie (dron sie pochyla -> cel ucieka
+    # po kadrze -> regulator dodaje gazu). Chroni przed tym tilt_comp, dlatego
+    # krok jest maly. Jesli w HOVER zobaczysz narastajace oscylacje — wroc na 0.2.
+    kp_hover: 0.25             # bylo 0.2
     kp_alt: 0.5
-    kp_yaw: 0.3
-    max_vel: 3.0
+    # 4.0, zeby limit nie ucinal kp_vx: 6.0 x ratio 0.5 to dokladnie 3.0, czyli
+    # stary limit bylby osiagany w polowie zakresu gimbala.
+    max_vel: 4.0               # bylo 3.0
     max_vz: 1.5
     max_yaw_rate: 0.5
-    ema_alpha: 0.15
+    ema_alpha: 0.25            # bylo 0.15 — mniej zwloki na rozpedzaniu
     tilt_comp: true            # odejmij przechyl ramy od uchybu obrazu
 
     # ─── KAMERA ───────────────────────────────────────────────────────

@@ -1,0 +1,129 @@
+# Parametry suas_mission_v2 — wersja uproszczona.
+#
+# TU SA TYLKO LICZBY. Przebieg misji jest zaszyty w kodzie (stale na gorze
+# suas_mission_v2.py) i nie da sie go zmienic z yamla:
+#   * cel z adresu: NAMIOT centruje sie przed zrzutem, CZLOWIEK zrzuca wprost
+#     na wspolrzedne,
+#   * nic pod waypointem = zrzut na wspolrzedne, bez skanu z tego miejsca,
+#   * misja nie pyta o SPACJE,
+#   * po ostatnim punkcie trasy powrot na pierwszy,
+#   * po zrzucie na namiot szukanie czlowieka tym samym skanem,
+#   * koniec = RTL.
+# Jedyny przelacznik: auto_takeoff (dotyczy startu, nie przebiegu).
+#
+#   ros2 run drone_autonomy suas_mission_v2 --ros-args \
+#       --params-file ~/Dron_symulacja/src/drone_bringup/config/misja_v2.yaml
+
+/**:
+  ros__parameters:
+
+    # ═══ WYSOKOSC I PLIKI ════════════════════════════════════════════
+    target_alt: 50.0
+    # Sama nazwa — plik jest szukany w repo, kontenerze i katalogu share.
+    scan_waypoints: "misja_skan.waypoints"
+
+    # ═══ START ═══════════════════════════════════════════════════════
+    takeover_timeout: 1200.0
+    auto_takeoff: false        # true = TRYB TESTOWY, sam uzbraja i startuje
+
+    # ═══ SCIEZKA B — dolot na adres ══════════════════════════════════
+    # Okno M z N nad waypointem. Cel pod dronem domyka bramke w ulamku
+    # sekundy; 5 s milczenia znaczy "nie ma go w kadrze".
+    wp_acquire: 5.0
+
+    # ═══ ZAWIS ═══════════════════════════════════════════════════════
+    approach_timeout: 90.0     # PODLOT + centrowanie (sciezka A)
+    # Sam zawis (sciezka B). Po tym czasie zrzut na wspolrzedne — regulator
+    # oscyluje wokol center_tol_m i czekanie dluzej nic nie da.
+    hover_timeout: 10.0
+    center_lost_timeout: 15.0  # ciagly SEARCH tak dlugo = cel zniknal
+    center_tol_m: 3.0          # kiedy cel jest "pod dronem"
+    hover_hold_time: 2.0       # jak dlugo ma tak byc, zanim zrzucimy
+    lost_timeout: 3.0
+    hover_deadzone_m: 1.5      # ponizej tego regulator nie koryguje
+    acquire_timeout: 5.0
+
+    # ═══ SCIEZKA A — CELUJ ═══════════════════════════════════════════
+    # Tolerancja w pikselach, bo przy podniesionym gimbalu uchyb metrowy
+    # bywa nieokreslony (kadr patrzy ponad horyzont).
+    aim_tol_px: 0.06
+    aim_hold: 1.0
+    aim_timeout: 15.0
+
+    # ═══ SKAN ════════════════════════════════════════════════════════
+    scan_yaw_step: 60.0        # 60 st. daje 11 st. zakladki
+    scan_arc_deg: [90.0, 360.0]    # luk per WP; z rogu pola wystarczy 90
+    scan_heading_deg: [45.0, 0.0]  # azymut srodka wachlarza per WP
+    scan_pitch_nadir: -90.0    # raz na punkt, bez obracania
+    scan_pitches: [-65.0, -40.0]   # na kazdej pozycji yaw
+    scan_dwell: 1.5            # postoj na zbieranie klatek
+    # 0.4 rad/s = 23 st./s. Przy 1.0 petla obrotu konczyla sie w ruchu
+    # i krok 60 st. przestrzeliwal o ~10 st.
+    scan_yaw_rate: 0.4
+    scan_settle: 0.8           # az gimbal dojedzie i dron przestanie bujac
+    scan_confirm_frames: 3     # bramka skanu: czulsza
+    scan_window_frames: 6
+    transit_confirm_frames: 4  # bramka w przelocie: ostrzejsza
+    transit_window_frames: 8
+    scan_timeout: 600.0
+    person_scan_timeout: 300.0
+    pitch_transit: -55.0       # kat w przelocie miedzy punktami
+    arrive_tol: 3.0
+
+    # ═══ NIZSZE BRAMKI DLA CZLOWIEKA ═════════════════════════════════
+    # Lezacy ma 30x22 px, stojacy 8 px — progi namiotowe bywaja
+    # nieprzechodzalne.
+    person_scan_confirm_frames: 2
+    person_scan_window_frames: 8
+    person_transit_confirm_frames: 3
+    person_transit_window_frames: 8
+    person_det_confirm_frames: 2   # to ta bramka wpuszcza w podlot
+    person_det_window_frames: 8
+    # Tracker gubi czlowiekowi ciaglosc ID, wiec przy true okno nigdy sie nie
+    # domyka. Zdejmuje to obrone przed falszywka.
+    person_require_same_track: false
+    person_lost_timeout: 5.0   # przerwy w detekcji sadaja 2 s i wiecej
+
+    # ═══ CISZA PO FALSZYWCE ══════════════════════════════════════════
+    det_cooldown: 20.0         # falszywka z przelotu
+    scan_det_cooldown: 5.0     # falszywka ze skanu — musi byc krotka
+    reconfirm_timeout: 3.0     # sprawdzenie NA STOJACO
+    brake_settle_time: 3.0     # az dron wyhamuje
+
+    # ═══ GIMBAL ══════════════════════════════════════════════════════
+    pitch_search: -55.0
+    pitch_min: -90.0           # prosto w dol
+    pitch_max: -30.0
+    pitch_hover_thr: -83.0     # prog APPROACH -> HOVER
+    gimbal_deadzone: 0.06
+    damping: 0.6
+
+    # ═══ BRAMKA DETEKCJI (NAMIOT) ════════════════════════════════════
+    det_confirm_frames: 4
+    det_window_frames: 8
+    det_confirm_gap: 1.5       # przerwa miedzy klatkami zerujaca okno
+    require_same_track: true
+
+    # ═══ REGULATORY ══════════════════════════════════════════════════
+    kp_vx: 4.0                 # predkosc do przodu w APPROACH
+    kp_hover: 0.2              # korekta pozycji w HOVER [1/s], uchyb w metrach
+    kp_alt: 0.5
+    kp_yaw: 0.3
+    max_vel: 3.0
+    max_vz: 1.5
+    max_yaw_rate: 0.5
+    ema_alpha: 0.15
+    tilt_comp: true            # odejmij przechyl ramy od uchybu obrazu
+
+    # ═══ KAMERA ══════════════════════════════════════════════════════
+    vfov_deg: 64.4
+    img_w: 1024
+    img_h: 1024
+    control_rate: 10.0
+
+    # ═══ ZRZUT ═══════════════════════════════════════════════════════
+    # 0 = symulacja (tylko log). Na realu 13 (AUX5).
+    drop_servo_ch: 13
+    drop_pwm_by_class: [1580, 1060]   # [namiot, czlowiek]
+    drop_pwm_neutral: 1300
+    drop_hold_s: 2.0
