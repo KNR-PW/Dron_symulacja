@@ -88,6 +88,18 @@
     wp_scan_timeout: 120.0
     confirm_timeout: 10.0
 
+    # ═══ OKNO NA POPRAWKE ADRESU ═════════════════════════════════════
+    # Dron wisi nad waypointem, gimbal w pionie, detektor celu nie potwierdzil
+    # (namiot) albo klasa i tak nie centruje (czlowiek). Zamiast zrzucac od razu
+    # — tyle sekund na klik w GUI. Geolokator przepisuje targets.json do 5 s,
+    # misja czyta go co sekunde i LECI na poprawiony punkt zamiast zrzucac.
+    # Cisza konczy okno zrzutem, czyli tym, co misja zrobilaby bez tej funkcji.
+    #
+    # 0 = wylaczone (stare zachowanie: zrzut natychmiast).
+    wp_fix_window: 10.0
+    wp_fix_tol: 5.0            # mniejsze przesuniecie to nie poprawka, to szum
+    wp_fix_max: 2              # ile razy z rzedu mozna poprawiac
+
     # ═══ CENTROWANIE NAD CELEM Z ADRESU ══════════════════════════════
     # Dotyczy WYLACZNIE dolotu na waypoint z targets.json (sciezka B).
     # false = detektor widzi cel pod dronem, ale misja i tak zrzuca na
