@@ -43,7 +43,7 @@
     # targets_json NIE jest tak podmieniany celowo: plik z innego srodowiska
     # moze byc z poprzedniego lotu, a zrzut pod nieaktualny adres jest gorszy
     # niz brak adresu. Misja tylko powie, gdzie taki plik lezy.
-    targets_json: "~/ros_ws/src/drone_bringup/config/targets.json"
+    targets_json: "~/Dron_symulacja/src/drone_bringup/config/targets.json"
     scan_waypoints: "misja_skan.waypoints"
 
     # ═══ PRZEJECIE LOTU ══════════════════════════════════════════════
