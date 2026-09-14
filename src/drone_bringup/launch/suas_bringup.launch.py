@@ -79,12 +79,12 @@ def generate_launch_description():
     )
     debug_jpeg_quality_arg = DeclareLaunchArgument(
         "debug_jpeg_quality",
-        default_value="20",
+        default_value="25",
         description="Jakosc JPEG podgladu (1-100)",
     )
     preview_max_fps_arg = DeclareLaunchArgument(
         "preview_max_fps",
-        default_value="4.0",
+        default_value="3.0",
         description="Limit FPS podgladu markera (:5000); 0 = bez limitu",
     )
     detect_delay_arg = DeclareLaunchArgument(

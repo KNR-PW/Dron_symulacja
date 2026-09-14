@@ -43,4 +43,4 @@
         # najczesciej ogladamy w przegladarce.
         preview:
           image_raw:
-            jpeg_quality: 8
+            jpeg_quality: 25

@@ -46,6 +46,8 @@
     targets_json: "~/Dron_symulacja/src/drone_bringup/config/targets.json"
     scan_waypoints: "misja_skan.waypoints"
 
+    person_waypoints: "~/Dron_symulacja/src/drone_bringup/config/czlowiek.waypoints"
+
     # ═══ PRZEJECIE LOTU ══════════════════════════════════════════════
     takeover_timeout: 1200.0
     auto_takeoff: false        # true = TRYB TESTOWY, sam uzbraja i startuje
@@ -241,6 +243,24 @@
     # (30x22 px na 50 m) — patrz docs/misja.md sekcja 5.
     search_person_after_tent: true
     person_scan_timeout: 300.0
+
+    # ═══ PATROL W OCZEKIWANIU NA OPERATORA ═══════════════════════════
+    # Dotyczy KAZDEGO ladunku, ktory zostal na pokladzie:
+    #   * czlowiek bez adresu — zawsze (detektor nie ma szans, 8 px),
+    #   * namiot po NIEUDANYM skanie — inaczej dron krazylby z jego ladunkiem,
+    #     a operator widzialby go na podgladzie bez sposobu, zeby to zglosic.
+    # Dron lata w kolko po tej trasie, na target_alt, z gimbalem w pionie,
+    # i czeka az operator kliknie cel w GUI. Po kliknieciu przerywa dolot
+    # (nawet w polowie odcinka) i leci dowiezc ladunek tej klasy.
+    # Gdy czekaja oba — kolejnosc jak w reszcie misji: najpierw namiot.
+    #
+    # Trasa: .waypoints z Mission Plannera, "lat, lon" w linii, albo OFFSETS
+    # w metrach. Kolejnosc liczona od NAJBLIZSZEGO punktu, nie od WP1.
+    #
+    # Patrol przyjmuje WYLACZNIE adres ze zrodlem 'operator' — automat na
+    # czlowieku to cien albo krzak, bo na 50 m ma on 8 px przy stride 8.
+    
+    person_patrol_timeout: 0.0   # 0 = bez limitu, do klikniecia albo RTL
     
     # Pochylenie gimbala w przelocie miedzy punktami trasy.
     pitch_transit: -55.0
