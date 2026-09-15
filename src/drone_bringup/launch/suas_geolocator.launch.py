@@ -50,6 +50,18 @@ def generate_launch_description():
         default_value="10.0",
         description="Promien laczenia detekcji w jeden cel [m]; ~0.12 * wysokosc",
     )
+    alt_offset_arg = DeclareLaunchArgument(
+        "alt_offset",
+        default_value="0.0",
+        description="Poprawka na TEREN [m], odejmowana od alt z telemetrii. "
+                    "Telemetria podaje wysokosc wzgledem punktu STARTU, a "
+                    "rzutowanie potrzebuje wysokosci nad ziemia pod dronem — "
+                    "wpisz srednia roznice 'teren w obszarze minus teren na "
+                    "starcie' (Mission Planner pokazuje ja przy waypoincie). "
+                    "ZMIERZONE DLA NASZYCH OBSZAROW: obszar 1 (misja1.yaml, "
+                    "czlowiek1.waypoints) = 7.0 | obszar 2 (misja2.yaml, "
+                    "czlowiek2.waypoints) = 5.0",
+    )
     min_obs_arg = DeclareLaunchArgument(
         "min_obs",
         default_value="10",
@@ -123,6 +135,8 @@ def generate_launch_description():
                     LaunchConfiguration("mount_pitch_deg"), value_type=float),
                 "cluster_radius": ParameterValue(
                     LaunchConfiguration("cluster_radius"), value_type=float),
+                "alt_offset": ParameterValue(
+                    LaunchConfiguration("alt_offset"), value_type=float),
                 "min_obs": ParameterValue(
                     LaunchConfiguration("min_obs"), value_type=int),
                 "min_obs_person": ParameterValue(
@@ -152,6 +166,7 @@ def generate_launch_description():
             lock_nadir_arg,
             mount_pitch_arg,
             cluster_radius_arg,
+            alt_offset_arg,
             min_obs_arg,
             min_obs_person_arg,
             person_size_m_arg,
