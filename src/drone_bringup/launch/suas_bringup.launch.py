@@ -74,7 +74,7 @@ def generate_launch_description():
     )
     debug_every_n_arg = DeclareLaunchArgument(
         "debug_every_n",
-        default_value="1",
+        default_value="2",
         description="Publikuj podglad co N-ta klatke (1 = kazda; 2-3 lzej na LTE)",
     )
     debug_jpeg_quality_arg = DeclareLaunchArgument(

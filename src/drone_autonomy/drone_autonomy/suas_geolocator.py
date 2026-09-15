@@ -20,10 +20,15 @@ Zalozenia (patrz docs/suas_geolocator.md):
   * kadr zorientowany "gora = przod drona" (cam_yaw_offset_deg = 0).
 
 Wyjscie w save_dir:
-  tent_target.json           staly plik dla misji zrzutu (nadpisywany atomowo)
-  <data-godzina>/target.json      kopia z tego lotu
+  targets.json               TO czyta misja (nadpisywany atomowo)
+  tent_target.json           stary format, sam namiot; nikt go juz nie czyta
+  <data-godzina>/targets.json     kopia z tego lotu
   <data-godzina>/observations.csv KAZDA przyjeta detekcja, dane surowe
   <data-godzina>/kandydat_NN.jpg  klatka podgladu, 1 na kandydata
+
+Do misji trafia wylacznie 'best' kazdej klasy. Domyslnie (operator_only)
+'best' moze powstac TYLKO z klikniecia operatora — automat liczy i zapisuje
+kandydatow, ale sam nie wyznacza adresu zrzutu.
 """
 
 import bisect
@@ -247,6 +252,21 @@ class SuasGeolocator(Node):
         # UWAGA: bramka dotyczy WYLACZNIE automatu. Klikniecie operatora dziala
         # na kazdej wysokosci — to jest caly sens recznego oznaczania.
         self.declare_parameter('person_max_alt', 50.0)
+        # ADRES DO MISJI TYLKO Z REKI OPERATORA.
+        # Automat dalej liczy, klastruje i wypisuje kandydatow (widac ich
+        # w raporcie i w sekcji 'candidates'), ale NIE awansuje na 'best' —
+        # a 'best' to jedyne, co suas_mission czyta jako adres zrzutu.
+        #
+        # Powod: klaster zbiezny to jeszcze nie cel. Obiekt systematycznie
+        # brany za namiot czy czlowieka (krzak, cien, znacznik ArUco) zbiera
+        # setki trafien w jednym miejscu tak samo jak prawdziwy cel — min_obs
+        # go nie odroznia, bo mierzy powtarzalnosc, nie poprawnosc. Czlowiek
+        # przy ekranie takiego bledu nie zrobi. Koszt pomylki automatu to
+        # ladunek zrzucony w zle miejsce, wiec ostatnie slowo ma operator.
+        #
+        # false = stare zachowanie: awans po min_obs obserwacjach.
+        self.declare_parameter('operator_only', True)          # namiot
+        self.declare_parameter('operator_only_person', True)   # czlowiek
         self.declare_parameter('pass_gap', 3.0)          # przerwa cos>tyle s = kolejny przelot
 
         self.declare_parameter('snapshots', True)
@@ -285,6 +305,8 @@ class SuasGeolocator(Node):
                         1: p('min_obs_person').value}
         self.max_alt_auto = {0: float('inf'),
                              1: p('person_max_alt').value}
+        self.operator_only = {0: bool(p('operator_only').value),
+                              1: bool(p('operator_only_person').value)}
         self.pass_gap = p('pass_gap').value
         self.snapshots = p('snapshots').value
         report_period = p('report_period').value
@@ -297,7 +319,8 @@ class SuasGeolocator(Node):
         self.origin = None                 # (lat, lon) pierwszego fixa
         self.candidates = []
         self._next_cid = 1
-        self._best_id = {}      # class_id -> id kandydata
+        # Ostatnia zalogowana linia stanu — logujemy tylko przy zmianie.
+        self._last_status = None
         # Log raz na ZRODLO: 'stamp klatki' czy 'det_latency'. Osobno dla detekcji
         # i dla znacznikow, bo wspolny stan kasowal ostrzezenie o kliknieciu przy
         # nastepnej klatce detektora - w logu zostawal 30-milisekundowy przebłysk.
@@ -361,28 +384,21 @@ class SuasGeolocator(Node):
         self.create_timer(2.0, self._set_nadir)
         self.create_timer(report_period, self._report)
 
+        # Dwie linie na starcie. Reszta ustawien jest w yamlu i w targets.json —
+        # w konsoli liczy sie tylko to, czego nie da sie tam sprawdzic w locie.
+        tylko_operator = [CLASS_NAMES.get(c, c) for c, v
+                          in sorted(self.operator_only.items()) if v]
         self.get_logger().info(
-            f"suas_geolocator gotowy | zapis: {self.flight_dir} | "
-            f"nadir={'TAK' if self.lock_nadir else 'NIE'} "
-            f"({self.mount_pitch:+.0f} st.) | promien klastra "
-            f"{self.cluster_radius:.0f} m | min_obs={self.min_obs}")
+            f"suas_geolocator gotowy | zapis: {self.targets_json} | "
+            f"nadir={'TAK' if self.lock_nadir else 'NIE'}")
         self.get_logger().info(
-            f"klasy: {CLASS_NAMES} | rozmiary [m]: {self.size_m} | "
-            f"kompensacja przechylu: {'WYLACZONA (mount stabilizowany)' if self.gimbal_stabilized else 'WLACZONA'}")
-        self.get_logger().info(
-            f"stempel klatki ufany do {self.stamp_max_skew:.0f} s rozjazdu "
-            f"zegara | bufor telemetrii {telemetry_samples} probek "
-            f"(~{telemetry_samples / 10.0:.0f} s przy 10 Hz) = tyle czasu ma "
-            f"operator od zamrozenia do wyboru klasy")
-        self.get_logger().info(
-            f"automat dla czlowieka tylko ponizej "
-            f"{self.max_alt_auto[1]:.0f} m (wyzej ma za malo pikseli); "
-            f"znaczniki operatora dzialaja na kazdej wysokosci")
+            "adres tylko z klikniecia operatora: "
+            + (", ".join(tylko_operator) if tylko_operator
+               else "nikt (automat awansuje po min_obs)"))
         if self.lock_nadir:
             self.get_logger().warn(
-                "lock_nadir=true — trzymam gimbal w pionie do czasu, az misja "
-                "zwolni blokade (/geolocator/lock_nadir). NIE uruchamiaj "
-                "rownolegle suas_gimbal_controller")
+                "lock_nadir=true — NIE uruchamiaj rownolegle "
+                "suas_gimbal_controller")
 
     # ────────────────────── Gimbal ──────────────────────
 
@@ -605,19 +621,11 @@ class SuasGeolocator(Node):
         # pewnoscia, wiec znacznik reczny ciagnie srodek klastra najmocniej.
         cand = self._add_observation(int(msg.class_id), lat, lon,
                                      d_north, d_east, 1.0, now, 'operator')
-        # Logujemy DWIE rzeczy, bo to co innego: surowy punkt z klikniecia
-        # (tym weryfikujesz celnosc piksela) i srodek klastra, do ktorego klik
-        # wpadl (to jest adres, ktory pojdzie do misji). Przy trafieniu w ten
-        # sam cel co automat beda prawie identyczne — i o to chodzi.
-        mlat, mlon = meters_to_gps(lat, lon, d_north, d_east)
+        # Logujemy srodek KLASTRA, do ktorego klik wpadl — bo to jest adres,
+        # ktory pojdzie do misji. Surowy punkt z piksela siedzi w CSV.
         clat, clon = self._latlon(cand)
         self.get_logger().info(
-            f"ZNACZNIK OPERATORA [{CLASS_NAMES.get(msg.class_id, msg.class_id)}] "
-            f"piksel ({msg.u:.0f},{msg.v:.0f}) z {alt:.1f} m -> "
-            f"{d_east:+.1f} m wschod, {d_north:+.1f} m polnoc od drona "
-            f"= {mlat:.6f} {mlon:.6f}")
-        self.get_logger().info(
-            f"   wpadl do klastra #{cand.id} ({cand.n_obs} obs) -> "
+            f"ZNACZNIK [{CLASS_NAMES.get(msg.class_id, msg.class_id)}] "
             f"{clat:.6f} {clon:.6f}")
 
     def _add_observation(self, class_id, lat, lon, d_north, d_east,
@@ -658,9 +666,12 @@ class SuasGeolocator(Node):
                          drone_ne, source)
         self._next_cid += 1
         self.candidates.append(cand)
+        # Nowy klaster automatu to jeszcze nie wiadomosc dla operatora — krzak
+        # i cien zakladaja swoje tak samo jak cel. Klik operatora ma wlasny log
+        # (ZNACZNIK), wiec tu zostaje debug; komplet jest w targets.json i CSV.
         lat, lon = meters_to_gps(self.origin[0], self.origin[1], north, east)
-        self.get_logger().info(
-            f"NOWY KANDYDAT #{cand.id} [{CLASS_NAMES.get(class_id, class_id)}]"
+        self.get_logger().debug(
+            f"nowy klaster #{cand.id} [{CLASS_NAMES.get(class_id, class_id)}]"
             f"  {lat:.6f} {lon:.6f}  conf={conf:.2f}  zrodlo={source}")
         self._save_snapshot(cand)
         return cand
@@ -671,8 +682,12 @@ class SuasGeolocator(Node):
         PRIORYTET OPERATORA: klaster oznaczony recznie wygrywa niezaleznie od
         liczby obserwacji. Automat na 80 m ma na czlowieku 11 pikseli, wiec
         czlowiek przy ekranie widzi wiecej niz model - i to jego wskazanie ma
-        byc adresem zrzutu. Dopiero gdy nikt nie kliknal, decyduje automat
-        i jego prog min_obs.
+        byc adresem zrzutu.
+
+        Co dalej, gdy nikt nie kliknal, zalezy od operator_only danej klasy:
+          true  -> BRAK adresu. Automat zostaje w 'candidates' (raport, JSON,
+                   CSV), ale misja nie dostanie od niego celu.
+          false -> decyduje automat i jego prog min_obs (stare zachowanie).
         """
         mine = [c for c in self.candidates if c.class_id == class_id]
         if not mine:
@@ -681,6 +696,8 @@ class SuasGeolocator(Node):
         oper = [c for c in ranked if c.source == 'operator']
         if oper:
             return max(oper, key=lambda c: c.last_t), ranked
+        if self.operator_only.get(class_id, False):
+            return None, ranked
         need = self.min_obs.get(class_id, 10)
         return next((c for c in ranked if c.n_obs >= need), None), ranked
 
@@ -697,50 +714,40 @@ class SuasGeolocator(Node):
 
     # ────────────────────── Raport i zapis ──────────────────────
 
+    def _status_line(self, by_class):
+        """Jedna linia: co mam dla namiotu, co dla czlowieka.
+
+        Tylko to, co idzie do misji — wspolrzedne 'best' albo slowo BRAK.
+        Ranking kandydatow, liczniki odrzucen i rozrzut zostaja w targets.json
+        i w observations.csv; w logu w locie sa zawada, bo trzeba ich szukac
+        oczami miedzy liniami, a pytanie jest zawsze jedno: mam adres czy nie.
+        """
+        czesci = []
+        for class_id, (best, _) in by_class.items():
+            name = CLASS_NAMES.get(class_id, class_id).upper()
+            if best is None:
+                czesci.append(f"{name}: BRAK")
+            else:
+                lat, lon = self._latlon(best)
+                czesci.append(f"{name}: {lat:.6f} {lon:.6f} ZAPISANO "
+                              f"({best.source})")
+        return "   |   ".join(czesci)
+
     def _report(self):
         if self.origin is None:
-            self.get_logger().warn(
-                "brak telemetrii z fixem GPS — detekcje odrzucane "
-                f"(dostalem {self._n_det} detekcji)")
+            self.get_logger().warn("brak fixa GPS — detekcje odrzucane")
             return
 
         by_class = {cid: self._best_for(cid) for cid in sorted(self.size_m)}
-        drops = ', '.join(f"{k}={v}" for k, v in self._rejects.items() if v)
-
-        if not self.candidates:
-            self.get_logger().info(
-                f"brak kandydatow | detekcji: {self._n_det}"
-                + (f" | odrzucone: {drops}" if drops else ""))
-            return
-
-        lines = []
-        for class_id, (best, ranked) in by_class.items():
-            if not ranked:
-                continue
-            name = CLASS_NAMES.get(class_id, class_id).upper()
-            lines.append(f"--- KANDYDACI ({name}) ---------------------------")
-            for c in ranked[:5]:
-                lat, lon = self._latlon(c)
-                mark = "   <-- ZAPISANY" if best is not None and c.id == best.id else ""
-                src = "  [OPERATOR]" if c.source == 'operator' else ""
-                lines.append(
-                    f" #{c.id}  {lat:.6f}  {lon:.6f}   obs={c.n_obs:4d}  "
-                    f"conf={c.mean_conf:.2f}  przeloty={c.n_passes}"
-                    f"  rozrzut={c.point_spread():.1f}m{src}{mark}")
-        if drops:
-            lines.append(f" (detekcji: {self._n_det}, odrzucone: {drops})")
-        self.get_logger().info("\n".join(lines))
-
-        for class_id, (best, _) in by_class.items():
-            if best is None:
-                continue
-            if self._best_id.get(class_id) not in (None, best.id):
-                self.get_logger().warn(
-                    f"ZMIANA LIDERA [{CLASS_NAMES.get(class_id, class_id)}] "
-                    f"-> #{best.id}")
-            self._best_id[class_id] = best.id
-
         self._write_json(by_class)
+
+        # Logujemy dopiero, gdy linia sie ZMIENI. Przy report_period 5 s stale
+        # powtarzanie tego samego zasypuje konsole i gubi to, co wazne: moment,
+        # w ktorym cel dostal adres albo adres podmienil sie na inny.
+        linia = self._status_line(by_class)
+        if linia != self._last_status:
+            self._last_status = linia
+            self.get_logger().info(linia)
 
     def _latlon(self, c):
         return meters_to_gps(self.origin[0], self.origin[1], c.north, c.east)
@@ -795,22 +802,18 @@ class SuasGeolocator(Node):
     def close(self):
         """Domkniecie plikow — wywolywane takze przy Ctrl+C."""
         try:
-            if self.candidates and self.origin is not None:
+            if self.origin is not None:
                 by_class = {cid: self._best_for(cid) for cid in sorted(self.size_m)}
                 self._write_json(by_class)
-                for class_id, (best, _) in by_class.items():
-                    name = CLASS_NAMES.get(class_id, class_id)
-                    if best is not None:
-                        lat, lon = self._latlon(best)
-                        self.get_logger().info(
-                            f"ZAPISANO [{name}] #{best.id}  {lat:.6f} {lon:.6f}  "
-                            f"({best.n_obs} obserwacji, zrodlo={best.source}) "
-                            f"-> {self.targets_json}")
-                    else:
-                        self.get_logger().warn(
-                            f"[{name}] zaden kandydat nie zebral "
-                            f"{self.min_obs.get(class_id)} obserwacji — "
-                            f"w {self.targets_json} jest sam ranking, bez 'best'")
+                self.get_logger().info(self._status_line(by_class))
+                # Liczniki odrzucen dopiero TU, raz. W locie sa szumem, po locie
+                # sa jedyna odpowiedzia na pytanie "czemu nic nie zlapalo".
+                drops = ', '.join(f"{k}={v}"
+                                  for k, v in self._rejects.items() if v)
+                self.get_logger().info(
+                    f"detekcji: {self._n_det}"
+                    + (f" | odrzucone: {drops}" if drops else "")
+                    + f" | {self.targets_json}")
         finally:
             if not self._csv_f.closed:
                 self._csv_f.close()

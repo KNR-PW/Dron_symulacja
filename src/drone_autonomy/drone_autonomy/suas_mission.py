@@ -180,7 +180,11 @@ class SuasMission(SuasFlightController):
         # Twardy budzet od dolotu do decyzji. Bez niego migoczaca detekcja
         # zapetlilaby pytanie: cel wraca -> pytamy -> znika -> wraca...
         p('wp_budget', 20.0)
-        p('wp_acquire', 10.0)      # okno M z N nad waypointem (budzet - confirm)
+        # Okno M z N nad waypointem. 5, a nie 10: jesli cel jest pod dronem,
+        # bramka 4 z 8 domyka sie w ulamku sekundy. Dziesiec sekund milczenia
+        # detektora nie znaczy "zaraz go zlapie", tylko "nie ma go w kadrze" —
+        # a wtedy i tak konczy sie okno poprawki albo zrzut na wspolrzedne.
+        p('wp_acquire', 5.0)
         # Gdy nad waypointem pod dronem nic nie widac: skan Z TEGO MIEJSCA,
         # tymi samymi katami co skan bez geolokatora. Adres bywa przesuniety
         # (slaba geolokalizacja, cel ruszyl sie miedzy ortofoto a misja),
@@ -190,6 +194,27 @@ class SuasMission(SuasFlightController):
         p('wp_scan_on_miss', True)
         p('wp_scan_arc_deg', 360.0)
         p('wp_scan_timeout', 120.0)
+
+        # ── OKNO NA POPRAWKE ADRESU ─────────────────────────────────
+        # Otwiera sie dokladnie tam, gdzie misja i tak zrzucilaby w ciemno:
+        # nad waypointem, bez zrzutu nad wycentrowanym celem. Dron wisi,
+        # gimbal jest w pionie, wiec operator widzi w GUI to samo co widzial
+        # geolokator — to sa najlepsze warunki do klikniecia w calym locie.
+        #
+        # Klik w GUI -> geolokator przepisuje targets.json (do 5 s) -> misja
+        # widzi nowy adres i LECI TAM zamiast zrzucac. Cisza konczy okno
+        # zrzutem: brak reakcji znaczy "adres jest dobry".
+        #
+        # 0 = wylaczone, czyli stare zachowanie (zrzut od razu).
+        p('wp_fix_window', 10.0)
+        # Ile adres musi sie przesunac, zeby uznac to za POPRAWKE. Klik w ten
+        # sam klaster przesuwa jego srodek o ulamek metra i nie ma po co po to
+        # przelatywac; ponizej center_tol_m (3 m) to i tak szum centrowania.
+        p('wp_fix_tol', 5.0)
+        # Ile razy z rzedu operator moze poprawiac. Kazda poprawka to nowy
+        # dolot i nowe okno, wiec bez limitu dalo by sie oprowadzac drona po
+        # polu az do wyczerpania baterii.
+        p('wp_fix_max', 2)
 
         # ── CENTROWANIE NAD CELEM Z ADRESU (sciezka B) ──────────────
         # false = mimo ze detektor widzi cel pod dronem, misja NIE centruje sie
@@ -322,6 +347,9 @@ class SuasMission(SuasFlightController):
         self.wp_scan_on_miss = g('wp_scan_on_miss').value
         self.wp_scan_arc_deg = g('wp_scan_arc_deg').value
         self.wp_scan_timeout = g('wp_scan_timeout').value
+        self.wp_fix_window = g('wp_fix_window').value
+        self.wp_fix_tol = g('wp_fix_tol').value
+        self.wp_fix_max = max(0, int(g('wp_fix_max').value))
         self.operator_confirm = g('operator_confirm').value
         self.center_on_target = {TENT: g('center_on_tent').value,
                                  PERSON: g('center_on_person').value}
@@ -436,6 +464,11 @@ class SuasMission(SuasFlightController):
                         + ("TAK" if self.center_on_target[c] else
                            "NIE, zrzut wprost na wspolrzedne")
                         for c in (TENT, PERSON)))
+        self.get_logger().info(
+            f"okno na poprawke adresu nad waypointem: "
+            + (f"{self.wp_fix_window:.0f}s, prog {self.wp_fix_tol:.0f} m, "
+               f"max {self.wp_fix_max} razy" if self.wp_fix_window > 0
+               else "WYLACZONE — zrzut od razu"))
         if self.operator_confirm:
             self.get_logger().info(
                 "potwierdzanie SPACJA: WLACZONE (o ile GUI zglasza sie na "
@@ -628,8 +661,12 @@ class SuasMission(SuasFlightController):
             f"zejscie: po {timeout:.0f}s jestem na {self.altitude:.1f} m — lece dalej")
         return False
 
-    def read_targets(self):
+    def read_targets(self, verbose=True):
         """targets.json -> {class_id: (lat, lon, zrodlo, n_obs)}.
+
+        verbose=False dla odpytywania w petli (okno poprawki czyta plik co
+        sekunde) — inaczej kazdy odczyt dopisywalby do logu wiek pliku
+        i adres kazdej klasy.
 
         Bierzemy TYLKO 'best' kazdej klasy. Nie ma puli kandydatow ani
         rankingu: adres uznajemy za wiarygodny i naszym zadaniem jest go
@@ -647,21 +684,26 @@ class SuasMission(SuasFlightController):
             # geolokator padnie albo w ogole nie wstal, zostaje stary plik
             # i misja poleciala by pod adres z poprzedniego lotu, nic nie
             # zauwazajac. Wiek pliku jest jedynym sygnalem, jaki mamy.
-            (self.get_logger().warn if wiek > 300 else self.get_logger().info)(
-                f"{self.targets_json}: zapisany {wiek:.0f} s temu")
+            if verbose:
+                (self.get_logger().warn if wiek > 300
+                 else self.get_logger().info)(
+                    f"{self.targets_json}: zapisany {wiek:.0f} s temu")
         except FileNotFoundError:
-            self.get_logger().warn(
-                f"brak {self.targets_json} — zadna klasa nie ma adresu, "
-                f"namiot idzie skanem")
-            inne = self._resolve_asset(self.targets_json)
-            if inne != os.path.expanduser(self.targets_json):
+            if verbose:
                 self.get_logger().warn(
-                    f"UWAGA: plik o tej nazwie LEZY w {inne}. Jesli to on ma "
-                    f"byc zrodlem adresow, popraw targets_json w yamlu — "
-                    f"NIE biore go sam, bo moglby byc z innego lotu.")
+                    f"brak {self.targets_json} — zadna klasa nie ma adresu, "
+                    f"namiot idzie skanem")
+                inne = self._resolve_asset(self.targets_json)
+                if inne != os.path.expanduser(self.targets_json):
+                    self.get_logger().warn(
+                        f"UWAGA: plik o tej nazwie LEZY w {inne}. Jesli to on "
+                        f"ma byc zrodlem adresow, popraw targets_json w yamlu "
+                        f"— NIE biore go sam, bo moglby byc z innego lotu.")
             return {}
         except Exception as e:
-            self.get_logger().warn(f"nie moge odczytac {self.targets_json}: {e}")
+            if verbose:
+                self.get_logger().warn(
+                    f"nie moge odczytac {self.targets_json}: {e}")
             return {}
 
         mins = data.get('min_obs') or {}
@@ -670,26 +712,30 @@ class SuasMission(SuasFlightController):
             sec = data.get(key) or {}
             best = sec.get('best')
             if not best:
-                self.get_logger().warn(f"{name}: BRAK adresu")
+                if verbose:
+                    self.get_logger().warn(f"{name}: BRAK adresu")
                 continue
             need = mins.get(key, 10)
             src = best.get('source', '?')
             n_obs = best.get('n_obs', 0)
             if src != 'operator' and n_obs < need:
-                self.get_logger().warn(
-                    f"{name}: adres odrzucony — {n_obs} obserwacji przy progu "
-                    f"{need} (to poziom krzaka, nie celu)")
+                if verbose:
+                    self.get_logger().warn(
+                        f"{name}: adres odrzucony — {n_obs} obserwacji przy "
+                        f"progu {need} (to poziom krzaka, nie celu)")
                 continue
             try:
                 blat, blon = float(best['lat']), float(best['lon'])
             except (KeyError, TypeError, ValueError):
-                self.get_logger().error(
-                    f"{name}: 'best' bez poprawnych wspolrzednych — pomijam")
+                if verbose:
+                    self.get_logger().error(
+                        f"{name}: 'best' bez poprawnych wspolrzednych — pomijam")
                 continue
             out[cid] = (blat, blon, src, n_obs)
-            self.get_logger().info(
-                f"{name}: adres {blat:.7f} {blon:.7f} "
-                f"(zrodlo={src}, obs={n_obs})")
+            if verbose:
+                self.get_logger().info(
+                    f"{name}: adres {blat:.7f} {blon:.7f} "
+                    f"(zrodlo={src}, obs={n_obs})")
         return out
 
     def _load_waypoints(self, path):
@@ -966,6 +1012,52 @@ class SuasMission(SuasFlightController):
         self.drop(cid)
         return True
 
+    def _okno_poprawki(self, cid, lat, lon):
+        """Okno na POPRAWKE adresu klikiem w GUI.
+
+        Zwraca (lat, lon, zrodlo, n_obs) nowego adresu albo None, gdy operator
+        nie zareagowal.
+
+        Otwiera sie tam, gdzie misja i tak zrzucilaby w ciemno: dron wisi nad
+        waypointem, gimbal jest w pionie, wiec operator widzi w GUI to samo, co
+        widzial geolokator — najlepsze warunki do klikniecia w calym locie.
+
+        Cisza konczy okno zrzutem. Brak reakcji ma znaczyc "adres jest dobry",
+        a nie "operator zasnal": jak nikogo nie ma, zrzut i tak jest tym, co
+        misja zrobilaby bez tej funkcji.
+        """
+        if self.wp_fix_window <= 0:
+            return None
+        name = self.klasy[cid][0]
+        self.get_logger().warn(
+            f"{name}: masz {self.wp_fix_window:.0f} s na POPRAWKE — kliknij "
+            f"w GUI, jesli cel jest gdzie indziej. Cisza = zrzut na ten punkt")
+
+        koniec = time.time() + self.wp_fix_window
+        nastepny = 0.0
+        while rclpy.ok() and not self._abort and time.time() < koniec:
+            rclpy.spin_once(self, timeout_sec=0.1)
+            now = time.time()
+            if now < nastepny:
+                continue
+            # Czytamy raz na sekunde, nie w kazdej iteracji: geolokator
+            # przepisuje plik co report_period (5 s), wiec czestsze zagladanie
+            # to samo obciazenie dysku.
+            nastepny = now + 1.0
+            cel = self.read_targets(verbose=False).get(cid)
+            if cel is None:
+                continue
+            nlat, nlon, nsrc, nobs = cel
+            d = math.hypot((nlat - lat) * M_LAT,
+                           (nlon - lon) * _m_per_deg_lon(lat))
+            if d < self.wp_fix_tol:
+                continue
+            self.get_logger().warn(
+                f"{name}: POPRAWKA — adres przesuniety o {d:.0f} m "
+                f"(zrodlo={nsrc}, obs={nobs}), lece na nowy punkt")
+            return nlat, nlon, nsrc, nobs
+        return None
+
     def deliver(self, cid, lat, lon, src, n_obs) -> bool:
         """Dolot na waypoint i zrzut. Zawsze konczy sie zrzutem.
 
@@ -974,6 +1066,11 @@ class SuasMission(SuasFlightController):
         w locie jest przy tym slaba przeslanka, a zatrzymanie sie dla krzaka
         po drodze oznaczaloby zrzut ladunku TEJ klasy obok niego i porzucenie
         adresu, ktory ktos juz zweryfikowal.
+
+        Dolot jest PETLA, nie jednym przelotem: za kazdym razem, gdy nad
+        waypointem nie doszlo do zrzutu nad wycentrowanym celem, operator
+        dostaje wp_fix_window sekund na poprawienie adresu klikiem. Poprawka
+        oznacza nowy dolot i nowe okno — do wp_fix_max razy.
         """
         name, _key, topic = self.klasy[cid]
         self._apply_class(cid)
@@ -984,30 +1081,66 @@ class SuasMission(SuasFlightController):
             f"(zrodlo={src}, obs={n_obs}), detektor milczy w drodze")
 
         self._gimbal(self.pitch_min)
-        self.send_goto_global(lat, lon, self.target_alt)
 
-        # Nad waypointem cel ma byc POD nami — gimbal w pion, inaczej okno
-        # akwizycji nie mialoby szans.
-        self._gimbal(self.pitch_min)
-        self._spin(1.0)
-        blad = self._dist_to(lat, lon)
-        self.get_logger().info(f"nad waypointem (blad {blad:.1f} m), gimbal w pionie")
+        widoczny = False
+        for runda in range(self.wp_fix_max + 1):
+            self.send_goto_global(lat, lon, self.target_alt)
 
-        # ── Budzet 20 s: od tej chwili do decyzji ────────────────────
-        t0 = time.time()
-        zostalo = lambda: max(0.0, self.wp_budget - (time.time() - t0))
-
-        widoczny = self.wait_acquire(timeout=min(self.wp_acquire, zostalo()))
-
-        # Centrowanie mozna WYLACZYC per klasa. Rozdzielone od `widoczny`
-        # celowo: gdy jest wylaczone, NIE chcemy wpasc w galaz wp_scan_on_miss
-        # ponizej, bo cel przeciez widac — po prostu zrzucamy na adres.
-        centruj = widoczny
-        if widoczny and not self.center_on_target[cid]:
-            centruj = False
+            # Nad waypointem cel ma byc POD nami — gimbal w pion, inaczej okno
+            # akwizycji nie mialoby szans.
+            self._gimbal(self.pitch_min)
+            self._spin(1.0)
+            blad = self._dist_to(lat, lon)
             self.get_logger().info(
-                f"{name}: cel w kadrze, ale centrowanie dla tej klasy jest "
-                f"wylaczone — zrzut na wspolrzedne z adresu")
+                f"nad waypointem (blad {blad:.1f} m), gimbal w pionie")
+
+            # ── Budzet 20 s: od tej chwili do decyzji ────────────────
+            # Liczony od NOWA przy kazdej rundzie: poprawka to osobny dolot,
+            # a nie dalszy ciag poprzedniego.
+            t0 = time.time()
+            zostalo = lambda: max(0.0, self.wp_budget - (time.time() - t0))
+
+            # Akwizycja tylko wtedy, gdy jej wynik cokolwiek zmienia. Przy
+            # center_on_* = false i wp_scan_on_miss = false nikt go nie czyta,
+            # a kosztuje do wp_acquire sekund zawisu (klasyczny przypadek:
+            # czlowiek, ktory i tak leci na wspolrzedne).
+            if self.center_on_target[cid] or self.wp_scan_on_miss:
+                widoczny = self.wait_acquire(
+                    timeout=min(self.wp_acquire, zostalo()))
+            else:
+                widoczny = False
+                self.get_logger().info(
+                    f"{name}: bez centrowania i bez skanu — pomijam akwizycje")
+
+            # Centrowanie mozna WYLACZYC per klasa. Rozdzielone od `widoczny`
+            # celowo: gdy jest wylaczone, NIE chcemy wpasc w galaz
+            # wp_scan_on_miss ponizej, bo cel przeciez widac.
+            centruj = widoczny
+            if widoczny and not self.center_on_target[cid]:
+                centruj = False
+                self.get_logger().info(
+                    f"{name}: cel w kadrze, ale centrowanie dla tej klasy jest "
+                    f"wylaczone — zrzut na wspolrzedne z adresu")
+
+            if centruj:
+                if self._centruj_i_zrzuc(cid, src, n_obs, zostalo):
+                    return True
+
+            # Tu jestesmy tylko wtedy, gdy do zrzutu nad wycentrowanym celem
+            # NIE doszlo. Zanim zejdziemy na wspolrzedne — daj operatorowi
+            # szanse wskazac wlasciwy punkt.
+            if runda == self.wp_fix_max:
+                # Ostatni dolot: adres jest juz poprawiony wp_fix_max razy,
+                # wiec zamiast otwierac kolejne okno — zrzucamy.
+                if self.wp_fix_max > 0:
+                    self.get_logger().warn(
+                        f"{name}: limit poprawek ({self.wp_fix_max}) "
+                        f"wyczerpany — zrzut na ten adres")
+                break
+            nowy = self._okno_poprawki(cid, lat, lon)
+            if nowy is None:
+                break
+            lat, lon, src, n_obs = nowy
 
         # Nie ma go POD dronem. Zanim zrzucimy w ciemno — sprawdzmy, czy nie
         # stoi OBOK (patrz _skan_z_waypointu). Skan konczy sie albo zrzutem
@@ -1016,44 +1149,48 @@ class SuasMission(SuasFlightController):
         if not widoczny and self.wp_scan_on_miss:
             if self._skan_z_waypointu(cid):
                 return True
-            return self._zrzut_na_wspolrzedne(cid, lat, lon)
-
-        # Pytanie zadawane RAZ. Nawet jesli cel zniknie i wroci, nie pytamy
-        # drugi raz — to jest zabezpieczenie przed petla nad jednym punktem.
-        # Pytamy TYLKO gdy cel jest widoczny: przy braku detekcji spacja i tak
-        # nie zmienialaby niczego (obie odpowiedzi konczyly sie zrzutem na
-        # wspolrzedne), a kosztowala pelne confirm_timeout czekania w prozni.
-        if centruj:
-            if not self.operator_watching():
-                # Bez operatora nie pytamy i nie czekamy: cel JEST w kadrze,
-                # a nieudane centrowanie i tak schodzi nizej na wspolrzedne.
-                approved = True
-                self.get_logger().info(
-                    f"{name}: bez pytania o spacje — centruje na widocznym celu")
-            else:
-                czas = min(self.confirm_timeout, zostalo())
-                approved = False
-                if czas > 0.5:
-                    approved = self.wait_confirm(
-                        f"=== {name} (zrodlo: {src}, obs={n_obs}) ===\n"
-                        f"Widze cel w kadrze.\n"
-                        f"[SPACJA] = wycentruj na nim i zrzuc     "
-                        f"[nic] = zrzut na wspolrzedne waypointu   "
-                        f"({czas:.0f}s)", timeout=czas)
-                else:
-                    self.get_logger().warn(
-                        f"{name}: budzet {self.wp_budget:.0f}s wyczerpany "
-                        f"przed pytaniem")
-
-            if approved:
-                if self.approach_and_center(over_target=True):
-                    self.get_logger().info(f"{name}: ZRZUT NAD WYCENTROWANYM CELEM")
-                    self.drop(cid)
-                    return True
-                self.get_logger().warn(
-                    f"{name}: centrowanie sie nie udalo — schodze na wspolrzedne")
 
         return self._zrzut_na_wspolrzedne(cid, lat, lon)
+
+    def _centruj_i_zrzuc(self, cid, src, n_obs, zostalo) -> bool:
+        """Cel widoczny pod dronem: (opcjonalne pytanie) -> zawis -> ZRZUT.
+
+        True = ladunek poszedl. False = centrowanie sie nie udalo albo operator
+        nie potwierdzil; decyzje co dalej podejmuje deliver().
+        """
+        name = self.klasy[cid][0]
+        # Pytanie zadawane RAZ. Nawet jesli cel zniknie i wroci, nie pytamy
+        # drugi raz — to jest zabezpieczenie przed petla nad jednym punktem.
+        if not self.operator_watching():
+            # Bez operatora nie pytamy i nie czekamy: cel JEST w kadrze,
+            # a nieudane centrowanie i tak schodzi nizej na wspolrzedne.
+            approved = True
+            self.get_logger().info(
+                f"{name}: bez pytania o spacje — centruje na widocznym celu")
+        else:
+            czas = min(self.confirm_timeout, zostalo())
+            approved = False
+            if czas > 0.5:
+                approved = self.wait_confirm(
+                    f"=== {name} (zrodlo: {src}, obs={n_obs}) ===\n"
+                    f"Widze cel w kadrze.\n"
+                    f"[SPACJA] = wycentruj na nim i zrzuc     "
+                    f"[nic] = zrzut na wspolrzedne waypointu   "
+                    f"({czas:.0f}s)", timeout=czas)
+            else:
+                self.get_logger().warn(
+                    f"{name}: budzet {self.wp_budget:.0f}s wyczerpany "
+                    f"przed pytaniem")
+
+        if not approved:
+            return False
+        if self.approach_and_center(over_target=True):
+            self.get_logger().info(f"{name}: ZRZUT NAD WYCENTROWANYM CELEM")
+            self.drop(cid)
+            return True
+        self.get_logger().warn(
+            f"{name}: centrowanie sie nie udalo — schodze na wspolrzedne")
+        return False
 
     # ═══════════════════════════════════════════════════════════
     #  SCIEZKA A — skan
