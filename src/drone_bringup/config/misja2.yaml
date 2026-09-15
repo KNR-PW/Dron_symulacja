@@ -44,9 +44,9 @@
     # moze byc z poprzedniego lotu, a zrzut pod nieaktualny adres jest gorszy
     # niz brak adresu. Misja tylko powie, gdzie taki plik lezy.
     targets_json: "~/Dron_symulacja/src/drone_bringup/config/targets.json"
-    scan_waypoints: "misja_skan.waypoints"
+    scan_waypoints: "misja_skan2.waypoints"
 
-    person_waypoints: "~/Dron_symulacja/src/drone_bringup/config/czlowiek.waypoints"
+    person_waypoints: "~/Dron_symulacja/src/drone_bringup/config/czlowiek2.waypoints"
 
     # ═══ PRZEJECIE LOTU ══════════════════════════════════════════════
     takeover_timeout: 1200.0

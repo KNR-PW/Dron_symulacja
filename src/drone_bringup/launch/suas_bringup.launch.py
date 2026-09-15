@@ -84,7 +84,7 @@ def generate_launch_description():
     )
     preview_max_fps_arg = DeclareLaunchArgument(
         "preview_max_fps",
-        default_value="3.0",
+        default_value="4.0",
         description="Limit FPS podgladu markera (:5000); 0 = bez limitu",
     )
     detect_delay_arg = DeclareLaunchArgument(
@@ -102,6 +102,16 @@ def generate_launch_description():
         "cluster_radius",
         default_value="10.0",
         description="Promien laczenia detekcji w jeden cel [m]; ~0.12 * wysokosc",
+    )
+    alt_offset_arg = DeclareLaunchArgument(
+        "alt_offset",
+        default_value="0.0",
+        description="Poprawka na TEREN [m] dla geolokatora: srednia roznica "
+                    "'teren w obszarze minus teren na starcie'. Telemetria "
+                    "podaje wysokosc wzgledem STARTU, wiec nad wyzszym terenem "
+                    "dron jest nizej, niz sadzi, i cele wypadaja dalej od "
+                    "nadiru. ZMIERZONE: obszar 1 (misja1.yaml) = 7.0 | "
+                    "obszar 2 (misja2.yaml) = 5.0",
     )
 
     # ─── drone_handler (pierwszy, laczy sie z FC) ─────────
@@ -144,6 +154,7 @@ def generate_launch_description():
         launch_arguments={
             "lock_nadir": LaunchConfiguration("lock_nadir"),
             "cluster_radius": LaunchConfiguration("cluster_radius"),
+            "alt_offset": LaunchConfiguration("alt_offset"),
         }.items(),
     )
 
@@ -166,6 +177,7 @@ def generate_launch_description():
         detect_delay_arg,
         lock_nadir_arg,
         cluster_radius_arg,
+        alt_offset_arg,
         drone_handler,     # najpierw polaczenie z FC
         delayed,           # potem kamera + detekcja + geolokator
     ])

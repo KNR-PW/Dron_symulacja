@@ -197,6 +197,20 @@ class SuasGeolocator(Node):
 
         # Bramki na pojedynczej detekcji
         self.declare_parameter('min_conf', 0.0)      # 0 = ufaj progowi detektora
+        # POPRAWKA NA TEREN. Telemetria podaje alt wzgledem PUNKTU STARTU
+        # (drone_handler publikuje global_relative_frame.alt), a rzutowanie
+        # potrzebuje wysokosci nad ziemia POD DRONEM. Gdy obszar lezy wyzej
+        # niz miejsce startu, dron jest nizej, niz sadzi — i kazdy punkt
+        # wypada dalej od nadiru, niz powinien.
+        #
+        # Wpisz tu SREDNIA roznice "teren w obszarze minus teren na starcie"
+        # (Mission Planner pokazuje wysokosc terenu przy kazdym waypoincie).
+        # Wartosc jest ODEJMOWANA od alt, wiec dodatnia = obszar wyzej.
+        #
+        # Blad, ktory to usuwa, rosnie z odchyleniem od pionu: przy celu
+        # dokladnie pod dronem jest zerowy, przy krawedzi kadru to delta * 0.5.
+        # Stala nie obejmie zmiennosci terenu W OBREBIE obszaru — to zostaje.
+        self.declare_parameter('alt_offset', 0.0)
         self.declare_parameter('min_alt', 10.0)      # nie zbieraj smieci przy ziemi
         # Przechyl jest teraz KOMPENSOWANY w rzutowaniu, wiec ta bramka nie sluzy
         # juz do ratowania dokladnosci - zostaje tylko po to, zeby odrzucic ostre
@@ -290,6 +304,7 @@ class SuasGeolocator(Node):
         self.img_h = p('img_h').value
         self.det_latency = p('det_latency').value
         self.min_conf = p('min_conf').value
+        self.alt_offset = p('alt_offset').value
         self.min_alt = p('min_alt').value
         self.max_tilt = math.radians(p('max_tilt').value)
         self.center_frac = p('center_frac').value
@@ -390,7 +405,9 @@ class SuasGeolocator(Node):
                           in sorted(self.operator_only.items()) if v]
         self.get_logger().info(
             f"suas_geolocator gotowy | zapis: {self.targets_json} | "
-            f"nadir={'TAK' if self.lock_nadir else 'NIE'}")
+            f"nadir={'TAK' if self.lock_nadir else 'NIE'}"
+            + (f" | teren +{self.alt_offset:.1f} m nad startem (alt_offset)"
+               if self.alt_offset else ""))
         self.get_logger().info(
             "adres tylko z klikniecia operatora: "
             + (", ".join(tylko_operator) if tylko_operator
@@ -429,7 +446,11 @@ class SuasGeolocator(Node):
         if msg.global_lat == 0.0 and msg.global_lon == 0.0:
             return                      # brak fixa GPS
         t = time.time()
-        self._telem.append((t, msg.global_lat, msg.global_lon, msg.alt,
+        # alt_offset zdejmujemy JUZ TUTAJ, zeby wszyscy nizej — rzutowanie,
+        # bramka min_alt, bramka person_max_alt i kolumna alt w CSV — widzieli
+        # wysokosc NAD ZIEMIA, a nie nad punktem startu.
+        self._telem.append((t, msg.global_lat, msg.global_lon,
+                            msg.alt - self.alt_offset,
                             msg.roll, msg.pitch, msg.yaw))
         self._telem_t.append(t)
         if self.origin is None:
