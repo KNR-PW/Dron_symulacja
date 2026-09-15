@@ -175,6 +175,18 @@ class SuasMission(SuasFlightController):
         p('takeover_timeout', 1200.0)
         p('auto_takeoff', False)
         p('finish_action', 'rtl')
+        # false = po przejeciu lotu dron rusza PROSTO na cel i gubi wysokosc
+        # PO DRODZE (ArduPilot w GUIDED zmienia wysokosc w trakcie przelotu).
+        # Zejscie z 80 na 50 m w miejscu kosztuje 12-20 s, w ktorych dron
+        # tylko wisi.
+        #
+        # Wysokosc jest potem DOCZEKANA nad celem — i to jest konieczne, bo
+        # akcja goto_global konczy sie na odleglosci POZIOMEJ (haversine < 2 m,
+        # drone_handler.get_distance_global), a wysokosci w ogole nie sprawdza.
+        # Bez tego dolot zglosilby sukces, gdy dron jest jeszcze 30 m wyzej.
+        #
+        # true = stare zachowanie: najpierw zejdz w miejscu, potem lec.
+        p('descend_in_place', False)
 
         # ── SCIEZKA B: dolot na waypoint ────────────────────────────
         # Twardy budzet od dolotu do decyzji. Bez niego migoczaca detekcja
@@ -357,6 +369,7 @@ class SuasMission(SuasFlightController):
         self.takeover_timeout = g('takeover_timeout').value
         self.auto_takeoff = g('auto_takeoff').value
         self.finish_action = str(g('finish_action').value).lower()
+        self.descend_in_place = g('descend_in_place').value
         self.wp_budget = g('wp_budget').value
         self.wp_acquire = g('wp_acquire').value
         self.wp_scan_on_miss = g('wp_scan_on_miss').value
@@ -1034,7 +1047,9 @@ class SuasMission(SuasFlightController):
         self.get_logger().warn(f"{name}: ZRZUT NA WSPOLRZEDNE")
         self.action_interrupt = None
         self._gimbal(self.pitch_min)
-        self.send_goto_global(lat, lon, self.target_alt)
+        # Z doczekaniem wysokosci: to jest moment zrzutu, a rozrzut balistyczny
+        # zalezy wprost od tego, z jak wysoka ladunek wypada.
+        self._dolec_i_zejdz(lat, lon)
         self._spin(1.0)
         self.drop(cid)
         return True
@@ -1111,7 +1126,7 @@ class SuasMission(SuasFlightController):
 
         widoczny = False
         for runda in range(self.wp_fix_max + 1):
-            self.send_goto_global(lat, lon, self.target_alt)
+            self._dolec_i_zejdz(lat, lon)
 
             # Nad waypointem cel ma byc POD nami — gimbal w pion, inaczej okno
             # akwizycji nie mialoby szans.
@@ -1510,6 +1525,47 @@ class SuasMission(SuasFlightController):
             od = trafil + 1
         return False
 
+    def _czekaj_na_wysokosc(self, tol=2.0, timeout=60.0) -> bool:
+        """Czekaj, az dron bedzie na target_alt. NIE zadaje zadnej pozycji.
+
+        Rozni sie tym od descend(), ktory wysyla goto na wspolrzedne BIEZACE —
+        wywolany zaraz po dolocie zakotwiczylby drona tam, gdzie akurat hamuje,
+        czyli kilka metrow obok waypointu, i juz by na niego nie wrocil. Tu
+        cel 3D jest juz zadany przez dolot, wiec wystarczy poczekac.
+        """
+        end = time.time() + timeout
+        while rclpy.ok() and not self._abort and time.time() < end:
+            if abs(self.altitude - self.target_alt) <= tol:
+                return True
+            rclpy.spin_once(self, timeout_sec=0.1)
+        return abs(self.altitude - self.target_alt) <= tol
+
+    def _dolec_i_zejdz(self, lat, lon):
+        """Dolot na punkt + PEWNOSC, ze jestesmy na target_alt.
+
+        Akcja goto_global konczy sie na odleglosci POZIOMEJ (haversine < 2 m,
+        drone_handler.get_distance_global) i wysokosci nie sprawdza w ogole.
+        Przy schodzeniu w drodze oznacza to, ze "doleciałem" pada, gdy dron
+        jest jeszcze kilkadziesiat metrow wyzej — a nastepnym krokiem bywa
+        okno akwizycji i zrzut. Stad drugi krok.
+
+        Gdy dron jest juz na wysokosci, konczy sie od razu — wiec nic nie
+        kosztuje takze przy descend_in_place=true.
+        """
+        self.send_goto_global(lat, lon, self.target_alt)
+        if self._czekaj_na_wysokosc():
+            return
+        # Nie zeszlo w limicie: powtarzamy TEN SAM cel (nie biezaca pozycje),
+        # zeby ewentualnie zgubiona komenda wrocila, a dron zostal nad punktem.
+        self.get_logger().warn(
+            f"po dolocie jestem na {self.altitude:.0f} m zamiast "
+            f"{self.target_alt:.0f} m — ponawiam cel")
+        self.send_goto_global(lat, lon, self.target_alt)
+        if not self._czekaj_na_wysokosc():
+            self.get_logger().error(
+                f"nie zszedlem na {self.target_alt:.0f} m "
+                f"(jestem {self.altitude:.0f} m) — lece dalej")
+
     def _od_najblizszego(self, trasa):
         """Kolejnosc "najblizszy sasiad", liczona od BIEZACEJ pozycji drona.
 
@@ -1747,6 +1803,12 @@ class SuasMission(SuasFlightController):
                     if self.handle_scan_target(w_locie=True, class_id=cid):
                         return True
 
+                # Obroty yaw i sprawdzanie celu wymagaja USTALONEJ wysokosci:
+                # przy schodzeniu w drodze (descend_in_place=false) pierwszy
+                # punkt trasy zaczynalby skan w trakcie zejscia, a rzutowanie
+                # piksela na ziemie liczy sie z biezacej wysokosci.
+                self._czekaj_na_wysokosc()
+
                 # Luk i kurs per PUNKT (indeks z konfiguracji, nie z kolejki).
                 arc = (self.scan_arc_deg[idx] if idx < len(self.scan_arc_deg)
                        else self.scan_arc_deg[-1])
@@ -1806,7 +1868,14 @@ class SuasMission(SuasFlightController):
         # Od tej chwili gimbal jest nasz — geolokator ma przestac trzymac pion.
         self._nadir_pub.publish(Bool(data=False))
         self._gimbal(self.pitch_transit, force=True)
-        self.descend(self.target_alt)
+        if self.descend_in_place:
+            self.descend(self.target_alt)
+        else:
+            # Wysokosc niesie pierwszy dolot — zejdziemy w drodze na cel.
+            # Doczekanie jej jest po stronie dolotu (_dolec_i_zejdz).
+            self.get_logger().info(
+                f"jestem na {self.altitude:.0f} m — schodze na "
+                f"{self.target_alt:.0f} m W DRODZE na cel")
 
         targets = self.read_targets()
         done = set()
