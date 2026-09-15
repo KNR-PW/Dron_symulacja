@@ -52,6 +52,14 @@
     takeover_timeout: 1200.0
     auto_takeoff: false        # true = TRYB TESTOWY, sam uzbraja i startuje
     finish_action: "rtl"       # "rtl" albo "land"
+    # false = po przejeciu lotu dron rusza PROSTO na cel i schodzi na
+    # target_alt PO DRODZE, zamiast najpierw zjezdzac w miejscu. Zejscie
+    # z 80 na 50 m to 12-20 s zawisu, ktore w ten sposob odpadaja.
+    # Nad celem wysokosc jest i tak doczekana przed akwizycja i zrzutem —
+    # akcja goto_global konczy sie na odleglosci POZIOMEJ i wysokosci nie
+    # sprawdza, wiec bez tego doczekania zrzut moglby pojsc z 70 m.
+    # true = stare zachowanie.
+    descend_in_place: false
 
     # ═══ SCIEZKA B — mam adres (dolot na waypoint) ═══════════════════
     # Twardy budzet od dolotu do decyzji. Bez niego migoczaca detekcja
@@ -143,12 +151,12 @@
     scan_yaw_step: 60.0
     # Szerokosc wachlarza skanu dla kolejnych WP. (Np. z rogu pola wystarczy 90).
     # Jesli punktow w pliku jest wiecej, reszta uzyje ostatniej wartosci z listy.
-    scan_arc_deg: [90.0, 360.0]
+    scan_arc_deg: [180.0, 360.0, 180.0]
     # Azymut srodka wachlarza (0-360) dla kolejnych WP. 
     # Jak liczyc z rogu pola dla luku 90st (patrzysz wdluz krawedzi = to Twoj azymut):
     # - Jesli pole jest po PRAWEJ stronie (czyli lewy rog) ➔ Dodajesz 45 stopni. (Azymut + 45)
     # - Jesli pole jest po LEWEJ stronie (czyli prawy rog) ➔ Odejmujesz 45 stopni. (Azymut - 45)
-    scan_heading_deg: [45.0, 0.0]
+    scan_heading_deg: [0.0, 0.0, 180.0]
     # Skan pionowo w dol (robiony raz na dany WP, obracanie drona nic tu nie zmienia).
     scan_pitch_nadir: -90.0
     # Zestaw pochylen gimbala dla kazdej z pozycji obrotu yaw.
