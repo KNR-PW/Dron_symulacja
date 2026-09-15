@@ -321,6 +321,21 @@ class SuasMission(SuasFlightController):
         # pod tym katem nieogladany — mimo ze dron nad nim przelecial.
         p('search_person_after_tent', True)
         p('person_scan_timeout', 300.0)
+        # ── PATROL ZA CZLOWIEKIEM ───────────────────────────────────
+        # Czlowiek bez adresu NIE jest szukany skanem, tylko patrolem: dron
+        # lata w kolko po wlasnej trasie z kamera w dol i czeka, az operator
+        # kliknie go w GUI.
+        #
+        # Dlaczego nie skan: na 50 m stojacy czlowiek ma ok. 8 px, a YOLO ma
+        # stride 8 — nie ma czego wykrywac. Lamanie trasy i obroty yaw pod
+        # detektor nie kupuja wiec nic; jedyne, co dziala, to oko operatora
+        # na podgladzie. Zadaniem drona jest WOZIC KAMERE nad terenem.
+        p('person_waypoints',
+          '~/Dron_symulacja/src/drone_bringup/config/czlowiek.waypoints')
+        # 0 = BEZ LIMITU: patrol chodzi, az operator kliknie albo sam przejmie
+        # lot (RTL z aparatury / Ctrl+C). Limit ma sens tylko wtedy, gdy nikt
+        # nie patrzy na podglad — a wtedy patrol i tak nie ma po co latac.
+        p('person_patrol_timeout', 0.0)
         p('pitch_transit', -55.0)        # kat w przelocie miedzy punktami
         # Cisza dla klasy po falszywce — inaczej ten sam krzak zatrzymywalby
         # drona w kolko.
@@ -392,6 +407,9 @@ class SuasMission(SuasFlightController):
         self.scan_timeout = g('scan_timeout').value
         self.search_person_after_tent = g('search_person_after_tent').value
         self.person_scan_timeout = g('person_scan_timeout').value
+        self.person_waypoints = os.path.expanduser(
+            str(g('person_waypoints').value))
+        self.person_patrol_timeout = g('person_patrol_timeout').value
         self.pitch_transit = g('pitch_transit').value
         self.det_cooldown = g('det_cooldown').value
         self.scan_det_cooldown = g('scan_det_cooldown').value
@@ -457,6 +475,15 @@ class SuasMission(SuasFlightController):
             self.get_logger().error(
                 "BRAK PLIKU TRASY SKANU — jesli namiot nie dostanie adresu "
                 "z geolokatora, misja nie bedzie miala gdzie go szukac")
+        # To samo dla trasy patrolu za czlowiekiem — brak pliku wyszedlby
+        # inaczej dopiero PO zrzucie na namiot, czyli po kilku minutach lotu.
+        patrol = self._resolve_asset(self.person_waypoints)
+        if os.path.isfile(patrol):
+            self.get_logger().info(f"trasa patrolu (czlowiek): {patrol}")
+        elif self.search_person_after_tent:
+            self.get_logger().error(
+                "BRAK PLIKU TRASY PATROLU — jesli czlowiek nie dostanie adresu "
+                f"z geolokatora, dron nie ma gdzie patrolowac ({patrol})")
 
         self.get_logger().info(
             "centrowanie nad celem z adresu: "
@@ -1483,6 +1510,159 @@ class SuasMission(SuasFlightController):
             od = trafil + 1
         return False
 
+    def _od_najblizszego(self, trasa):
+        """Kolejnosc "najblizszy sasiad", liczona od BIEZACEJ pozycji drona.
+
+        Z miejsca, w ktorym stoimy, do najblizszego punktu, potem za kazdym
+        razem do najblizszego z pozostalych. Cykliczne przesuniecie listy
+        (WP3 -> WP1 -> WP2) byloby gorsze, bo trasa jest LINIA, a nie petla:
+        przy trzech punktach dawalo 425 m przelotu zamiast 300 m.
+
+        Wejscie i wyjscie: [(indeks_w_pliku, lat, lon), ...].
+        """
+        zostalo, out = list(trasa), []
+        poz_lat, poz_lon = self.global_lat, self.global_lon
+        while zostalo:
+            j = min(range(len(zostalo)),
+                    key=lambda z: math.hypot(
+                        (zostalo[z][1] - poz_lat) * M_LAT,
+                        (zostalo[z][2] - poz_lon) * _m_per_deg_lon(poz_lat)))
+            out.append(zostalo[j])
+            poz_lat, poz_lon = zostalo[j][1], zostalo[j][2]
+            zostalo.pop(j)
+        return out
+
+    def _adres_operatora(self, cid):
+        """Adres klasy z targets.json, ale TYLKO gdy pochodzi od operatora.
+
+        Warunek jest twardy i niezalezny od operator_only w geolokatorze:
+        patrol czeka na klik, nie na automat. Klaster automatu na czlowieku to
+        najczesciej cien albo krzak — na 50 m czlowiek ma 8 px, czyli ponizej
+        stride'u YOLO, wiec cokolwiek model tam "widzi", nie jest czlowiekiem.
+        """
+        cel = self.read_targets(verbose=False).get(cid)
+        if cel is None or cel[2] != 'operator':
+            return None
+        return cel
+
+    def patrol_operatora(self, czekam):
+        """Patrol z kamera w dol, w oczekiwaniu na klik operatora.
+
+        Zwraca (class_id, lat, lon, zrodlo, n_obs) wskazane przez operatora albo None,
+        gdy patrol przerwano (Ctrl+C, limit czasu, brak trasy).
+
+        Zastepuje skan: dron lata w kolko po wlasnej trasie na target_alt
+        z gimbalem w pionie i nie probuje niczego wykrywac. Detektor jest tu
+        bez znaczenia — liczy sie tylko to, co operator zobaczy na podgladzie.
+
+        `czekam` to zbior klas, ktorych ladunek NADAL jest na pokladzie.
+        Patrol pilnuje ich WSZYSTKICH, nie tylko czlowieka: po nieudanym skanie
+        namiot tez zostaje nieoddany, a operator, ktory widzi go na podgladzie,
+        musi miec jak go wskazac. Bez tego dron krazylby z ladunkiem namiotu
+        nad polem, patrzac wylacznie, czy nie pojawil sie czlowiek.
+
+        Gdy w jednym odczycie sa adresy obu klas, decyduje kolejnosc z run():
+        najpierw namiot. Ten sam powod co tam — namiot jest pewniejszy.
+
+        Klik jest sprawdzany takze W TRAKCIE dolotu (action_interrupt), wiec
+        dron reaguje w ciagu sekundy zamiast dopiero nad kolejnym punktem —
+        przy galsie 250 m to roznica minuty.
+        """
+        czekam = [c for c in (TENT, PERSON) if c in czekam]
+        if not czekam:
+            return None
+        opis = "/".join(self.klasy[c][0] for c in czekam)
+        sciezka = self._resolve_asset(self.person_waypoints)
+        bazowe = self._load_waypoints(sciezka)
+        if not bazowe:
+            self.get_logger().error(
+                f"brak trasy patrolu ({sciezka}) — nie mam gdzie latac")
+            return None
+
+        trasa = self._od_najblizszego(
+            [(i, la, lo) for i, (la, lo) in enumerate(bazowe)])
+
+        self.action_interrupt = None
+        self._gimbal(self.pitch_min, force=True)
+
+        self._patrol_cel = None
+        self._patrol_next = 0.0
+
+        def _sprawdz():
+            """Pierwsza klasa z adresem od operatora, w kolejnosci `czekam`."""
+            for c in czekam:
+                cel = self._adres_operatora(c)
+                if cel is not None:
+                    return (c,) + tuple(cel)
+            return None
+
+        def _klik():
+            """Haczyk dla _send_action: True = przerwij dolot, mamy adres."""
+            now = time.time()
+            if now < self._patrol_next:
+                return False
+            self._patrol_next = now + 1.0
+            self._patrol_cel = _sprawdz()
+            return self._patrol_cel is not None
+
+        limit = self.person_patrol_timeout
+        t0 = time.time()
+        self.get_logger().info(
+            f"╔══ PATROL ({opis}) ══ {len(trasa)} punktow, "
+            + " -> ".join(f"WP{i + 1}" for i, _la, _lo in trasa)
+            + f", {self.target_alt:.0f} m, gimbal w pionie | "
+            + ("bez limitu czasu — czekam na klik operatora"
+               if limit <= 0 else f"limit {limit:.0f}s"))
+
+        okrazenie = 0
+        bledy = 0
+        try:
+            while rclpy.ok() and not self._abort:
+                okrazenie += 1
+                if okrazenie > 1:
+                    self.get_logger().info(f"patrol: okrazenie {okrazenie}")
+                for _idx, wlat, wlon in trasa:
+                    if self._abort:
+                        break
+                    if limit > 0 and time.time() - t0 > limit:
+                        self.get_logger().warn(
+                            f"patrol: limit {limit:.0f}s — koncze")
+                        return None
+                    self._patrol_cel = _sprawdz()
+                    if self._patrol_cel is not None:
+                        break
+                    # Serwo jest bez sprzezenia, wiec kat dopisujemy przy
+                    # kazdym odcinku — to jedna komenda, a gwarantuje, ze
+                    # kamera patrzy w dol takze po restarcie czegokolwiek.
+                    self._gimbal(self.pitch_min)
+                    self.action_interrupt = _klik
+                    try:
+                        doszedl = self.send_goto_global(
+                            wlat, wlon, self.target_alt)
+                    finally:
+                        self.action_interrupt = None
+                    if self._patrol_cel is not None:
+                        break
+                    # Nieudany dolot bez adresu to zwykle znak, ze dron nie
+                    # jest juz nasz (operator przejal lot, RTL z aparatury).
+                    # Dobijanie sie kolejnymi komendami walczyloby z nim.
+                    bledy = 0 if doszedl else bledy + 1
+                    if bledy >= 3:
+                        self.get_logger().error(
+                            "patrol: trzy doloty z rzedu nieudane — przerywam "
+                            "(dron w innym trybie?)")
+                        return None
+                if self._patrol_cel is not None:
+                    pcid, plat, plon, _psrc, _pobs = self._patrol_cel
+                    self.get_logger().info(
+                        f"ZNACZNIK OPERATORA [{self.klasy[pcid][0]}] "
+                        f"{plat:.7f} {plon:.7f} — przerywam patrol, "
+                        f"lece dowiezc")
+                    return self._patrol_cel
+        finally:
+            self.action_interrupt = None
+        return None
+
     def search_class(self, cid, skan_w_miejscu=False, budzet=None) -> bool:
         """Skan trasy dla JEDNEJ klasy. True = ladunek poszedl.
 
@@ -1506,21 +1686,7 @@ class SuasMission(SuasFlightController):
         # PUNKTU, nie do miejsca w kolejce.
         trasa = [(i, la, lo) for i, (la, lo) in enumerate(bazowe)]
         if skan_w_miejscu:
-            # Kolejnosc "najblizszy sasiad": z miejsca zrzutu do najblizszego
-            # punktu, potem za kazdym razem do najblizszego z pozostalych.
-            # Cykliczne przesuniecie listy (WP3 -> WP1 -> WP2) byloby gorsze,
-            # bo trasa jest LINIA, a nie petla: przy trzech punktach dawalo
-            # 425 m przelotu zamiast 300 m.
-            zostalo, trasa = list(trasa), []
-            poz_lat, poz_lon = self.global_lat, self.global_lon
-            while zostalo:
-                j = min(range(len(zostalo)),
-                        key=lambda z: math.hypot(
-                            (zostalo[z][1] - poz_lat) * M_LAT,
-                            (zostalo[z][2] - poz_lon) * _m_per_deg_lon(poz_lat)))
-                trasa.append(zostalo[j])
-                poz_lat, poz_lon = zostalo[j][1], zostalo[j][2]
-                zostalo.pop(j)
+            trasa = self._od_najblizszego(trasa)
         elif self.scan_return_to_first and len(bazowe) > 1:
             trasa.append((0, bazowe[0][0], bazowe[0][1]))
 
@@ -1659,21 +1825,40 @@ class SuasMission(SuasFlightController):
             elif cid == TENT:
                 if self.search_class(TENT):
                     done.add(cid)
-            elif self.search_person_after_tent:
-                # Obrot 360 w MIEJSCU, gdzie dron akurat stoi (po zrzucie —
-                # nad namiotem), potem trasa od NAJBLIZSZEGO punktu. Szanse sa
-                # ograniczone: na 50 m czlowiek STOJACY ma 8 px, czyli ponizej
-                # progu YOLO. Realnie liczy sie tylko lezacy (30x22 px).
-                self.get_logger().info(
-                    f"{name}: brak adresu — szukam skanem "
-                    f"({'namiot zrzucony' if TENT in done else 'namiotu tez nie bylo'})")
-                if self.search_class(PERSON, skan_w_miejscu=True,
-                                     budzet=self.person_scan_timeout):
-                    done.add(cid)
-            else:
+            elif cid == PERSON and not self.search_person_after_tent:
                 self.get_logger().warn(
                     f"{name}: brak adresu, a search_person_after_tent=false "
                     f"— nie szukam, ladunek wraca.")
+
+        # ── PATROL: wszystko, co zostalo na pokladzie, czeka na operatora ──
+        # Czlowiek trafia tu zawsze, gdy nie mial adresu (detektor nie ma
+        # szans: 8 px przy stride 8). Namiot trafia tu po NIEUDANYM skanie —
+        # inaczej dron krazylby z jego ladunkiem, a operator widzialby go na
+        # podgladzie bez zadnego sposobu, zeby to zglosic.
+        if self.search_person_after_tent:
+            while not self._abort:
+                czekam = [c for c in (TENT, PERSON) if c not in done]
+                if not czekam:
+                    break
+                self.get_logger().info(
+                    "na pokladzie zostalo: "
+                    + ", ".join(self.klasy[c][0] for c in czekam)
+                    + " — patroluje i czekam na klik operatora")
+                cel = self.patrol_operatora(czekam)
+                if cel is None:
+                    break
+                pcid, plat, plon, psrc, pobs = cel
+                if not self.deliver(pcid, plat, plon, psrc, pobs):
+                    # deliver() konczy sie zrzutem na kazdej sciezce, wiec to
+                    # nie powinno sie zdarzyc. Gdyby jednak — NIE wracamy do
+                    # patrolu: ten sam adres wciaz lezy w targets.json, wiec
+                    # patrol oddalby go natychmiast i petla kręciłaby sie
+                    # w miejscu, nawet nie latajac.
+                    self.get_logger().error(
+                        f"{self.klasy[pcid][0]}: dowiezienie nieudane — "
+                        f"koncze patrol, ladunek zostaje")
+                    break
+                done.add(pcid)
 
         self._finish(done)
         return True
