@@ -1,114 +1,266 @@
-# KNR Drone Simulation - README
+# KNR Drone Simulation
 
-## Installation Instructions
+Symulacja drona KNR: **ROS 2 Humble + ArduPilot SITL  + Gazebo Harmonic**, wszystko w kontenerze Docker.
+Na hoście potrzebujesz tylko Dockera i repozytorium. Kod edytujesz na hoście, a kompilujesz i uruchamiasz w kontenerze.
 
-### 1. Install Docker
-Ensure you have Docker installed on your system. You can follow the official installation guide:  
-[Docker Installation Guide](https://docs.docker.com/get-docker/)
+Jak to jest połączone:
 
-### 2. Install NVIDIA Container Toolkit
-For systems with NVIDIA GPUs, install the NVIDIA Container Toolkit ([official installation guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)):
+- **Gazebo** symuluje fizykę, kamerę i gimbal. Z SITL wymienia dane przez wtyczkę ArduPilota.
+- **ArduCopter SITL** to symulowany flight controller.
+- **drone_handler** łączy się z SITL przez MAVLink i wystawia drona w ROS 2: akcje, serwisy i topici.
+- **Misje i detekcja** to node'y ROS 2, które sterują dronem przez `drone_handler`.
+- **Stacja naziemna** na hoście, np. QGroundControl albo Mission Planner, łączy się bezpośrednio z SITL.
+
+Oznaczenia w blokach kodu: `# [host]` to zwykły terminal na Twoim komputerze, `# [kontener]` to terminal w kontenerze `knr_drone`.
+
+---
+
+## 1. Wymagania
+
+- Linux: Ubuntu 22.04 lub 24.04 z sesją **Xorg** (patrz krok 2.4). Windows i macOS nie są wspierane.
+- Docker Engine.
+- Opcjonalnie GPU: NVIDIA (wymaga NVIDIA Container Toolkit) albo AMD (działa od razu). Bez GPU też działa, tylko wolniej.
+- Na słabym laptopie symulacja może się zacinać albo w ogóle nie zadziałać.
+
+---
+
+## 2. Instalacja (jednorazowo)
+
+### 2.1 Instalacja Dockera
+
+Zainstaluj **Docker Engine** . **Nie instaluj Docker Desktop**, 
+
+Komendy z [oficjalnej instrukcji](https://docs.docker.com/engine/install/ubuntu/):
+
 ```bash
-distribution=$(. /etc/os-release;echo $ID$VERSION_ID) curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
-
-curl -s -L https://nvidia.github.io/libnvidia-container/$distribution/libnvidia-container.list | \
-    sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
-    sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
-
+# [host]
 sudo apt update
-sudo apt install -y nvidia-container-toolkit
+sudo apt install -y ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+```
+
+
+### 2.2 Docker bez `sudo`
+
+Dodaj swojego użytkownika do grupy `docker`. Dzięki temu komendy `docker` i skrypty z repo (`docker/docker_ap/*.sh`, `scripts/*.sh`) uruchamiasz bez `sudo`.
+
+```bash
+# [host]
+sudo usermod -aG docker $USER
+# wyloguj się i zaloguj ponownie (albo uruchom: newgrp docker)
+docker run --rm hello-world      # test
+```
+
+### 2.3 NVIDIA Container Toolkit (tylko z kartą NVIDIA)
+
+Szczegóły są w [oficjalnej instrukcji](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
+
+```bash
+# [host]
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+  sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+  sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+sudo apt update && sudo apt install -y nvidia-container-toolkit
+sudo nvidia-ctk runtime configure --runtime=docker
 sudo systemctl restart docker
+
+docker run --rm --gpus all ubuntu nvidia-smi    # test: powinna się pokazać tabela z GPU
 ```
 
-### 3. Pull the KNR Drone Simulation Docker Image
-Download the prebuilt Docker image from Docker Hub:
+### 2.4 Dostęp kontenera do ekranu (okno Gazebo)
+
+Ubuntu domyślnie loguje do sesji Wayland, na której okno Gazebo z kontenera często się nie otwiera albo jest czarne. Dotyczy to zwłaszcza kart NVIDIA. Na ekranie logowania kliknij swojego użytkownika, potem ikonę zębatki w prawym dolnym rogu, i wybierz **Ubuntu on Xorg**.
+
 ```bash
-docker image pull dierust/knr_ap_sim:latest
+# [host]
+echo $XDG_SESSION_TYPE      # musi wypisać: x11
+
+echo "xhost +local:docker > /dev/null" >> ~/.bashrc
+source ~/.bashrc
 ```
 
-### 4. Start the Docker Container
-First you should source your graphic session to docker:
+### 2.5 Repozytorium i obraz
+
 ```bash
-echo "xhost +local:docker" >> ~/.bashrc
+# [host]
+git clone https://github.com/KNR-PW/Dron_symulacja.git
+cd Dron_symulacja
+docker pull dierust/knr_ap_sim:latest
 ```
 
-Navigate to the `docker/docker_ap` directory and execute the setup script:  
-If your host has nvidia gpu:
+Submodułów (`git submodule update`) nie pobieraj. Są potrzebne tylko do PX4, a ArduPilot z nich nie korzysta.
+
+### 2.6 Utworzenie kontenera `knr_drone`
+
+Robisz to **raz**. Później kontener tylko uruchamiasz (patrz [rozdział 5](#5-praca-z-kontenerem)). Skrypt uruchom z katalogu `docker/docker_ap` i wybierz wariant pasujący do Twojej karty:
+
 ```bash
+# [host]
 cd docker/docker_ap
-./setup_container_gpu.sh dierust/knr_ap_sim:latest
+./setup_container_gpu.sh dierust/knr_ap_sim:latest   # karta NVIDIA
+./setup_container_amd.sh dierust/knr_ap_sim:latest   # karta AMD
+./setup_container_cpu.sh dierust/knr_ap_sim:latest   # bez GPU
 ```
-If your host doesnt have nvidia gpu:
+
+Po wykonaniu skryptu jesteś w powłoce kontenera. Sprawdź, czy katalog `src` się zamontował:
+
 ```bash
-cd docker/docker_ap
-./setup_container_cpu.sh dierust/knr_ap_sim:latest
+# [kontener]
+ls ~/ros_ws/src      # muszą być widoczne pakiety drone_bringup, drone_hardware, ...
 ```
-Once executed, you will be attached to the newly created Docker container.
 
-> **Note:**  
-> In some cases, the provided setup scripts may not work correctly and the container might not mount the `src` directory as expected (for example, you see an empty container after running `ls`).  
-> If this happens, you can start the container manually with the following command (replace `/absolute/path/to/Dron_symulacja/src` with the full path to your `src` directory on your machine):
-> ```bash
-> docker run --gpus all -it   --name knr_drone   -v /absolute/path/to/Dron_symulacja/src:/root/ros_ws/src   -e DISPLAY=$DISPLAY   -v /tmp/.X11-unix:/tmp/.X11-unix   --device /dev/dri   dierust/knr_ap_sim:latest
+### 2.7 Pierwszy build
 
-> ```
-> For systems without NVIDIA GPU, remove the `--gpus all` flag:
-> ```bash
-> docker run -it   --name knr_drone   -v /absolute/path/to/Dron_symulacja/src:/root/ros_ws/src   -e DISPLAY=$DISPLAY   -v /tmp/.X11-unix:/tmp/.X11-unix   --device /dev/dri   dierust/knr_ap_sim:latest
-> ```
-
-### 5. ROS2 Workspace and Build Process
-Inside the container:
 ```bash
+# [kontener]
 cd ~/ros_ws
-colcon build
+colcon build --packages-skip microxrcedds_agent px4_msgs px4_ros_com
 source install/setup.bash
+
+# Jednorazowo: każdy nowy terminal w kontenerze będzie miał od razu załadowany workspace
+echo "source ~/ros_ws/install/setup.bash" >> ~/.bashrc
 ```
 
-### 6. Run Webots Simulation and ROS2 Packages
-To launch the Webots simulator along with required ROS2 packages:
+---
+
+## 3. Uruchomienie symulacji: Gazebo + SITL + drone_handler
+
+
+### 3.1 Start kontenera
+
 ```bash
-ros2 launch drone_bringup drone_simulation.launch.py
-```
-
-### 7. Run ArduPilot SITL (Software-in-the-Loop)
-To start the ArduPilot SITL environment, open new terminal and run the following command **outside** the Docker container:
-```bash
-./run_ardupilot_sitl.sh
-```
-First run can take a while since ardupilot will build required components.
-
-### 8. Drone control
-
-You have two options to control the drone:
-
-- **Option A – custom mission**  
-  Write your own `test_mission` node/script and run it using:
-  ```bash
-  ./run_test_mission.sh
-
-### 9. Managing the Docker Container
-#### Detach from the container (keep it running):
-Press `Ctrl + P` then `Ctrl + Q`
-
-#### Reattach to a running container (no need to create new every time):
-```bash
-docker attach knr_drone
-```
-
-#### Start a stopped container:
-```bash
+# [host]
 docker start knr_drone
 ```
 
-#### Stop the container:
-```bash
-docker stop knr_drone
-```
-### 10. Important Notes
-- The `src` directory is shared between the host and the Docker container. In the container, it is located at `~/ros_ws/src`.
-- Your development code should be placed inside this directory to be visible in the container.
-- After stopping the container, its memory persists. However, if the container is removed, all data outside the shared `src` directory will be lost.
-- **Keep everything in the `src` directory** to prevent data loss.
-- **If you encounter any issues, contact: piotrek2995 / prujasiedomnie / DieRust on Discord.**
+### 3.2 Terminal 1: Gazebo + drone_handler
 
+Ze skryptu:
+
+```bash
+# [host]
+cd scripts
+./run_ap_gazeboo_ros.sh                  # domyślny świat: aruco_plain.sdf
+./run_ap_gazeboo_ros.sh suas_field.sdf   # wybrany świat
+```
+
+Alternatywnie bez skryptu, bezpośrednio w kontenerze:
+
+```bash
+# [host] otwórz nowy terminal w kontenerze
+docker exec -it knr_drone bash
+
+# [kontener]
+cd ~/ros_ws
+colcon build --packages-skip microxrcedds_agent px4_msgs px4_ros_com
+source install/setup.bash
+ros2 launch drone_bringup gazeboo_ap_sim.launch.py world:=aruco_plain.sdf
+```
+
+### 3.3 Terminal 2: ArduCopter SITL
+
+```bash
+# [host]
+cd scripts
+./run_ap_gazeboo_sitl.sh
+```
+
+> Pierwsze uruchomienie SITL kompiluje ArduCopter, co trwa kilka minut. Kolejne starty są szybkie, dopóki nie usuniesz kontenera.
+
+### 3.4 Jak sprawdzić, że wszystko działa
+
+1. Jest okno Gazebo, a w nim dron na ziemi.
+2. W konsoli SITL pojawia się `EKF3 IMU0 is using GPS`.
+3. W terminalu 1 widać zielony komunikat `Copter connected, ready to arm`. Może to potrwać do około minuty, bo handler czeka na GPS i EKF.
+
+Szybki test lotu wpisany w konsoli SITL (MAVProxy):
+
+```
+mode guided
+arm throttle
+takeoff 5
+```
+
+### 3.5 Światy Gazebo
+
+Światy są w [src/drone_bringup/gazebo/worlds/](src/drone_bringup/gazebo/worlds/):
+
+- `aruco_plain.sdf`
+- `suas_field.sdf`
+- `terrain_tent_sunset.sdf`
+
+### 3.6 Restart i sprzątanie procesów z symulacji
+
+Zatrzymaj symulację przez `Ctrl+C` w obu terminalach. Jeśli coś zostało w tle, zabij pozostałe procesy:
+
+```bash
+# [host]
+./scripts/kill_sim.sh
+```
+
+---
+
+## 4. Uruchamianie misji 
+
+Gazebo i SITL muszą już działać, a handler musi wypisać `ready to arm`.
+
+### 4.1  misja testowa
+
+```bash
+# [kontener]
+python3 ~/ros_ws/src/drone_autonomy/drone_autonomy/test_mission.py
+```
+
+Lub ze skryptu:
+
+```bash
+# [host]
+cd scripts
+./run_test_mission.sh
+```
+
+Jeśli dron się nie uzbraja, wpisz w konsoli SITL `arm throttle` i zobacz, jaki komunikat `PreArm:` się pojawi.
+
+### 4.2 Detekcja YOLO w Gazebo
+
+```bash
+# [kontener]
+ros2 launch drone_bringup suas_detect_gazebo.launch.py
+```
+
+---
+
+## 5. Komendy docker 
+
+
+```bash
+# [host]
+docker start knr_drone            # start (np. po restarcie komputera)
+docker exec -it knr_drone bash    # nowy terminal
+docker attach knr_drone           # główna powłoka; odłączenie: Ctrl+P, Ctrl+Q
+docker stop knr_drone             # stop
+docker ps -a                      # stan
+docker rm knr_drone               # usunięcie (potem znowu krok 2.6)
+```
+
+### 5.2 Uwagi do dockera
+
+- `exit` w **głównej** powłoce (tej z `setup_container_*.sh` albo `docker attach`) **zatrzymuje cały kontener**. `exit` w terminalu otwartym przez `docker exec` zamyka tylko ten terminal.
+- `docker attach` nie otwiera nowego terminala, tylko podłącza się do tej samej głównej powłoki. Do pracy w kilku terminalach używaj `docker exec`.
+- Hosta i kontener łączy **tylko katalog `src/`** (w kontenerze to `~/ros_ws/src`). Kod edytujesz na hoście, a zmiany od razu widać w kontenerze.
+- Wszystko poza `src/` (build, install, skompilowany SITL, pliki w `/root`) przetrwa `docker stop`, ale **zniknie po `docker rm`**. Swoje pliki trzymaj w `src/`.
+
+---
+
+Opis wszystkich pakietów: [docs/co_do_czego.md](docs/co_do_czego.md). 
+
+Praca z gitem: [docs/git_komendy.md](docs/git_komendy.md).
+
+---
