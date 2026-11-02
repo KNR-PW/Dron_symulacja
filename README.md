@@ -3,15 +3,11 @@
 Symulacja drona KNR: **ROS 2 Humble + ArduPilot SITL  + Gazebo Harmonic**, wszystko w kontenerze Docker.
 Na hoście potrzebujesz tylko Dockera i repozytorium. Kod edytujesz na hoście, a kompilujesz i uruchamiasz w kontenerze.
 
-Jak to jest połączone:
-
-- **Gazebo** symuluje fizykę, kamerę i gimbal. Z SITL wymienia dane przez wtyczkę ArduPilota.
-- **ArduCopter SITL** to symulowany flight controller.
-- **drone_handler** łączy się z SITL przez MAVLink i wystawia drona w ROS 2: akcje, serwisy i topici.
-- **Misje i detekcja** to node'y ROS 2, które sterują dronem przez `drone_handler`.
-- **Stacja naziemna** na hoście, np. QGroundControl albo Mission Planner, łączy się bezpośrednio z SITL.
-
-Oznaczenia w blokach kodu: `# [host]` to zwykły terminal na Twoim komputerze, `# [kontener]` to terminal w kontenerze `knr_drone`.
+- **Gazebo** – świat i fizyka drona, kamera, gimbal. Z SITL łączy się przez wtyczkę ArduPilota.
+- **ArduCopter SITL** – symulowany flight controller, ten sam firmware co na prawdziwym dronie.
+- **drone_handler** – most między SITL a ROS 2. Rozmawia z SITL przez MAVLink i udostępnia drona jako akcje, serwisy i topici.
+- **Node'y ROS 2** – misje, detekcja, kamera i reszta logiki projektu. Z dronem komunikują się przez `drone_handler`.
+- **Stacja naziemna** – QGroundControl albo Mission Planner na hoście, łączy się bezpośrednio z SITL.
 
 ---
 
@@ -250,12 +246,6 @@ docker ps -a                      # stan
 docker rm knr_drone               # usunięcie (potem znowu krok 2.6)
 ```
 
-### 5.2 Uwagi do dockera
-
-- `exit` w **głównej** powłoce (tej z `setup_container_*.sh` albo `docker attach`) **zatrzymuje cały kontener**. `exit` w terminalu otwartym przez `docker exec` zamyka tylko ten terminal.
-- `docker attach` nie otwiera nowego terminala, tylko podłącza się do tej samej głównej powłoki. Do pracy w kilku terminalach używaj `docker exec`.
-- Hosta i kontener łączy **tylko katalog `src/`** (w kontenerze to `~/ros_ws/src`). Kod edytujesz na hoście, a zmiany od razu widać w kontenerze.
-- Wszystko poza `src/` (build, install, skompilowany SITL, pliki w `/root`) przetrwa `docker stop`, ale **zniknie po `docker rm`**. Swoje pliki trzymaj w `src/`.
 
 ---
 
