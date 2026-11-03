@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
-# run_px4_sim_erc.sh — HOST-side wrapper. Odpala PX4 SITL + Gazebo w kontenerze.
-# Domyslnie: swiat ERC_test, x500_mono_cam_down_ERC_test, spawn 0,0,0.5
+# run_px4_sim_erc.sh — HOST-side wrapper. Odpala PX4 SITL + Gazebo + ros_gz_bridge kamery w kontenerze.
+# Domyslnie: swiat ERC_test, x500_mono_cam_down, spawn 0,0,0.5, bridge /rgb_camera/{image,camera_info}
 #
-#   ./run_px4_sim_erc.sh                          # swiat ERC_test
+#   ./run_px4_sim_erc.sh                          # swiat ERC_test + bridge kamery
 #   ./run_px4_sim_erc.sh --headless               # bez GUI Gazebo
+#   BRIDGE=0 ./run_px4_sim_erc.sh                 # bez bridge'a gz->ROS2
 #   PX4_GZ_MODEL_POSE="2,3,0.5,0,0,1.57" ./run_px4_sim_erc.sh   # inny spawn (x,y,z,r,p,yaw)
 #   TARGET=gz_x500_gimbal ./run_px4_sim_erc.sh    # inny model
+#   BRIDGE_TOPICS="/a@pkg/msg/T[gz.msgs.T ..." ./run_px4_sim_erc.sh   # inne topici do bridge'a
 #
+# Log bridge'a (w kontenerze): /tmp/gz_bridge.log
 # Jak Docker wymaga sudo:  DOCKER="sudo docker" ./run_px4_sim_erc.sh
 set -euo pipefail
 
@@ -18,8 +21,12 @@ REPO="${REPO:-$HOME/Dron_symulacja}"
 
 # --- swiat ERC jako domyslny ---
 PX4_GZ_WORLD="${PX4_GZ_WORLD:-ERC_test}"
-TARGET="${TARGET:-gz_x500_mono_cam_down_ERC_test}"
+TARGET="${TARGET:-gz_x500_mono_cam_down}"
 PX4_GZ_MODEL_POSE="${PX4_GZ_MODEL_POSE:-0,0,0.5}"
+
+# --- bridge gz -> ROS2 (kamera) ---
+BRIDGE="${BRIDGE:-1}"
+BRIDGE_TOPICS="${BRIDGE_TOPICS:-/rgb_camera/image@sensor_msgs/msg/Image[gz.msgs.Image /rgb_camera/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo}"
 
 HEADLESS="${HEADLESS:-0}"
 if [[ "${1:-}" == "-h" || "${1:-}" == "--headless" ]]; then
@@ -92,10 +99,24 @@ if [ -z "\$AIRFRAME" ]; then
     exit 1
 fi
 
-echo ">> world=\$PX4_GZ_WORLD pose=\$PX4_GZ_MODEL_POSE target=$TARGET HEADLESS=\${HEADLESS:-0}"
+# --- bridge gz -> ROS2 w tle (osobny subshell, zeby env ROS nie mieszal w buildzie PX4) ---
+if [ "$BRIDGE" = "1" ]; then
+    ROS_SETUP=\$(ls /opt/ros/*/setup.bash 2>/dev/null | head -1)
+    if [ -n "\$ROS_SETUP" ]; then
+        ( set +eu -f; source "\$ROS_SETUP"; exec ros2 run ros_gz_bridge parameter_bridge $BRIDGE_TOPICS ) > /tmp/gz_bridge.log 2>&1 &
+        BRIDGE_PID=\$!
+        trap 'kill \$BRIDGE_PID 2>/dev/null || true' EXIT
+        echo ">> ros_gz_bridge PID=\$BRIDGE_PID, log: /tmp/gz_bridge.log"
+    else
+        echo "UWAGA: brak /opt/ros/*/setup.bash w kontenerze - bridge pominiety" >&2
+    fi
+fi
+
+echo ">> world=\$PX4_GZ_WORLD pose=\$PX4_GZ_MODEL_POSE target=$TARGET HEADLESS=\${HEADLESS:-0} BRIDGE=$BRIDGE"
 echo ">> GALLIUM_DRIVER=\${GALLIUM_DRIVER:-brak}"
 cd "$PX4_DIR"
-exec make px4_sitl $TARGET
+# bez exec: po wyjsciu z PX4 trap EXIT ubija bridge
+make px4_sitl $TARGET
 EOF
 )
 
