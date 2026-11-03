@@ -1,10 +1,8 @@
 # Setup MATLAB R2026a + ROS2 do sterowania dronem PX4 (KNR-PW ERC)
 
-Kompletna instrukcja postawienia MATLABa od zera do działającego sterowania dronem
-przez ROS2 (`drone_interfaces` actions/services -> `drone_handler_px4` -> PX4 SITL).
+Kompletna instrukcja postawienia MATLABa od zera do działającego sterowania dronem przez ROS2 (`drone_interfaces` actions/services -> `drone_handler_px4` -> PX4 SITL).
 
-Kroki oznaczone **[WSL]** są specyficzne dla setupu na WSL2 i mogą być zbędne
-na natywnym Linuksie. Reszta jest uniwersalna.
+Kroki oznaczone **[WSL]** są specyficzne dla setupu na WSL2 i mogą być zbędne na natywnym Linuksie. Reszta jest uniwersalna.
 
 ---
 
@@ -12,23 +10,75 @@ na natywnym Linuksie. Reszta jest uniwersalna.
 
 - MATLAB R2026a z toolboxami: **ROS Toolbox**, Simulink, Stateflow
 - Działający `drone_handler_px4` w kontenerze (wystawia `/knr_hardware/*`).
-- Repo `Dron_symulacja` z pakietami `px4_msgs` i `drone_interfaces` w `src/`.
+- Repo `Dron_symulacja` **z zainicjalizowanymi submodułami** (sekcja 1), z pakietami `px4_msgs` i `drone_interfaces` w `src/`.
 
 ---
 
-## 1. Instalacja MATLAB
+## 1. Repo i submoduły (PX4 + światy Gazebo)
 
-Instalacja przez **GUI installer** (nie MPM — MPM nie ma aktywatora, kończy się
-`Licensing shutdown`).
+Struktura:
+
+- `Dron_symulacja` -> submoduł `KNR_Drone_PX4_Autopilot` (fork PX4 KNR, branch `main`)
+- `KNR_Drone_PX4_Autopilot` -> submoduł `Tools/simulation/gz` = `KNR-PW/KNR-PX4-gazebo-models` (światy i modele Gazebo, m.in. `ERC_test`)
+
+Świeży klon:
+
+```bash
+git clone --recursive https://github.com/KNR-PW/Dron_symulacja.git
+```
+
+Istniejący klon / po każdym pullu, który zmienia wskaźnik submodułu:
+
+```bash
+cd ~/Dron_symulacja
+git pull
+git submodule sync --recursive
+git submodule update --init --recursive
+```
+
+Weryfikacja:
+
+```bash
+ls ~/Dron_symulacja/KNR_Drone_PX4_Autopilot/Tools/simulation/gz/worlds/ERC_test.sdf
+git -C ~/Dron_symulacja/KNR_Drone_PX4_Autopilot remote -v                       # KNR_Drone_PX4_Autopilot
+git -C ~/Dron_symulacja/KNR_Drone_PX4_Autopilot/Tools/simulation/gz remote -v   # KNR-PX4-gazebo-models
+```
+
+### Pułapki
+
+- **Pusty `Tools/simulation/gz/`** -> submoduł niezainicjalizowany -> `git submodule update --init --recursive`.
+- **`fatal: 'origin' does not appear to be a git repository`** w submodule -> brak remote'a. Dodaj ręcznie URL z `.gitmodules`:
+  ```bash
+  git -C ~/Dron_symulacja/KNR_Drone_PX4_Autopilot remote add origin https://github.com/KNR-PW/KNR_Drone_PX4_Autopilot.git
+  ```
+- **Po zmianie wersji PX4** (bump submodułu) usuń stary cache CMake przed buildem: `rm -rf ~/Dron_symulacja/KNR_Drone_PX4_Autopilot/build`.
+- **Submoduły po `update` są w detached HEAD.** Zanim zaczniesz commitować w submodule: `git switch main`.
+- **Kolejność przy zmianach w submodule:** commit + push w submodule -> dopiero potem `git add <submoduł>` + commit + push w repo nadrzędnym (bump wskaźnika). Odwrotnie = wskaźnik na commit, którego nie ma na remote -> `--recursive` u innych się wysypie.
+- **Nowe światy/modele Gazebo** commitujesz w `KNR-PX4-gazebo-models`, nie w PX4 — w PX4 `Tools/simulation/gz` to tylko wskaźnik.
+
+### Odpalenie symulacji ERC
+
+```bash
+~/Dron_symulacja/scripts/WSL_scripts/run_px4_sim_erc.sh              # świat ERC_test, gz_x500_mono_cam_down
+~/Dron_symulacja/scripts/WSL_scripts/run_px4_sim_erc.sh --headless   # bez GUI Gazebo
+```
+
+Skrypt odpala PX4 SITL + Gazebo w kontenerze `knr_drone_px4` (z zamontowanym `KNR_Drone_PX4_Autopilot`). Jeśli kontenera nie ma, wypisze gotową komendę `docker run`. Przed startem sprawdza, czy istnieje świat, czy `<world name>` w SDF zgadza się z nazwą pliku i czy jest airframe dla targetu.
 
 ---
 
-## 2. Zależności systemowe (build typów ROS2)
+## 2. Instalacja MATLAB
 
-`ros2genmsg` buduje typy natywnie i ma **twarde wymogi wersji** — Ubuntu 24.04
-ma za nowe Pythona i gcc, trzeba dołożyć starsze.
+Instalacja przez **GUI installer** (nie MPM — MPM nie ma aktywatora, kończy się `Licensing shutdown`).
+
+---
+
+## 3. Zależności systemowe (build typów ROS2)
+
+`ros2genmsg` buduje typy natywnie i ma **twarde wymogi wersji** — Ubuntu 24.04 ma za nowe Pythona i gcc, trzeba dołożyć starsze.
 
 ### Python 3.10 (ROS Toolbox wymaga 3.9–3.10; Ubuntu 24.04 ma 3.12 — za nowe)
+
 ```bash
 sudo add-apt-repository ppa:deadsnakes/ppa
 sudo apt update
@@ -36,21 +86,22 @@ sudo apt install python3.10 python3.10-dev python3.10-venv
 ```
 
 ### gcc-12 (ros2genmsg wymaga gcc <13.1; Ubuntu 24.04 ma 13.3 — za nowe)
+
 ```bash
 sudo apt install gcc-12 g++-12
 ```
 
 ### Pozostałe zależności
+
 ```bash
 sudo apt install python3-dev libpython3-dev python3-numpy
 ```
 
 ---
 
-## 3. Przygotowanie pakietów interfejsów
+## 4. Przygotowanie pakietów interfejsów
 
-Skopiuj `px4_msgs` i `drone_interfaces` z repo do osobnych folderów roboczych
-(ros2genmsg buduje w miejscu i zaśmieca folder — nie buduj wprost w `src/`).
+Skopiuj `px4_msgs` i `drone_interfaces` z repo do osobnych folderów roboczych (ros2genmsg buduje w miejscu i zaśmieca folder — nie buduj wprost w `src/`).
 
 ```bash
 mkdir -p ~/matlab_msgs ~/matlab_interfaces
@@ -59,9 +110,8 @@ cp -r ~/Dron_symulacja/src/drone_interfaces ~/matlab_interfaces/
 ```
 
 ### WAŻNE: usuń polskie znaki z definicji interfejsów
-Parser `rosidl` (Python 3.9 wewnątrz MATLAB) **dławi się na nie-ASCII**
-w komentarzach `.msg`/`.srv`/`.action` — build pada z błędem typu
-`'t' is an invalid message name` (parser bierze fragment "kąt" za nazwę pola).
+
+Parser `rosidl` (Python 3.9 wewnątrz MATLAB) **dławi się na nie-ASCII** w komentarzach `.msg`/`.srv`/`.action` — build pada z błędem typu `'t' is an invalid message name` (parser bierze fragment "kąt" za nazwę pola).
 
 ```bash
 cd ~/matlab_interfaces/drone_interfaces
@@ -74,15 +124,11 @@ grep -rlP '[^\x00-\x7F]' msg/ srv/ action/
 
 ---
 
-## 4. Profil UDP dla Fast DDS
+## 5. Profil UDP dla Fast DDS
 
-**Tylko na WSL.** Discovery MATLAB<->kontener działa (multicast UDP), ale
-**transport danych** domyślnie idzie przez Fast DDS **shared memory (SHM)**,
-który NIE przekracza granicy kontenera. Objaw: `ros2 topic list` widzi topiki,
-ale `receive`/subscriber nie dostaje danych (`LatestMessage: []`).
+**Tylko na WSL.** Discovery MATLAB<->kontener działa (multicast UDP), ale **transport danych** domyślnie idzie przez Fast DDS **shared memory (SHM)**, który NIE przekracza granicy kontenera. Objaw: `ros2 topic list` widzi topiki, ale `receive`/subscriber nie dostaje danych (`LatestMessage: []`).
 
-Fix: wymuś transport UDP profilem XML (tylko po stronie MATLAB — mostu
-microXRCE NIE trzeba ruszać).
+Fix: wymuś transport UDP profilem XML (tylko po stronie MATLAB — mostu microXRCE NIE trzeba ruszać).
 
 ```bash
 cat > ~/fastdds_udp.xml << 'EOF'
@@ -108,30 +154,31 @@ cat > ~/fastdds_udp.xml << 'EOF'
 EOF
 ```
 
-Zmienna `FASTRTPS_DEFAULT_PROFILES_FILE` wskazująca ten plik ustawiana jest
-w `startup.m` (sekcja 6).
+Zmienna `FASTRTPS_DEFAULT_PROFILES_FILE` wskazująca ten plik ustawiana jest w `startup.m` (sekcja 7).
 
 ---
 
-## 5. Build typów ROS2 (JEDNORAZOWO)
+## 6. Build typów ROS2 (JEDNORAZOWO)
 
-Odpal MATLAB **z ustawionym gcc-12** (inaczej ros2genmsg użyje domyślnego 13.3
-i padnie):
+Odpal MATLAB **z ustawionym gcc-12** (inaczej ros2genmsg użyje domyślnego 13.3 i padnie):
+
 ```bash
 export CC=/usr/bin/gcc-12
 export CXX=/usr/bin/g++-12
 matlab
 ```
 
-W MATLAB (jednorazowo — patrz `matlab_ros2_setup_ONCE.m`).
-Uwaga: MATLAB **nie rozwija `$USER`** jak bash — użyj `getenv('HOME')`:
+W MATLAB (jednorazowo — patrz `matlab_ros2_setup_ONCE.m`). Uwaga: MATLAB **nie rozwija `$USER`** jak bash — użyj `getenv('HOME')`:
+
 ```matlab
 home = getenv('HOME');
 pyenv('Version', '/usr/bin/python3.10');              % ROS Toolbox build wymaga 3.10
 ros2genmsg(fullfile(home, 'matlab_msgs'));             % build px4_msgs (~kilka min)
 ros2genmsg(fullfile(home, 'matlab_interfaces'));       % build drone_interfaces (~kilka min)
 ```
+
 Czekaj na `Build succeeded` przy każdym. Potem:
+
 ```matlab
 addpath(fullfile(home, 'matlab_msgs/matlab_msg_gen_R2026a/glnxa64/install/m'));
 addpath(fullfile(home, 'matlab_interfaces/matlab_msg_gen_R2026a/glnxa64/install/m'));
@@ -140,17 +187,16 @@ rehash toolboxcache
 ```
 
 ### Jeśli build pada
+
 - Sprawdź log: `!cat ~/matlab_interfaces/matlab_msg_gen_R2026a/glnxa64/log/build_*/drone_interfaces/stderr.log`
-- `'X' is an invalid message name` -> nie-ASCII w plikach, wróć do sekcji 3 (iconv).
-- `Could not find package geometry_msgs/std_msgs` -> zależność zewnętrzna;
-  standardowe typy MATLAB ma wbudowane, ale sprawdź czy build je widzi.
+- `'X' is an invalid message name` -> nie-ASCII w plikach, wróć do sekcji 4 (iconv).
+- `Could not find package geometry_msgs/std_msgs` -> zależność zewnętrzna; standardowe typy MATLAB ma wbudowane, ale sprawdź czy build je widzi.
 
 ---
 
-## 6. startup.m (PER SESJA — automatyczny przy każdym starcie)
+## 7. startup.m (PER SESJA — automatyczny przy każdym starcie)
 
-Umieść w userpath (sprawdź: `userpath` w MATLAB, zwykle `~/Documents/MATLAB/`).
-Ładuje się sam przy każdym starcie MATLAB — rejestruje typy i wymusza UDP.
+Umieść w userpath (sprawdź: `userpath` w MATLAB, zwykle `~/Documents/MATLAB/`). Ładuje się sam przy każdym starcie MATLAB — rejestruje typy i wymusza UDP.
 
 ```matlab
 % ~/Documents/MATLAB/startup.m
@@ -161,13 +207,11 @@ setenv('FASTRTPS_DEFAULT_PROFILES_FILE', fullfile(home, 'fastdds_udp.xml'));  % 
 setenv('ROS_DOMAIN_ID', '0');
 ```
 
-> `savepath` gołe wywala warning (brak prawa zapisu do root-owned instalacji MATLAB).
-> Jeśli chcesz zapisać path na trwałe: `savepath(fullfile(userpath,'pathdef.m'))`.
-> Ale `startup.m` z `addpath` załatwia to per sesja bez potrzeby savepath.
+> `savepath` gołe wywala warning (brak prawa zapisu do root-owned instalacji MATLAB). Jeśli chcesz zapisać path na trwałe: `savepath(fullfile(userpath,'pathdef.m'))`. Ale `startup.m` z `addpath` załatwia to per sesja bez potrzeby savepath.
 
 ---
 
-## 7. Weryfikacja
+## 8. Weryfikacja
 
 Po starcie MATLAB (ze świeżym `startup.m`):
 
@@ -188,28 +232,23 @@ sub = ros2subscriber(node, "/fmu/out/vehicle_odometry", "px4_msgs/VehicleOdometr
 
 ---
 
-## 8. Sterowanie dronem — `DroneControllerMATLAB`
+## 9. Sterowanie dronem — `DroneControllerMATLAB`
 
-Klasa opakowująca ROS2 actions/services handlera. Wymaga **działającego
-`drone_handler_px4`** (wystawia `/knr_hardware/*`) + zbudowanych typów.
+Klasa opakowująca ROS2 actions/services handlera. Wymaga **działającego `drone_handler_px4`** (wystawia `/knr_hardware/*`) + zbudowanych typów.
 
 ### Kluczowe ustalenia o handlerze
+
 - Actions/services są pod namespace **`/knr_hardware/`**.
 - Handler mapuje **stringi ArduPilot** na komendy PX4:
   - `'GUIDED'` -> PX4 **offboard** (`DO_SET_MODE param2=6`)
   - `'LAND'` -> land
   - `'RTL'` -> return to launch
   - `'Offboard'/'Land'/'Return'` **NIE działają** (brak `if` w handlerze — no-op!).
-- **Sekwencja uzbrojenia:** `set_mode('GUIDED')` (offboard) -> pauza (~2s, PX4
-  potrzebuje czasu wejść w offboard, nav_state=14) -> akcja `Arm`.
-  Sam arm bez offboard = dron uzbraja się w loiter i auto-disarmuje.
-- `set_mode` rzuca `ros:mlros2:serviceclient:CallError` mimo że **działa** —
-  bo `SetMode.srv` ma pusty response, na którym `call()` się wykłada. Komenda
-  i tak dochodzi do PX4. **Nie bać się tego błędu.** (Uwaga: obsługa tego błędu
-  nie jest ograna dla wszystkich trybów — jak coś nie działa, sprawdź czy klasa
-  łyka CallError dla danego trybu.)
+- **Sekwencja uzbrojenia:** `set_mode('GUIDED')` (offboard) -> pauza (~2s, PX4 potrzebuje czasu wejść w offboard, nav_state=14) -> akcja `Arm`. Sam arm bez offboard = dron uzbraja się w loiter i auto-disarmuje.
+- `set_mode` rzuca `ros:mlros2:serviceclient:CallError` mimo że **działa** — bo `SetMode.srv` ma pusty response, na którym `call()` się wykłada. Komenda i tak dochodzi do PX4. **Nie bać się tego błędu.** (Uwaga: obsługa tego błędu nie jest ograna dla wszystkich trybów — jak coś nie działa, sprawdź czy klasa łyka CallError dla danego trybu.)
 
 ### Użycie
+
 ```matlab
 d = DroneControllerMATLAB();   % konstruktor lapie serwery /knr_hardware/*
 d.arm();                        % GUIDED(offboard) -> pauza -> Arm
@@ -222,15 +261,17 @@ d.stop();
 
 ## Szybki start (gdy wszystko już postawione)
 
-1. Odpal symulację + most microXRCE + `drone_handler_px4`.
-2. Odpal MATLAB (startup.m załaduje typy + UDP automatycznie).
-3. `d = DroneControllerMATLAB(); d.arm(); d.takeoff(...);`
+1. Zaktualizuj repo + submoduły: `git pull && git submodule update --init --recursive` (sekcja 1).
+2. Odpal symulację ERC: `~/Dron_symulacja/scripts/WSL_scripts/run_px4_sim_erc.sh`, potem most microXRCE + `drone_handler_px4`.
+3. Odpal MATLAB (startup.m załaduje typy + UDP automatycznie).
+4. `d = DroneControllerMATLAB(); d.arm(); d.takeoff(...);`
 
 ## Kolejność debugowania gdy nie działa
+
+- `BLAD: brak ... ERC_test.sdf` / pusty `Tools/simulation/gz/` -> submoduły niezainicjalizowane (sekcja 1).
+- `BLAD: w ERC_test.sdf jest <world name=...>` -> nazwa świata w SDF musi być równa nazwie pliku.
 - Cisza na subscriberze -> [WSL] UDP profil (`getenv FASTRTPS...`).
 - `Unknown package drone_interfaces` w kontenerze -> `source install/setup.bash`.
 - set_mode `CallError` -> to normalne (pusty response), komenda działa.
-- Dron nie lata mimo arm -> sprawdź `nav_state` (`ros2 topic echo
-  /fmu/out/vehicle_status_v1`): musi być 14 (offboard) ORAZ arming_state 2.
-- Klasa nie przeładowuje zmian -> `clear classes; rehash`; jak nie pomaga,
-  **restart MATLAB**.
+- Dron nie lata mimo arm -> sprawdź `nav_state` (`ros2 topic echo /fmu/out/vehicle_status_v1`): musi być 14 (offboard) ORAZ arming_state 2.
+- Klasa nie przeładowuje zmian -> `clear classes; rehash`; jak nie pomaga, **restart MATLAB**.
