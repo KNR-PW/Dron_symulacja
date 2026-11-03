@@ -18,7 +18,7 @@ REPO="${REPO:-$HOME/Dron_symulacja}"
 
 # --- swiat ERC jako domyslny ---
 PX4_GZ_WORLD="${PX4_GZ_WORLD:-ERC_test}"
-TARGET="${TARGET:-gz_x500_mono_cam_down_ERC_test}"
+TARGET="${TARGET:-gz_x500_mono_cam_down}"
 PX4_GZ_MODEL_POSE="${PX4_GZ_MODEL_POSE:-0,0,0.5}"
 
 HEADLESS="${HEADLESS:-0}"
