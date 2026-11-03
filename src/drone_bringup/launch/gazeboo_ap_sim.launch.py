@@ -15,17 +15,11 @@ def generate_launch_description():
             ]
         )
 
-    aruco_node = Node(
-            package='ros2_aruco',
-            executable='aruco_node',
-        )
-
     # Delay running drone_handler to wain for gazeboo init
     drone_handler_node_action = TimerAction(
             period=10.0,
             actions=[
-                drone_handler_node,
-                aruco_node
+                drone_handler_node
             ]
         )
 

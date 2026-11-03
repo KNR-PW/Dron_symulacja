@@ -1,24 +1,39 @@
-source ~/.bashrc
+#!/usr/bin/env bash
+set -euo pipefail
 
-# Check if a Docker image is provided
-if [ -z "$1" ]; then
-    echo "Error: No Docker image specified."
-    echo "Usage: $0 <docker-image-name>"
-    exit 1
+# Wariant dla kart NVIDIA (wymaga NVIDIA Container Toolkit).
+#
+# Użycie: ./setup_container_gpu.sh dierust/knr_ap_sim:latest
+
+if [ -z "${1:-}" ]; then
+  echo "Error: No Docker image specified."
+  echo "Usage: $0 <docker-image-name>"
+  exit 1
 fi
 
-echo "using docker image: $1"
-echo "creating new container with name: knr_drone"
+IMAGE="$1"
+CONTAINER_NAME="knr_drone"
 
-docker run --gpus all \
-    --shm-size=1g \
-    -it --env="NVIDIA_DRIVER_CAPABILITIES=all" \
-    --env="NVIDIA_VISIBLE_DEVICES=all" \
-    -e DISPLAY=$DISPLAY \
-    -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
-    --name knr_drone \
-    -v ./../../src:/root/ros_ws/src:rw \
-    -p 5763:5763 \
-    --add-host=host.docker.internal:host-gateway \
-    -it \
-    $1
+echo "using docker image: $IMAGE"
+echo "creating new container with name: $CONTAINER_NAME"
+
+# Pozwól kontenerowi rysować w X11 hosta (okno Gazebo/Webots).
+xhost +local:root 1>/dev/null 2>&1 || true
+
+# Ścieżka do src/ liczona od położenia skryptu, więc działa z dowolnego katalogu.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SRC_HOST="${SCRIPT_DIR}/../../src"
+
+docker run \
+  --gpus all \
+  --shm-size=1g \
+  -it \
+  -e NVIDIA_DRIVER_CAPABILITIES=all \
+  -e NVIDIA_VISIBLE_DEVICES=all \
+  -e DISPLAY="${DISPLAY:-}" \
+  -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
+  --name "${CONTAINER_NAME}" \
+  -v "${SRC_HOST}:/root/ros_ws/src:rw" \
+  -p 5763:5763 \
+  --add-host=host.docker.internal:host-gateway \
+  "${IMAGE}"
