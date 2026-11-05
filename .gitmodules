@@ -7,4 +7,4 @@
 [submodule "KNR_Drone_PX4_Autopilot"]
 	path = KNR_Drone_PX4_Autopilot
 	url = https://github.com/KNR-PW/KNR_Drone_PX4_Autopilot.git
-	branch = main
+	branch = KNR_stable_v1.16.1
