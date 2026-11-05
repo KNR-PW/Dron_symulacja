@@ -20,7 +20,7 @@ Kroki oznaczone **[WSL]** są specyficzne dla setupu na WSL2 i mogą być zbędn
 
 Struktura:
 
-- `Dron_symulacja` -> submoduł `KNR_Drone_PX4_Autopilot` (fork PX4 KNR, branch `main`)
+- `Dron_symulacja` -> submoduł `KNR_Drone_PX4_Autopilot` (fork PX4 KNR, branch **`KNR_stable_v1.16.1`** — zawsze działa; `main` to branch roboczy)
 - `KNR_Drone_PX4_Autopilot` -> submoduł `Tools/simulation/gz` = `KNR-PW/KNR-PX4-gazebo-models` (światy i modele Gazebo, m.in. `ERC_test`)
 
 Świeży klon:
@@ -54,9 +54,38 @@ git -C ~/Dron_symulacja/KNR_Drone_PX4_Autopilot/Tools/simulation/gz remote -v   
   git -C ~/Dron_symulacja/KNR_Drone_PX4_Autopilot remote add origin https://github.com/KNR-PW/KNR_Drone_PX4_Autopilot.git
   ```
 - **Po zmianie wersji PX4** (bump submodułu) usuń stary cache CMake przed buildem: `rm -rf ~/Dron_symulacja/KNR_Drone_PX4_Autopilot/build`.
-- **Submoduły po `update` są w detached HEAD.** Zanim zaczniesz commitować w submodule: `git switch main`.
+- **Submoduły po `update` są w detached HEAD.** Zanim zaczniesz commitować: w PX4 `git switch KNR_stable_v1.16.1`, w `Tools/simulation/gz` `git switch main`.
+- **`fatal: not a git repository: .../.git/modules/...` w kontenerze** (build PX4 pada na `px_update_git_header.py`) -> repo submodułów leży poza katalogiem zamontowanym w kontenerze. Fix: usuń zagnieżdżone submoduły i sklonuj je od nowa wewnątrz PX4:
+  ```bash
+  cd ~/Dron_symulacja/KNR_Drone_PX4_Autopilot && git config -f .gitmodules --get-regexp '\.path$' | awk '{print $2}' | xargs -r sudo rm -rf && sudo rm -rf .git/modules && git submodule update --init --recursive
+  ```
+- **`dubious ownership` / `rev-parse` exit 128 w kontenerze** -> `docker exec knr_drone_px4 git config --global --add safe.directory '*'`.
+- **Pull requesty w forkach** (PX4, gazebo-models): GitHub domyślnie ustawia *base repository* na upstream (`PX4/...`). Zawsze sprawdź, że base to `KNR-PW/...`.
 - **Kolejność przy zmianach w submodule:** commit + push w submodule -> dopiero potem `git add <submoduł>` + commit + push w repo nadrzędnym (bump wskaźnika). Odwrotnie = wskaźnik na commit, którego nie ma na remote -> `--recursive` u innych się wysypie.
-- **Nowe światy/modele Gazebo** commitujesz w `KNR-PX4-gazebo-models`, nie w PX4 — w PX4 `Tools/simulation/gz` to tylko wskaźnik.
+- **Nowe światy/modele Gazebo dla PX4** commitujesz w `KNR-PX4-gazebo-models`, nie w PX4 — w PX4 `Tools/simulation/gz` to tylko wskaźnik.
+
+### Gdzie trzymamy światy Gazebo
+
+| Autopilot | Światy / modele | Dron w świecie | Nowy świat |
+|---|---|---|---|
+| **PX4** | `KNR_Drone_PX4_Autopilot/Tools/simulation/gz/` → repo `KNR-PX4-gazebo-models` | **nie** — PX4 spawnuje go sam (`TARGET`) | commit + push w gazebo-models → bump `gz` w PX4 (`KNR_stable_v1.16.1`) → bump PX4 w `Dron_symulacja` |
+| **ArduPilot** | `src/drone_bringup/gazebo/{worlds,models}` | **tak** — model z pluginem ArduPilota wpisany w `.sdf` | zwykły commit w `Dron_symulacja` |
+
+Nie mieszać: świat ArduPilota z dronem w środku nie zadziała pod PX4 (dwa drony / brak gz_bridge), a świat PX4 nie ma drona dla ArduPilota.
+
+Nowy świat PX4 krok po kroku:
+
+```bash
+# 1. gazebo-models
+cd ~/Dron_symulacja/KNR_Drone_PX4_Autopilot/Tools/simulation/gz && git switch main && git pull
+#    wrzuc worlds/<nazwa>.sdf (+ models/<model>/), <world name="..."> = nazwa pliku
+git add worlds/<nazwa>.sdf models/<model> && git commit -m "Add <nazwa> world" && git push origin main
+# 2. PX4 stable — najpierw przetestuj świat w SITL (stable ma zawsze działać)
+cd ~/Dron_symulacja/KNR_Drone_PX4_Autopilot && git switch KNR_stable_v1.16.1 && git pull
+git add Tools/simulation/gz && git commit -m "Bump gz: <nazwa> world" && git push origin KNR_stable_v1.16.1
+# 3. Dron_symulacja
+cd ~/Dron_symulacja && git add KNR_Drone_PX4_Autopilot && git commit -m "Bump PX4: <nazwa> world" && git push
+```
 
 ### Odpalenie symulacji ERC
 
@@ -307,7 +336,7 @@ Steps marked **[WSL]** are specific to the WSL2 setup and may be unnecessary on 
 
 Structure:
 
-- `Dron_symulacja` -> submodule `KNR_Drone_PX4_Autopilot` (KNR PX4 fork, branch `main`)
+- `Dron_symulacja` -> submodule `KNR_Drone_PX4_Autopilot` (KNR PX4 fork, branch **`KNR_stable_v1.16.1`** — always working; `main` is the working branch)
 - `KNR_Drone_PX4_Autopilot` -> submodule `Tools/simulation/gz` = `KNR-PW/KNR-PX4-gazebo-models` (Gazebo worlds and models, incl. `ERC_test`)
 
 Fresh clone:
@@ -341,9 +370,38 @@ git -C ~/Dron_symulacja/KNR_Drone_PX4_Autopilot/Tools/simulation/gz remote -v   
   git -C ~/Dron_symulacja/KNR_Drone_PX4_Autopilot remote add origin https://github.com/KNR-PW/KNR_Drone_PX4_Autopilot.git
   ```
 - **After a PX4 version change** (submodule bump) delete the old CMake cache before building: `rm -rf ~/Dron_symulacja/KNR_Drone_PX4_Autopilot/build`.
-- **Submodules are in detached HEAD after `update`.** Before committing in a submodule: `git switch main`.
+- **Submodules are in detached HEAD after `update`.** Before committing: in PX4 `git switch KNR_stable_v1.16.1`, in `Tools/simulation/gz` `git switch main`.
+- **`fatal: not a git repository: .../.git/modules/...` in the container** (PX4 build fails in `px_update_git_header.py`) -> the submodule repos live outside the directory mounted in the container. Fix: delete the nested submodules and re-clone them inside PX4:
+  ```bash
+  cd ~/Dron_symulacja/KNR_Drone_PX4_Autopilot && git config -f .gitmodules --get-regexp '\.path$' | awk '{print $2}' | xargs -r sudo rm -rf && sudo rm -rf .git/modules && git submodule update --init --recursive
+  ```
+- **`dubious ownership` / `rev-parse` exit 128 in the container** -> `docker exec knr_drone_px4 git config --global --add safe.directory '*'`.
+- **Pull requests in forks** (PX4, gazebo-models): GitHub defaults the *base repository* to upstream (`PX4/...`). Always check the base is `KNR-PW/...`.
 - **Order when changing a submodule:** commit + push inside the submodule -> only then `git add <submodule>` + commit + push in the parent repo (pointer bump). The other way round = pointer to a commit that doesn't exist on the remote -> `--recursive` breaks for everyone else.
-- **New Gazebo worlds/models** are committed to `KNR-PX4-gazebo-models`, not to PX4 — in PX4, `Tools/simulation/gz` is only a pointer.
+- **New Gazebo worlds/models for PX4** are committed to `KNR-PX4-gazebo-models`, not to PX4 — in PX4, `Tools/simulation/gz` is only a pointer.
+
+### Where Gazebo worlds live
+
+| Autopilot | Worlds / models | Drone in the world | New world |
+|---|---|---|---|
+| **PX4** | `KNR_Drone_PX4_Autopilot/Tools/simulation/gz/` → `KNR-PX4-gazebo-models` repo | **no** — PX4 spawns it (`TARGET`) | commit + push in gazebo-models → bump `gz` in PX4 (`KNR_stable_v1.16.1`) → bump PX4 in `Dron_symulacja` |
+| **ArduPilot** | `src/drone_bringup/gazebo/{worlds,models}` | **yes** — model with the ArduPilot plugin is in the `.sdf` | plain commit in `Dron_symulacja` |
+
+Don't mix them: an ArduPilot world with a drone inside won't work under PX4 (two drones / no gz_bridge), and a PX4 world has no drone for ArduPilot.
+
+New PX4 world step by step:
+
+```bash
+# 1. gazebo-models
+cd ~/Dron_symulacja/KNR_Drone_PX4_Autopilot/Tools/simulation/gz && git switch main && git pull
+#    add worlds/<name>.sdf (+ models/<model>/), <world name="..."> = file name
+git add worlds/<name>.sdf models/<model> && git commit -m "Add <name> world" && git push origin main
+# 2. PX4 stable — test the world in SITL first (stable must always work)
+cd ~/Dron_symulacja/KNR_Drone_PX4_Autopilot && git switch KNR_stable_v1.16.1 && git pull
+git add Tools/simulation/gz && git commit -m "Bump gz: <name> world" && git push origin KNR_stable_v1.16.1
+# 3. Dron_symulacja
+cd ~/Dron_symulacja && git add KNR_Drone_PX4_Autopilot && git commit -m "Bump PX4: <name> world" && git push
+```
 
 ### Running the ERC simulation
 
