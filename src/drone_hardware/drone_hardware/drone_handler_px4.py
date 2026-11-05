@@ -1,63 +1,72 @@
+"""
+drone_handler_px4 - warstwa sprzetowa KNR, poprawki znalezione przez ERC 2026 i pracę inżynierską KT.
+"""
 import time
 import math
 import haversine as hv
-import numpy as np
 
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
 from rclpy.executors import MultiThreadedExecutor
-from rclpy.action import ActionServer,  CancelResponse
-from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
+from rclpy.action import ActionServer, CancelResponse
+from rclpy.callback_groups import ReentrantCallbackGroup
 
 from drone_interfaces.msg import VelocityVectors, Telemetry
 from drone_interfaces.srv import SetMode, ToggleVelocityControl, SetServo, VtolServoCalib
-from drone_interfaces.action import  Arm, Takeoff, GotoGlobal, GotoRelative, SetYawAction
+from drone_interfaces.action import Arm, Takeoff, GotoGlobal, GotoRelative, SetYawAction
 
 from px4_msgs.msg import (
-    VehicleStatus, 
-    VehicleCommand, 
-    OffboardControlMode, 
-    VehicleGlobalPosition, 
-    TrajectorySetpoint, 
-    VehicleLocalPosition, 
+    VehicleStatus,
+    VehicleCommand,
+    OffboardControlMode,
+    VehicleGlobalPosition,
+    TrajectorySetpoint,
+    VehicleLocalPosition,
     VehicleAttitude,
     BatteryStatus,
     ActuatorServos,
-    OffboardControlMode,
 )
-#TODO 
-#1. (DONE)makes check if we get a new topic before we send mode to offboard
-#2. still rebuilding the drone handler to px4
-#3. convert the flight mode in NAV state to string to be readable for a man
-#4. add more flight modes minimum is RTL
+
+
+def wrap_pi(a: float) -> float:
+    return (a + math.pi) % (2.0 * math.pi) - math.pi
+
+
+def quat_to_euler(q): # Ladnie napisane teraz i jawnie
+    w, x, y, z = q
+    roll = math.atan2(2.0 * (w * x + y * z), 1.0 - 2.0 * (x * x + y * y))
+    pitch = math.asin(max(-1.0, min(1.0, 2.0 * (w * y - z * x))))
+    yaw = math.atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
+    return roll, pitch, yaw
+
 
 class GlobalPosition():
     def __init__(self):
-        self.alt = float(0.0)
+        self.alt = float(0.0)   # AMSL [m], wczesniej nie patrzyl na to wgl
         self.lat = float(0.0)
         self.lon = float(0.0)
 
+
 class LocalPosition():
     def __init__(self):
-        # Position in local NED frame counts from start point, coordinates of start point is (0,0) 
-        self.x = float(0.0) # North position in NED earth-fixed frame, (metres)
-        self.y = float(0.0) # East position in NED earth-fixed frame, (metres)
-        self.z = float(0.0) # Down position (negative altitude) in NED earth-fixed frame, (metres)
-
-        # Velocity in NED frame
-        self.vx = float(0.0) # North velocity in NED earth-fixed frame, (metres/sec)
-        self.vy = float(0.0) # East velocity in NED earth-fixed frame, (metres/sec)
-        self.vz = float(0.0) # Down velocity in NED earth-fixed frame, (metres/sec)
-
+        self.x = float(0.0)     # North [m]
+        self.y = float(0.0)     # East [m]
+        self.z = float(0.0)     # Down [m] (ujemne = nad startem)
+        self.vx = float(0.0)
+        self.vy = float(0.0)
+        self.vz = float(0.0)
         self.heading = float(0.0)
+
 
 class BatteryInfo():
     def __init__(self):
         self.voltage = float(0.0)
         self.current = float(0.0)
         self.number_of_cells = 0
-    
+        self.remaining = -1.0   # 0..1 z PX4, -1 = brak
+
+
 class DroneHandlerPX4(Node):
     def __init__(self):
         super().__init__('drone_handler_px4')
@@ -67,154 +76,185 @@ class DroneHandlerPX4(Node):
             history=QoSHistoryPolicy.KEEP_LAST,
             depth=1
         )
-        #declaring necessary stuff
         NAMESPACE = 'knr_hardware/'
+
+        # parametry, do zabawy, ustawione pod ERC 2026 i moja inzynierke
+        self.declare_parameter('vel_timeout', 0.5)        # [s] Velocity setpoint lecial w nieskonczonosc jak padl handler
+        self.declare_parameter('arm_timeout', 30.0)       # [s] Arm lecial w nieskonczonosc kolejny bug 
+        self.declare_parameter('goto_tolerance', 0.2)     # [m] Wszystko w jendym miejscu
+        self.declare_parameter('yaw_tolerance_deg', 3.0)  # [deg] Yaw tolerance znacznie za duze bylo 30 stopni
+        self.declare_parameter('takeoff_timeout', 60.0)   # [s] Takeoff sie konczyl jak tylko wzlecial do gory
+        self.declare_parameter('dev', False)
+        p = lambda n: self.get_parameter(n).value          # noqa: E731
+        self.vel_timeout = float(p('vel_timeout'))
+        self.arm_timeout = float(p('arm_timeout'))
+        self.goto_tolerance = float(p('goto_tolerance'))
+        self.yaw_tolerance = math.radians(float(p('yaw_tolerance_deg')))
+        self.takeoff_timeout = float(p('takeoff_timeout'))
+        self.dev_mode = bool(p('dev'))
+
         self._servo_controls = [0.0] * 8
-        #declare services
-        self.mode = self.create_service(SetMode, NAMESPACE+'set_mode',self.set_mode_callback)
-        self.toggle_velocity_control_srv = self.create_service(ToggleVelocityControl, NAMESPACE+'toggle_v_control', self.toggle_velocity_control)
-        self.servo = self.create_service(SetServo, NAMESPACE+'set_servo', self.set_servo_callback)
-        self.calib_servo_srv = self.create_service(VtolServoCalib,NAMESPACE + 'calib_servo',self.calib_servo_callback)
-        #declare actions
-        self.arm = ActionServer(self,Arm, NAMESPACE+'Arm',self.arm_callback)
-        self.takeoff = ActionServer(self, Takeoff, NAMESPACE+'takeoff',self.takeoff_callback, cancel_callback=self.cancel_callback)
-        self.goto_global = ActionServer(self, GotoGlobal, NAMESPACE+'goto_global', self.goto_global_action, cancel_callback=self.cancel_callback)
-        goto_cbg = MutuallyExclusiveCallbackGroup()
-        self.goto_rel = ActionServer(self, GotoRelative, NAMESPACE+'goto_relative', self.goto_relative_action, cancel_callback=self.cancel_callback, callback_group=goto_cbg)
-        self.yaw = ActionServer(self, SetYawAction, NAMESPACE+'Set_yaw', self.yaw_callback, cancel_callback=self.cancel_callback)
 
-        #declare subcriptions
-        self.offboard_mode_pub = self.create_publisher(OffboardControlMode,'/fmu/in/offboard_control_mode',10)
-        self.status_sub = self.create_subscription(VehicleStatus, '/fmu/out/vehicle_status_v1', self.vehicle_status_callback, qos_profile)
-        self.global_position_sub = self.create_subscription(VehicleGlobalPosition, '/fmu/out/vehicle_global_position', self.vehicle_global_position_callback, qos_profile)
-        self.local_position_sub = self.create_subscription(VehicleLocalPosition, '/fmu/out/vehicle_local_position_v1', self.vehicle_local_position_callback, qos_profile)
-        self.attitude_sub = self.create_subscription(VehicleAttitude, '/fmu/out/vehicle_attitude', self.attitude_callback, qos_profile)
-        self.battery_receiver = self.create_subscription(BatteryStatus, '/fmu/out/battery_status_v1', self.battery_callback, qos_profile)
+        # Wszystkie callbacki w grupie reentrant: akcje czekaja w petlach, a timery
+        # (heartbeat offboard, watchdog) i subskrypcje musza dzialac rownolegle.
+        cbg = ReentrantCallbackGroup()
 
-        self.vector_receiver = self.create_subscription(VelocityVectors, NAMESPACE+'velocity_vectors', self.velocity_control_callback ,10)
+        # uslugi
+        self.mode = self.create_service(SetMode, NAMESPACE + 'set_mode', self.set_mode_callback,
+                                        callback_group=cbg)
+        self.toggle_velocity_control_srv = self.create_service(
+            ToggleVelocityControl, NAMESPACE + 'toggle_v_control', self.toggle_velocity_control,
+            callback_group=cbg)
+        self.servo = self.create_service(SetServo, NAMESPACE + 'set_servo', self.set_servo_callback,
+                                         callback_group=cbg)
+        self.calib_servo_srv = self.create_service(VtolServoCalib, NAMESPACE + 'calib_servo',
+                                                   self.calib_servo_callback, callback_group=cbg)
+        # akcje
+        self.arm = ActionServer(self, Arm, NAMESPACE + 'Arm', self.arm_callback,
+                                callback_group=cbg)
+        self.takeoff = ActionServer(self, Takeoff, NAMESPACE + 'takeoff', self.takeoff_callback,
+                                    cancel_callback=self.cancel_callback, callback_group=cbg)
+        self.goto_global = ActionServer(self, GotoGlobal, NAMESPACE + 'goto_global',
+                                        self.goto_global_action,
+                                        cancel_callback=self.cancel_callback, callback_group=cbg)
+        self.goto_rel = ActionServer(self, GotoRelative, NAMESPACE + 'goto_relative',
+                                     self.goto_relative_action,
+                                     cancel_callback=self.cancel_callback, callback_group=cbg)
+        self.yaw = ActionServer(self, SetYawAction, NAMESPACE + 'Set_yaw', self.yaw_callback,
+                                cancel_callback=self.cancel_callback, callback_group=cbg)
 
-        # # Create publishers
-        self.offboard_control_mode_publisher = self.create_publisher(OffboardControlMode, '/fmu/in/offboard_control_mode', qos_profile)
-        self.vehicle_command_publisher = self.create_publisher(VehicleCommand, '/fmu/in/vehicle_command', qos_profile)
-        self.trajectory_setpoint_publisher = self.create_publisher(TrajectorySetpoint, '/fmu/in/trajectory_setpoint', qos_profile)
-        self.actuator_pub = self.create_publisher(ActuatorServos,'/fmu/in/actuator_servos', 10)
-        
-        self.telemetry_publisher = self.create_publisher(Telemetry, NAMESPACE+'telemetry',10)
+        # subskrypcje PX4
+        self.status_sub = self.create_subscription(
+            VehicleStatus, '/fmu/out/vehicle_status_v1', self.vehicle_status_callback, qos_profile,
+            callback_group=cbg)
+        self.global_position_sub = self.create_subscription(
+            VehicleGlobalPosition, '/fmu/out/vehicle_global_position',
+            self.vehicle_global_position_callback, qos_profile, callback_group=cbg)
+        self.local_position_sub = self.create_subscription(
+            VehicleLocalPosition, '/fmu/out/vehicle_local_position_v1',
+            self.vehicle_local_position_callback, qos_profile, callback_group=cbg)
+        self.attitude_sub = self.create_subscription(
+            VehicleAttitude, '/fmu/out/vehicle_attitude', self.attitude_callback, qos_profile,
+            callback_group=cbg)
+        self.battery_receiver = self.create_subscription(
+            BatteryStatus, '/fmu/out/battery_status_v1', self.battery_callback, qos_profile,
+            callback_group=cbg)
+        self.vector_receiver = self.create_subscription(
+            VelocityVectors, NAMESPACE + 'velocity_vectors', self.velocity_control_callback, 10,
+            callback_group=cbg)
 
-        #declare Main loop in timer
-        self.timer = self.create_timer(0.1, self.timer_callback)
+        # publishery - Wczesniej byly wgl dwa XD
+        self.offboard_control_mode_publisher = self.create_publisher(
+            OffboardControlMode, '/fmu/in/offboard_control_mode', qos_profile)
+        self.vehicle_command_publisher = self.create_publisher(
+            VehicleCommand, '/fmu/in/vehicle_command', qos_profile)
+        self.trajectory_setpoint_publisher = self.create_publisher(
+            TrajectorySetpoint, '/fmu/in/trajectory_setpoint', qos_profile)
+        self.actuator_pub = self.create_publisher(ActuatorServos, '/fmu/in/actuator_servos', 10)
+        self.telemetry_publisher = self.create_publisher(Telemetry, NAMESPACE + 'telemetry', 10)
 
-        #declare Telemetry timer
-        self.timer = self.create_timer(0.1, self.telemetry_callback)
-
-        self.get_logger().info("starting knr drone handler px4")
-
-        #define the variables
-        self.px4_alive_flag = False #this flag will check if we received any data from  drone
-        self.px4_watchdog = 0 #this variable will check if we still getting new topics
+        # stan
+        self.px4_alive_flag = False
+        self.px4_watchdog = 0                 # time.monotonic_ns() ostatniej pozycji, bo na WSL mi sie zjebalo raz
         self.nav_state = VehicleStatus.NAVIGATION_STATE_MAX
         self.arm_state = VehicleStatus.ARMING_STATE_ARMED
-        self.failsafe = False # if true that means drone is in failsafe mode
-        self.flightCheck = False #if true drone can be armed
+        self.failsafe = False
+        self.flightCheck = False
         self.offboard_setpoint_counter = 0
-        self.flight_mode_flag = False #False = position points trajectory mode
-                                      #True = velocity vectors trajectory mode
-        self._is_fixed_wing = False # Track current vehicle mode (False=multicopter, True=fixed-wing)
-        self._goto_global_acceptance_m_fw = 80.0  # Fixed-wing acceptance radius in meters
-        self._goto_global_acceptance_m_mc = 2.0   # Multicopter acceptance radius in meters
+        self.flight_mode_flag = False         # False = pozycja, True = predkosc
+        self._is_fixed_wing = False
+        self._goto_global_acceptance_m_fw = 80.0
+        self._goto_global_acceptance_m_mc = 2.0
+        self.current_setpoint = None          # (x, y, z, yaw) NED, publikowany 10 Hz w trybie pozycji
+        self.trueYaw = 0.0
+        self.roll = 0.0
+        self.pitch = 0.0
+        self._last_vel_ns = 0                 # FIX ostatnie velocity_vectors (monotonic), zeby nie lecial w niesk.
+        self._vel_timeout_active = False
+        self._direct_actuator = False         # ale to zjebane jest napisane przepraszam
+        self._battery_wait_logged = False
 
-        #data structure
         self.global_position = GlobalPosition()
         self.local_position = LocalPosition()
         self.battery_info = BatteryInfo()
-        self.dev_mode = False
         self.state_decoder = (
-            "Manual",
-            "Altitude control",
-            "Position control",
-            "Auto mission mode",
-            "Auto loiter",
-            "Return to launch",
-            "Position slow",
-            "Free5",
-            "Altitude cruise",
-            "Free3",
-            "Acro",
-            "Free2",
-            "Descend",
-            "Termination",
-            "Offboard",
-            "Stabilize",
-            "Free1",
-            "Takeoff",
-            "Land",
-            "Follow target",
-            "Precision land",
-            "Orbit",
-            "Vtol takeoff",
-            "External1",
-            "External2",
-            "External3",
-            "External4",
-            "External5",
-            "External6",
-            "External7",
-            "External8",
-            "Max"
-        )
+            "Manual", "Altitude control", "Position control", "Auto mission mode", "Auto loiter",
+            "Return to launch", "Position slow", "Free5", "Altitude cruise", "Free3", "Acro",
+            "Free2", "Descend", "Termination", "Offboard", "Stabilize", "Free1", "Takeoff", "Land",
+            "Follow target", "Precision land", "Orbit", "Vtol takeoff", "External1", "External2",
+            "External3", "External4", "External5", "External6", "External7", "External8", "Max")
 
-    #for some reason to work with px4 offboard (guided) mode FC must recevied with minimum 2Hz control topic
-    #to know the companion computer is alive
-    def publish_offboard_control_heartbeat_signal(self):
-        """Publish the offboard control mode."""
-        msg = OffboardControlMode()
+        self.timer = self.create_timer(0.1, self.timer_callback, callback_group=cbg)
+        self.telemetry_timer = self.create_timer(0.1, self.telemetry_callback, callback_group=cbg)
+
+        if self.dev_mode:
+            self.get_logger().warn("DEV MODE is enabled.")
+        self.get_logger().info("starting knr drone handler px4")
+
+    def nav_name(self, s):
+        return self.state_decoder[s] if 0 <= s < len(self.state_decoder) else f"nav_state {s}"
+
+    def armed(self):
+        return self.arm_state == VehicleStatus.ARMING_STATE_ARMED
+
+    def set_position_mode(self, why=""):
+        """goto/takeoff/yaw potrzebuja trybu pozycyjnego - inaczej timer nie publikuje setpointu."""
         if self.flight_mode_flag:
-            msg.position = False
-            msg.velocity = True
-        else:
-            msg.position = True
-            msg.velocity = False
+            self.get_logger().info(f"tryb velocity -> pozycja ({why})")
+            self.flight_mode_flag = False
+
+    def publish_offboard_control_heartbeat_signal(self):
+        msg = OffboardControlMode()
+        msg.position = not self.flight_mode_flag
+        msg.velocity = self.flight_mode_flag
         msg.acceleration = False
         msg.attitude = False
         msg.body_rate = False
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         self.offboard_control_mode_publisher.publish(msg)
 
-    #timer loop to publish above function to drone
     def timer_callback(self) -> None:
-        """Callback function for the timer."""
-        if self.px4_alive_flag:
+        if not self.px4_alive_flag:
+            return
+        if not self._direct_actuator:                 # bez sprzecznych trybow, zjebanie napisane v69
             self.publish_offboard_control_heartbeat_signal()
 
-            if self.offboard_setpoint_counter < 11:
-                self.offboard_setpoint_counter += 1
-            
-            if self.offboard_setpoint_counter == 10:
-                self.get_logger().info("Vehicle is ready to be set into offboard mode")
-        
-            if self.get_clock().now().nanoseconds - self.px4_watchdog > 1e9:
-                self.px4_alive_flag = False
-                self.get_logger().warn("Vehicle is missing ERROR PX4 not found")
-                self.offboard_setpoint_counter = 0
+        if self.flight_mode_flag:
+            # FIX 30.09 brak komend predkosci -> zawis. Wczesniej PX4 trzymal ostatni
+            # setpoint predkosci w nieskonczonosc (dron lecial dalej po padnieciu klienta).
+            stale_s = (time.monotonic_ns() - self._last_vel_ns) / 1e9
+            if stale_s > self.vel_timeout:
+                if not self._vel_timeout_active:
+                    self.get_logger().warn(f"brak velocity_vectors od {stale_s:.1f} s -> zawis")
+                    self._vel_timeout_active = True
+                self.publish_velocity_setpoint(0.0, 0.0, 0.0, 0.0)
+        elif self.current_setpoint is not None:
+            x, y, z, yaw = self.current_setpoint
+            self._publish_setpoint_raw(x, y, z, yaw)
 
-    #declare subscribtions
-    #Print status of the drone
+        if self.offboard_setpoint_counter < 11:
+            self.offboard_setpoint_counter += 1
+        if self.offboard_setpoint_counter == 10:
+            self.get_logger().info("Vehicle is ready to be set into offboard mode")
+
+        # FIX 29.08 zegar monotoniczny - skok zegara systemowego nie wyzwala falszywego alarmu
+        if time.monotonic_ns() - self.px4_watchdog > 1e9:
+            self.px4_alive_flag = False
+            self.get_logger().warn("Vehicle is missing ERROR PX4 not found")
+            self.offboard_setpoint_counter = 0
+
     def vehicle_status_callback(self, msg):
-        if (msg.nav_state != self.nav_state):
-            self.get_logger().info(f"NAV_STATUS: {self.state_decoder[msg.nav_state]} {msg.nav_state}")
-        
-        if (msg.arming_state != self.arm_state):
+        if msg.nav_state != self.nav_state:
+            self.get_logger().info(f"NAV_STATUS: {self.nav_name(msg.nav_state)} {msg.nav_state}")
+        if msg.arming_state != self.arm_state:
             self.get_logger().info(f"ARM STATUS: {msg.arming_state}")
-
-        if (msg.failsafe != self.failsafe):
+        if msg.failsafe != self.failsafe:
             self.get_logger().info(f"FAILSAFE: {msg.failsafe}")
-        
-        if (msg.pre_flight_checks_pass != self.flightCheck):
-            if (msg.pre_flight_checks_pass):
-                self.get_logger().info(f"Drone can be armed")
+        if msg.pre_flight_checks_pass != self.flightCheck:
+            if msg.pre_flight_checks_pass:
+                self.get_logger().info("Drone can be armed")
             else:
-                 self.get_logger().warn(f"Drone can't be armed")
-
+                self.get_logger().warn("Drone can't be armed")
         self.nav_state = msg.nav_state
         self.arm_state = msg.arming_state
         self.failsafe = msg.failsafe
@@ -226,56 +266,44 @@ class DroneHandlerPX4(Node):
         self.global_position.lon = msg.lon
 
     def vehicle_local_position_callback(self, msg):
-        self.local_position.x = msg.x
-        self.local_position.y = msg.y
-        self.local_position.z = msg.z
-
-        self.local_position.vx = msg.vx
-        self.local_position.vy = msg.vy
-        self.local_position.vz = msg.vz
-
-        self.local_position.heading = msg.heading
-
+        lp = self.local_position
+        lp.x, lp.y, lp.z = msg.x, msg.y, msg.z
+        lp.vx, lp.vy, lp.vz = msg.vx, msg.vy, msg.vz
+        lp.heading = msg.heading
         self.px4_alive_flag = True
-        self.px4_watchdog = self.get_clock().now().nanoseconds
-    
-    def velocity_control_callback(self, msg):
-        if self.flight_mode_flag:
-            self.get_logger().info(f"i receive x:{msg.vx} y:{msg.vy} z:{msg.vz} yaw:{msg.yaw}")
-            real_vy = -msg.vy
-            cos_yaw = np.cos(self.trueYaw)
-            sin_yaw = np.sin(self.trueYaw)
-            velocity_world_x = (-msg.vx * cos_yaw - real_vy * sin_yaw)
-            velocity_world_y = (-msg.vx * sin_yaw + real_vy * cos_yaw)
-            
-            velocity_world_z = msg.vz
-            yaw_rate = msg.yaw
+        self.px4_watchdog = time.monotonic_ns()
 
-            self.publish_velocity_setpoint(velocity_world_x, velocity_world_y, velocity_world_z, yaw_rate)
+    def velocity_control_callback(self, msg):
+        if not self.flight_mode_flag:
+            return
+        self._last_vel_ns = time.monotonic_ns()
+        if self._vel_timeout_active:
+            self.get_logger().info("velocity_vectors wznowione")
+            self._vel_timeout_active = False
+        # FIX 02.10 body FRD (vx przod, vy prawo) -> NED przez yaw drona. Wynik identyczny
+        # jak w poprzedniej wersji (tam: trueYaw = yaw - pi i dwa minusy, ktore sie znosily top 10 code)
+        c, s = math.cos(self.trueYaw), math.sin(self.trueYaw)
+        v_n = msg.vx * c - msg.vy * s
+        v_e = msg.vx * s + msg.vy * c
+        self.get_logger().debug(f"velocity body ({msg.vx:.2f},{msg.vy:.2f},{msg.vz:.2f}) "
+                                f"-> NED ({v_n:.2f},{v_e:.2f}), yaw_rate {msg.yaw:.2f} rad/s")
+        self.publish_velocity_setpoint(v_n, v_e, msg.vz, msg.yaw)
 
     def attitude_callback(self, msg):
-        orientation_q = msg.q
-
-        #trueYaw is the drones current yaw value
-        self.trueYaw = -(np.arctan2(2.0*(orientation_q[3]*orientation_q[0] + orientation_q[1]*orientation_q[2]), 
-                                  1.0 - 2.0*(orientation_q[0]*orientation_q[0] + orientation_q[1]*orientation_q[1])))
+        # FIX 02.10 poprawna formula (wczesniej odwrocony mianownik dawal yaw - pi)
+        self.roll, self.pitch, self.trueYaw = quat_to_euler(msg.q)
 
     def battery_callback(self, msg):
         self.battery_info.voltage = msg.voltage_v
         self.battery_info.current = msg.current_a
         self.battery_info.number_of_cells = msg.cell_count
+        self.battery_info.remaining = msg.remaining
 
-    # function to send to drone command in MAVLINK style
     def publish_vehicle_command(self, command, **params) -> None:
         msg = VehicleCommand()
         msg.command = command
-        msg.param1 = params.get("param1", 0.0)
-        msg.param2 = params.get("param2", 0.0)
-        msg.param3 = params.get("param3", 0.0)
-        msg.param4 = params.get("param4", 0.0)
-        msg.param5 = params.get("param5", 0.0)
-        msg.param6 = params.get("param6", 0.0)
-        msg.param7 = params.get("param7", 0.0)
+        for i in range(1, 8):
+            setattr(msg, f"param{i}", float(params.get(f"param{i}", 0.0)))
         msg.target_system = 1
         msg.target_component = 1
         msg.source_system = 1
@@ -283,399 +311,366 @@ class DroneHandlerPX4(Node):
         msg.from_external = True
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         self.vehicle_command_publisher.publish(msg)
-    
-    def publish_position_setpoint(self, x: float, y: float, z: float, yaw = "ORIGINAL"):
-        """Publish the trajectory setpoint in the NED frame"""
+
+    def _publish_setpoint_raw(self, x: float, y: float, z: float, yaw: float):
+        msg = TrajectorySetpoint()
+        msg.position = [float(x), float(y), float(z)]
+        msg.velocity = [float('nan')] * 3
+        msg.yaw = float(yaw)
+        msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
+        self.trajectory_setpoint_publisher.publish(msg)
+
+    def publish_position_setpoint(self, x: float, y: float, z: float, yaw="ORIGINAL"):
         if yaw == "ORIGINAL":
             yaw = self.local_position.heading
-        msg = TrajectorySetpoint()
-        msg.position = [x, y, z]
-        msg.yaw = yaw
-        msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
-        self.trajectory_setpoint_publisher.publish(msg)
-        self.get_logger().info(f"Publishing position setpoints {[x, y, z]}")
+        self.current_setpoint = (x, y, z, yaw)
+        self._publish_setpoint_raw(x, y, z, yaw)
+        return (x, y, z, yaw)
 
-    def publish_velocity_setpoint(self, x: float = 0.0, y: float = 0.0, z: float = 0.0, yaw_speed: float = 0.0):
-        """Publish the trajectory in velocity vectors in the NED frame"""
+    def publish_velocity_setpoint(self, x: float = 0.0, y: float = 0.0, z: float = 0.0,
+                                  yaw_speed: float = 0.0):
+        """Predkosc w NED [m/s], yaw_speed [rad/s]."""
         msg = TrajectorySetpoint()
-        msg.velocity = [x, y, z]
-        msg.position = [float('nan'), float('nan'), float('nan')]
+        msg.velocity = [float(x), float(y), float(z)]
+        msg.position = [float('nan')] * 3
         msg.yaw = float('nan')
-        msg.yawspeed = yaw_speed
+        msg.yawspeed = float(yaw_speed)
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         self.trajectory_setpoint_publisher.publish(msg)
-        self.get_logger().info(f"Publishing velocity vectors {[x, y, z]} m/s, yaw_speed {yaw_speed} deg/s")
 
     def change_flight_mode_flag(self):
+        self.flight_mode_flag = not self.flight_mode_flag
         if self.flight_mode_flag:
-            self.flight_mode_flag = False
-        else:
-            self.flight_mode_flag = True
+            self._last_vel_ns = 0          # do pierwszej komendy: zawis
+            self._vel_timeout_active = False
 
     def telemetry_callback(self):
+        if self.battery_info.number_of_cells == 0 and self.battery_info.remaining < 0:
+            if not self._battery_wait_logged:            # wczesniej: log co 0.1 s bez konca wkurwialo mega
+                self.get_logger().info("waiting for battery status")
+                self._battery_wait_logged = True
+            return
         msg = Telemetry()
-        if self.battery_info.number_of_cells == 0:
-            self.get_logger().info(f"waiting for battery status")
-        else:
-            msg.battery_percentage = int((self.battery_info.voltage / float(self.battery_info.number_of_cells * 4.2)) * 100) 
-            msg.battery_voltage = self.battery_info.voltage
-            msg.battery_current = self.battery_info.current
-            # GPS
-            msg.global_lat = self.global_position.lat
-            msg.global_lon = self.global_position.lon
-            msg.global_alt = self.global_position.alt
-            msg.flight_mode = self.state_decoder[self.nav_state]
-            msg.speed = math.sqrt(self.local_position.vx**2 + self.local_position.vy**2)
-            msg.lat = self.global_position.lat
-            msg.lon = self.global_position.lon
-            msg.alt = self.global_position.alt
+        b = self.battery_info
+        if b.remaining >= 0.0:
+            msg.battery_percentage = int(round(b.remaining * 100))
+        elif b.number_of_cells > 0:
+            msg.battery_percentage = int((b.voltage / float(b.number_of_cells * 4.2)) * 100)
+        msg.battery_voltage = b.voltage
+        msg.battery_current = b.current
+        msg.global_lat = self.global_position.lat
+        msg.global_lon = self.global_position.lon
+        msg.global_alt = self.global_position.alt
+        msg.flight_mode = self.nav_name(self.nav_state)
+        msg.speed = math.sqrt(self.local_position.vx ** 2 + self.local_position.vy ** 2)
+        msg.lat = self.global_position.lat
+        msg.lon = self.global_position.lon
+        msg.alt = self.global_position.alt
+        msg.roll = float(self.roll)                       # wczesniej puste XD
+        msg.pitch = float(self.pitch)
+        msg.yaw = float(self.trueYaw)
+        self.telemetry_publisher.publish(msg)
 
-            self.telemetry_publisher.publish(msg)
-
-
-
-    #declare services callbback
     def set_mode_callback(self, request, response):
-        self.get_logger().info("zmieniam tryb")
-        if (request.mode == 'GUIDED'):
-            self.get_logger().info("wchodze w guided")
+        mode = request.mode.upper()
+        self.get_logger().info(f"set_mode {mode}")
+        if mode == 'GUIDED':
             self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, param1=1.0, param2=6.0)
-        if (request.mode == 'LAND'):
+        elif mode == 'LAND':
+            self.current_setpoint = None
             self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_LAND)
-        if (request.mode == 'RTL'):
+        elif mode == 'RTL':
+            self.current_setpoint = None
             self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_RETURN_TO_LAUNCH)
-        if (request.mode == 'FIXED_WING'):
-            self.get_logger().info("Transitioning to FIXED_WING")
-            self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_VTOL_TRANSITION, param1=4.0)  # 4.0 = FIXED_WING
+        elif mode == 'HOLD':
+            # AUTO / LOITER - zawis niezalezny od komputera pokladowego
+            self.current_setpoint = None
+            self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE,
+                                         param1=1.0, param2=4.0, param3=3.0)
+        elif mode == 'FIXED_WING':
+            self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_VTOL_TRANSITION, param1=4.0)
             self._is_fixed_wing = True
-        if (request.mode == 'MULTICOPTER'):
-            self.get_logger().info("Transitioning to MULTICOPTER")
-            self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_VTOL_TRANSITION, param1=3.0)  # 3.0 = MULTICOPTER
+        elif mode == 'MULTICOPTER':
+            self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_VTOL_TRANSITION, param1=3.0)
             self._is_fixed_wing = False
+        else:
+            self.get_logger().warn(f"nieznany tryb '{request.mode}' - zignorowany "
+                                   f"(GUIDED, LAND, RTL, HOLD, FIXED_WING, MULTICOPTER)")
+        return SetMode.Response()
 
-        response = SetMode.Response()
-        return response
-    
     def toggle_velocity_control(self, request, response):
         self.change_flight_mode_flag()
+        self.get_logger().info(f"tryb: {'velocity' if self.flight_mode_flag else 'pozycja'}")
         response.result = self.flight_mode_flag
-
         return response
-    
-    #declare actions callback
+
     def arm_callback(self, goal_handle):
-        self.get_logger().info(f'-- Arm action registered --')
+        self.get_logger().info('-- Arm action registered --')
         feedback_msg = Arm.Feedback()
-        
-        while self.flightCheck==False:
-            if self.dev_mode:
-                self.get_logger().info("DEV MODE is enabled. Skipping armable check.")
-                break
-            feedback_msg.feedback = "Waiting for vehicle to become armable..."
-            self.get_logger().info(feedback_msg.feedback)
-            time.sleep(1)
-
-        self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, param1=1.0)
-        self.get_logger().info('Arm command sent')
-
-        while self.arm_state == 1:
-            feedback_msg.feedback = "Waiting for drone to become armed..."
-            self.get_logger().info(feedback_msg.feedback)
-            time.sleep(1)
-
-        feedback_msg.feedback = "Vehicle is now armed."
-        self.get_logger().info(feedback_msg.feedback)
-
-        goal_handle.succeed()
         result = Arm.Result()
-        result.result = 1
+        t0 = time.monotonic()
 
+        while not self.flightCheck and not self.dev_mode:
+            if time.monotonic() - t0 > self.arm_timeout:                   # FIX ARM, stop
+                self.get_logger().error("Arm: dron nie stal sie gotowy (preflight) - przerywam")
+                goal_handle.abort()
+                result.result = 0
+                return result
+            feedback_msg.feedback = "Waiting for vehicle to become armable..."
+            goal_handle.publish_feedback(feedback_msg)
+            time.sleep(1)
+
+        t_send = 0.0
+        while not self.armed():
+            if time.monotonic() - t_send > 2.0:                            # FIX ARM, ponawianie
+                self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM,
+                                             param1=1.0)
+                t_send = time.monotonic()
+                self.get_logger().info('Arm command sent')
+            if time.monotonic() - t0 > self.arm_timeout:
+                self.get_logger().error("Arm: PX4 nie uzbroil drona - przerywam "
+                                        "(powod w konsoli PX4: 'Arming denied')")
+                goal_handle.abort()
+                result.result = 0
+                return result
+            feedback_msg.feedback = "Waiting for drone to become armed..."
+            goal_handle.publish_feedback(feedback_msg)
+            time.sleep(0.2)
+
+        self.get_logger().info("Vehicle is now armed.")
+        goal_handle.succeed()
+        result.result = 1
         return result
-    
+
     def takeoff_callback(self, goal_handle):
         feedback_msg = Takeoff.Feedback()
+        result = Takeoff.Result()
+        alt = float(goal_handle.request.altitude)
+        target_z = -alt
+        self.set_position_mode("takeoff")
+        x0, y0 = self.local_position.x, self.local_position.y
+        self.publish_position_setpoint(x0, y0, target_z)
+        t0 = time.monotonic()
 
-        self.publish_position_setpoint(self.local_position.x, self.local_position.y, -goal_handle.request.altitude)
-
-        while self.global_position.alt <= goal_handle.request.altitude:
-            self.publish_position_setpoint(self.local_position.x, self.local_position.y, -goal_handle.request.altitude)
+        # FIX wysokosc WZGLEDNA z lokalnego NED
+        # akcja konczyla sie natychmiast(WORKAROUND NA ERC, juz usuniete)
+        while -self.local_position.z < 0.95 * alt:
             if goal_handle.is_cancel_requested:
                 goal_handle.canceled()
-                self.get_logger().info('Goal canceled')
-                return Takeoff.Result()
+                self.get_logger().info('Takeoff canceled')
+                return result
+            if time.monotonic() - t0 > self.takeoff_timeout:
+                self.get_logger().error(f"Takeoff: brak wysokosci {alt} m po "
+                                        f"{self.takeoff_timeout:.0f} s")
+                goal_handle.abort()
+                result.result = 0
+                return result
+            feedback_msg.altitude = float(-self.local_position.z)
+            goal_handle.publish_feedback(feedback_msg)
+            time.sleep(0.2)
 
-            feedback_msg.altitude = self.global_position.alt
-            self.get_logger().info(f"Altitude: {feedback_msg.altitude}")
-            time.sleep(1)
-
-        self.get_logger().info("Reached target altitude")
-        
+        self.get_logger().info(f"Reached target altitude {-self.local_position.z:.1f} m")
         goal_handle.succeed()
-        result = Takeoff.Result()
         result.result = 1
-
         return result
-    
+
     def goto_global_action(self, goal_handle):
-        self.get_logger().info(f'-- Goto global action registered. Destination in global frame: --')
+        req = goal_handle.request
+        self.get_logger().info(f'-- Goto global: lat {req.lat} lon {req.lon} alt(AMSL) {req.alt} --')
+        target = GlobalPosition()
+        target.lat, target.lon, target.alt = req.lat, req.lon, req.alt
 
-        request_position = GlobalPosition()
-        request_position.lat = goal_handle.request.lat
-        request_position.lon = goal_handle.request.lon
-        request_position.alt = goal_handle.request.alt
-
-        self.get_logger().info(f'Latitude: {request_position.lat}')
-        self.get_logger().info(f'Longitude: {request_position.lon}')
-        self.get_logger().info(f'Altitude: {request_position.alt}')
-
-        self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_REPOSITION, param1 = -1.0, param2 = 1.0,
-                                     param5 = request_position.lat, param6 = request_position.lon, param7 = request_position.alt)
-
+        self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_REPOSITION, param1=-1.0, param2=1.0,
+                                     param5=target.lat, param6=target.lon, param7=target.alt)
         feedback_msg = GotoGlobal.Feedback()
-        feedback_msg.distance = self.get_distance_global(self.global_position, request_position)
-        
-        # Select acceptance radius based on vehicle type
-        acceptance_radius = self._goto_global_acceptance_m_fw if self._is_fixed_wing else self._goto_global_acceptance_m_mc
-        self.get_logger().info(f"Vehicle mode: {'FIXED_WING' if self._is_fixed_wing else 'MULTICOPTER'}, Acceptance radius: {acceptance_radius}m")
-
-        self.get_logger().info(f"Distance remaining: {feedback_msg.distance} m")
-
+        acceptance_radius = (self._goto_global_acceptance_m_fw if self._is_fixed_wing
+                             else self._goto_global_acceptance_m_mc)
+        feedback_msg.distance = self.get_distance_global(self.global_position, target)
         while feedback_msg.distance > acceptance_radius:
             if goal_handle.is_cancel_requested:
                 goal_handle.canceled()
                 self.get_logger().info('Goal canceled')
                 return GotoGlobal.Result()
-
-            self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_REPOSITION, param1 = -1.0, param2 = 1.0,
-                                     param5 = request_position.lat, param6 = request_position.lon, param7 = request_position.alt)
-            feedback_msg.distance = self.get_distance_global(self.global_position, request_position)
-            self.get_logger().info(f"Distance remaining: {feedback_msg.distance} m (acceptance: {acceptance_radius}m)")
+            self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_REPOSITION, param1=-1.0,
+                                         param2=1.0, param5=target.lat, param6=target.lon,
+                                         param7=target.alt)
+            feedback_msg.distance = self.get_distance_global(self.global_position, target)
+            goal_handle.publish_feedback(feedback_msg)
             time.sleep(1)
 
+        # FIX powrot do offboard w miejscu docelowym. DO_REPOSITION bierze wysokosc AMSL,
+        # a setpoint offboard jest w lokalnym NED - przeliczenie z roznicy wysokosci.
+        z_target = self.local_position.z - (target.alt - self.global_position.alt)
+        self.set_position_mode("goto_global")
+        self.publish_position_setpoint(self.local_position.x, self.local_position.y, z_target)
         self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, param1=1.0, param2=6.0)
-        self.publish_position_setpoint(self.local_position.x, 
-                                       self.local_position.y,
-                                       -request_position.alt)
         goal_handle.succeed()
         result = GotoGlobal.Result()
         result.result = 1
-
         return result
-    
-    def get_distance_global(self, aLocation1: GlobalPosition, aLocation2: GlobalPosition):
-        coord1 = (aLocation1.lat, aLocation1.lon)
-        coord2 = (aLocation2.lat, aLocation2.lon)
 
-        return hv.haversine(coord1, coord2)*1000 # because we want it in metres
-    
-    ## ACTION CALLBACKS
+    def get_distance_global(self, a: GlobalPosition, b: GlobalPosition):
+        return hv.haversine((a.lat, a.lon), (b.lat, b.lon)) * 1000.0
+
     def goto_relative_action(self, goal_handle):
-        self.get_logger().info(f'-- Goto relative action registered. Destination in local frame: --')
+        req = goal_handle.request
+        dest = LocalPosition()
+        dest.x = self.local_position.x + req.north
+        dest.y = self.local_position.y + req.east
+        dest.z = self.local_position.z + req.down
+        self.get_logger().info(f'-- Goto relative: N {dest.x:.1f} E {dest.y:.1f} D {dest.z:.1f} --')
 
-        north = self.local_position.x + goal_handle.request.north
-        east = self.local_position.y + goal_handle.request.east
-        down = self.local_position.z + goal_handle.request.down
-        #velocity = goal_handle.request.velocity
-        destination = LocalPosition()
-        destination.x = north
-        destination.y = east
-        destination.z = down
-
-        self.get_logger().info(f'North: {destination.x}')
-        self.get_logger().info(f'East: {destination.y}')
-        self.get_logger().info(f'Down: {destination.z}')
-
-        self.publish_position_setpoint(destination.x, destination.y, destination.z)
+        self.set_position_mode("goto_relative")
+        self.publish_position_setpoint(dest.x, dest.y, dest.z)
 
         feedback_msg = GotoRelative.Feedback()
-        feedback_msg.distance = self.calculate_remaining_distance_rel(destination)
-        self.get_logger().info(f"Distance remaining: {feedback_msg.distance} m")
-
-        while feedback_msg.distance>0.1:
+        feedback_msg.distance = self.calculate_remaining_distance_rel(dest)
+        timeout = 30.0 + 3.0 * feedback_msg.distance                      
+        t0 = time.monotonic()
+        while feedback_msg.distance > self.goto_tolerance:                
             if goal_handle.is_cancel_requested:
                 goal_handle.canceled()
                 self.get_logger().info('Goal goto rel canceled')
                 return GotoRelative.Result()
+            if time.monotonic() - t0 > timeout:
+                self.get_logger().error(f"goto_relative: timeout, zostalo "
+                                        f"{feedback_msg.distance:.1f} m (setpoint utrzymany)")
+                goal_handle.abort()
+                result = GotoRelative.Result()
+                result.result = 0
+                return result
+            feedback_msg.distance = self.calculate_remaining_distance_rel(dest)
+            goal_handle.publish_feedback(feedback_msg)
+            time.sleep(0.1)
 
-            self.publish_position_setpoint(destination.x, destination.y, destination.z)
-            feedback_msg.distance = self.calculate_remaining_distance_rel(destination)
-            time.sleep(1)
-
+        # setpoint zostaje - dron trzyma pozycje miedzy akcjami
         goal_handle.succeed()
         result = GotoRelative.Result()
-        result.result=1
-
+        result.result = 1
         return result
-    
-    def calculate_remaining_distance_rel(self, destination: LocalPosition):
-        dnorth = destination.x - self.local_position.x
-        deast = destination.y - self.local_position.y
-        ddown = destination.z - self.local_position.z
-        return math.sqrt(dnorth*dnorth + deast*deast + ddown*ddown)
-    
+
+    def calculate_remaining_distance_rel(self, d: LocalPosition):
+        return math.sqrt((d.x - self.local_position.x) ** 2 + (d.y - self.local_position.y) ** 2
+                         + (d.z - self.local_position.z) ** 2)
+
 
     def yaw_callback(self, goal_handle):
-        self.get_logger().info(f'-- Set yaw action registered. --')
-        self.__relative = goal_handle.request.relative
-        setted_yaw = goal_handle.request.yaw
-        actual_yaw = self.local_position.heading
-        YAW_SPEED = 0.2
-        cw = YAW_SPEED
+        """[FIX 4/9] Obrot przez setpoint pozycyjny z zadanym yaw (PX4 sam prowadzi
+        obrot najkrotsza droga). yaw [rad]; relative=True -> wzgledem obecnego kursu."""
+        req = goal_handle.request
+        heading = self.local_position.heading
+        target = wrap_pi(req.yaw + heading if req.relative else req.yaw)
+        self.get_logger().info(f'-- Set yaw: {math.degrees(target):.1f} deg '
+                               f'({"wzgl." if req.relative else "abs."}) --')
 
-        requested_yaw = self.calc_yaw(setted_yaw, actual_yaw)
-
-        if requested_yaw<0:
-            requested_yaw+=6.283185
-        if setted_yaw < 0:
-            setted_yaw = -setted_yaw
-            cw = -cw
-        yaw_deg = requested_yaw / 3.141592 * 180
-        
-        self.get_logger().info(f'd')
-        # self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_CONDITION_YAW, param1 = yaw_deg, param3 = float(cw), param4 = 0.0)
-        
-        if not self.flight_mode_flag:
-            prev_flight_mode_flag = self.flight_mode_flag
-            self.change_flight_mode_flag()
-
-        self.publish_velocity_setpoint(yaw_speed=cw)
+        prev_velocity_mode = self.flight_mode_flag       # [FIX 4] zawsze zdefiniowane
+        self.set_position_mode("Set_yaw")
+        lp = self.local_position
+        self.publish_position_setpoint(lp.x, lp.y, lp.z, target)
 
         feedback_msg = SetYawAction.Feedback()
-        feedback_msg.angle = self.calc_remaning_yaw(requested_yaw, actual_yaw, cw)
-        self.get_logger().info(f"Angle remainig: {feedback_msg.angle}")
-
-
-        while feedback_msg.angle > 0.5:
+        result = SetYawAction.Result()
+        t0 = time.monotonic()
+        while True:
+            err = wrap_pi(target - self.local_position.heading)            # FIX - razy -
+            feedback_msg.angle = float(abs(err))
+            goal_handle.publish_feedback(feedback_msg)
+            if abs(err) < self.yaw_tolerance:
+                break
             if goal_handle.is_cancel_requested:
                 goal_handle.canceled()
                 self.get_logger().info('Goal canceled')
-                return SetYawAction.Result()
+                break
+            if time.monotonic() - t0 > 30.0:
+                self.get_logger().error(f"Set_yaw: timeout, blad {math.degrees(err):.1f} deg")
+                goal_handle.abort()
+                break
+            time.sleep(0.1)
 
-            # self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_CONDITION_YAW, param1 = yaw_deg, param3 = float(cw), param4 = 0.0)
-            self.publish_velocity_setpoint(yaw_speed=cw)
-            actual_yaw = self.local_position.heading
-            feedback_msg.angle = self.calc_remaning_yaw(requested_yaw, actual_yaw, cw)
-            self.get_logger().info(f"Angle remainig: {feedback_msg.angle}")
-            time.sleep(1)
-
-        if not prev_flight_mode_flag:
+        if prev_velocity_mode:                            # przywroc tryb sprzed akcji
             self.change_flight_mode_flag()
-
-        # self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, param1=1.0, param2=6.0)
-        # self.publish_position_setpoint(self.local_position.x, 
-        #                                self.local_position.y,
-        #                                self.local_position.z)
-
-        # self.get_logger().info(f"Angle remainig: {feedback_msg.angle}")
-        goal_handle.succeed()
-        result = SetYawAction.Result()
-        result.result = 1
-
+        if goal_handle.is_active:
+            goal_handle.succeed()
+            result.result = 1
         return result
-    
-    def calc_yaw(self, yaw: float, actual_yaw: float)->float:
-        if not self.__relative:
-            return yaw
-        return yaw+actual_yaw
-    
-    def calc_remaning_yaw(self, yaw: float, actual_yaw: float, cw)->float:
-        if cw > 0:
-            if actual_yaw < 0:
-                actual_yaw = 2*math.pi + actual_yaw
-            return abs(yaw-actual_yaw)
-        if actual_yaw < 0:
-            actual_yaw = 2*math.pi - actual_yaw
-        return abs(-yaw+actual_yaw)
-    
+
     def set_servo(self, servo_id: int, pwm: float):
-        # mapping PWM 0–1000 -> -1 : 1
-        pwm = max(0.0, min(pwm, 1000.0))
+        pwm = max(0.0, min(pwm, 1000.0))                  # PWM 0..1000 -> -1..1
         value = (pwm - 500) / 500.0
         index = servo_id - 1
         if 0 <= index < len(self._servo_controls):
-            self._servo_controls[index] = value  # only updating one servo at a time
+            self._servo_controls[index] = value
         msg = ActuatorServos()
-        msg.control = list(self._servo_controls)  # sending whole tab
-        self.get_logger().info(
-            f"PX4 Actuator set: servo {servo_id}, pwm={pwm} -> value={value}, "
-            f"controls={self._servo_controls}"
-        )
+        msg.control = list(self._servo_controls)
+        msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         self.actuator_pub.publish(msg)
+
     def set_servo_callback(self, request, response):
         self.set_servo(request.servo_id, request.pwm)
-        response = SetServo.Response()
-        return response
-    def _angle_to_pwm(self, angle_deg: float) -> int:  # Function changing angle to pwm for actuors in px4 should work on the latest PX4(27.11.2025)
-        """
-        0°  -> PWM = 0   (do góry)
-        90° -> PWM = 1000 (do przodu)
-        """
-        angle_clamped = max(0.0, min(angle_deg, 90.0))
-        pwm = int((angle_clamped / 90.0) * 1000.0)
-        return pwm
+        return SetServo.Response()
+
+    def _angle_to_pwm(self, angle_deg: float) -> int:
+        """0 deg -> 0 (do gory), 90 deg -> 1000 (do przodu)."""
+        return int((max(0.0, min(angle_deg, 90.0)) / 90.0) * 1000.0)
+
+    def _enable_direct_actuator(self):
+        msg = OffboardControlMode()
+        msg.direct_actuator = True
+        msg.position = msg.velocity = msg.acceleration = False
+        msg.attitude = msg.body_rate = msg.thrust_and_torque = False
+        msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
+        self.offboard_control_mode_publisher.publish(msg)
+
     def calib_servo(self, angle_deg_4: float, angle_deg_5: float):
-        # actuator 4
-        pwm3 = self._angle_to_pwm(angle_deg_4)
-        # actuator 5
-        pwm4 = self._angle_to_pwm(angle_deg_5)
-        self.get_logger().info(
-            f"calib_servo: S4 angle={angle_deg_4}° pwm={pwm3}, "
-            f"S5 angle={angle_deg_5}° pwm={pwm4}"
-        )
-        start = time.time()
-        Hz = 50 # Publication freq
-        Duration = 10 #Pulication time
-        while time.time() - start < Duration:   #Publication loop
-            self._enable_direct_actuator()
-            self.set_servo(4, pwm3)
-            self.set_servo(5, pwm4)
-            time.sleep(1/Hz)  
+        pwm4, pwm5 = self._angle_to_pwm(angle_deg_4), self._angle_to_pwm(angle_deg_5)
+        self.get_logger().info(f"calib_servo: S4 {angle_deg_4} deg pwm={pwm4}, "
+                               f"S5 {angle_deg_5} deg pwm={pwm5}")
+        self._direct_actuator = True          # timer wstrzymuje heartbeat pozycji/predkosci
+        try:
+            start = time.monotonic()
+            while time.monotonic() - start < 10.0:
+                self._enable_direct_actuator()
+                self.set_servo(4, pwm4)
+                self.set_servo(5, pwm5)
+                time.sleep(1 / 50)
+        finally:
+            self._direct_actuator = False
+
     def calib_servo_callback(self, request, response):
-        self.get_logger().info(
-            f"-- Calib tilts service called: angle_4={request.angle_4}, angle_5={request.angle_5} --"
-        )
+        if self.armed():                      # tylko na ziemi
+            response.success = False
+            response.message = "Kalibracja serw tylko z rozbrojonym dronem"
+            self.get_logger().error(response.message)
+            return response
         try:
             self.calib_servo(request.angle_4, request.angle_5)
             response.success = True
             response.message = "Tilts calibrated successfully"
-        except Exception as e:
+        except Exception as e:                
             self.get_logger().error(f"Calib tilts error: {e}")
             response.success = False
             response.message = f"Error: {e}"
         return response
-    def _enable_direct_actuator(self):   #Helper function for enabling direct actuator output
-        msg = OffboardControlMode()
-        msg.direct_actuator = True
-        msg.position = False
-        msg.velocity = False
-        msg.acceleration = False
-        msg.attitude = False
-        msg.body_rate = False
-        msg.thrust_and_torque = False
-        now = self.get_clock().now().nanoseconds // 1000
-        msg.timestamp = now
-        msg.timestamp = self.get_clock().now().nanoseconds // 1000
-        self.offboard_mode_pub.publish(msg)
-    #special method to cancel the action
+
     def cancel_callback(self, goal_handle):
-        """Accept or reject a client request to cancel an action."""
         self.get_logger().info('Received cancel request')
         return CancelResponse.ACCEPT
 
+
 def main():
     rclpy.init()
-    
     drone = DroneHandlerPX4()
-
-    # rclpy.spin(drone)
     executor = MultiThreadedExecutor()
     executor.add_node(drone)
-    executor.spin()
+    try:
+        executor.spin()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        drone.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
 
-    drone.destroy_node()
 
-    rclpy.shutdown()
-
-
-if __name__ == 'main':
+if __name__ == '__main__':
     main()

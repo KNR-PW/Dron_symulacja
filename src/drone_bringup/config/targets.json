@@ -1,0 +1,45 @@
+{
+  "created": "TEST wp_scan_on_miss: adres bledny o 40 m",
+  "min_obs": {
+    "tent": 10,
+    "people": 5
+  },
+  "tent": {
+    "best": {
+      "id": 1,
+      "class_id": 0,
+      "source": "auto",
+      "lat": -35.3615401,
+      "lon": 149.1651087,
+      "n_obs": 300,
+      "mean_conf": 0.95,
+      "n_passes": 2,
+      "score": 285.0,
+      "point_spread_m": 1.5,
+      "drone_spread_m": 30.0,
+      "first_seen": 0.0,
+      "last_seen": 1.0
+    },
+    "candidates": [
+      {
+        "id": 1,
+        "class_id": 0,
+        "source": "auto",
+        "lat": -35.3615401,
+        "lon": 149.1651087,
+        "n_obs": 300,
+        "mean_conf": 0.95,
+        "n_passes": 2,
+        "score": 285.0,
+        "point_spread_m": 1.5,
+        "drone_spread_m": 30.0,
+        "first_seen": 0.0,
+        "last_seen": 1.0
+      }
+    ]
+  },
+  "people": {
+    "best": null,
+    "candidates": []
+  }
+}

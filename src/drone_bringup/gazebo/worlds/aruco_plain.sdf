@@ -206,22 +206,11 @@
       <static>true</static>
     </include>
 
-    <model name="drone_spawn_platform">
-      <static>true</static>
-      <pose>-20 0 30 0 0 0</pose>
-      <link name="link">
-        <collision name="collision">
-          <geometry>
-            <box>
-              <size>2 2 0.1</size>
-            </box>
-          </geometry>
-        </collision>
-      </link>
-    </model>
+    <!-- Dron na ziemi, 20 m przed namiotem (namiot: x=30), nosem w jego strone.
+         Platforma na 30 m usunieta - start z ziemi, jak na realnym locie. -->
       <include>
       <uri>model://iris_with_gimbal</uri>
-      <pose degrees="true">-20 0 30.25 0 0 0</pose>
+      <pose degrees="true">10 0 0.195 0 0 0</pose>
     </include>
 </world>
 </sdf>

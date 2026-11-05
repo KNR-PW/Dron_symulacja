@@ -1,3 +1,5 @@
+import time
+
 import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionClient
@@ -8,10 +10,12 @@ from drone_interfaces.srv import (
     SetMode,
     SetSpeed,
     MakePhoto,
+    SetServo,
     ToggleVelocityControl
 
 )
 from drone_interfaces.msg import Telemetry, VelocityVectors
+from std_msgs.msg import Float32
 from drone_interfaces.action import (
     Arm,
     Takeoff,
@@ -39,7 +43,14 @@ class DroneController(Node):
         self._stop_video_client = self.create_client(TurnOffVideo, NAMESPACE_VIDEO+'turn_off_video')
         self.toggle_velocity_control_cli = self.create_client(ToggleVelocityControl,NAMESPACE_HARDWARE+'toggle_v_control')
         self._set_guard_client = self.create_client(SetMode, 'set_brake_on_obstacle')
+        # Zrzut ladunku idzie TA SAMA droga co gimbal — MAV_CMD_DO_SET_SERVO
+        # przez drone_handler. Gimbal ma osobny topic tylko dlatego, ze handler
+        # przelicza tam stopnie na mikrosekundy wg kalibracji; zrzut podaje
+        # surowe PWM, a serwis set_servo jest juz ogolny i obsluzy dowolny kanal.
+        # (Serwisu 'dropper' z Dropper.srv nikt w tym repo nie serwuje.)
+        self._servo_client = self.create_client(SetServo, NAMESPACE_HARDWARE+'set_servo')
         self.velocity_publisher = self.create_publisher(VelocityVectors,NAMESPACE_HARDWARE+'velocity_vectors', 10)
+        self.gimbal_publisher = self.create_publisher(Float32, NAMESPACE_HARDWARE+'gimbal_pitch', 10)
 
         self._wait_for_service(self._mode_client, NAMESPACE_HARDWARE+'set_mode')
         if not DEV:
@@ -64,6 +75,13 @@ class DroneController(Node):
         # --- State & fail‑safe ---
         self._busy = False
         self._alarm = False
+        # Haczyk przerywajacy akcje W TRAKCIE lotu. Misja podstawia tu funkcje
+        # bez argumentow; gdy odda True, _send_action przestaje czekac na koniec
+        # akcji i wraca. Bez tego dolot do waypointu jest nieprzerywalny przez
+        # cale 180 s timeoutu, a przy galsie 250 m to i minuta, w ktorej dron
+        # ignoruje wszystko, co sie w miedzyczasie wydarzylo (np. operator
+        # oznaczyl cel). None = nic nie przerywa, zachowanie jak dotad.
+        self.action_interrupt = None
         self._voltage_spikes = 0
         self._voltage_threshold = 12.0
 
@@ -291,7 +309,7 @@ class DroneController(Node):
         goal = SetYawAction.Goal(yaw=yaw, relative=relative)
         return self._send_action(self._yaw_client, goal)
 
-    def _send_action(self, client: ActionClient, goal_msg) -> bool:
+    def _send_action(self, client: ActionClient, goal_msg, timeout: float = 180.0) -> bool:
         # Wait for action server
         while not client.wait_for_server(timeout_sec=1.0):
             self.get_logger().warn(f'Waiting for {client._action_name} server...')
@@ -300,7 +318,11 @@ class DroneController(Node):
         send_future = client.send_goal_async(goal_msg)
         send_future.add_done_callback(lambda f: self._on_action_response(f, client))
 
-        # Spin until result or emergency
+        # Spin until result, emergency or timeout.
+        # Timeout jest KONIECZNY: serwer akcji, ktory nie domknie celu, zawiesilby
+        # cala misje na zawsze. Tak wlasnie zachowuje sie yaw_callback przy
+        # ujemnym kacie — jego petla porownuje kat z [0,2pi) z katem z [-pi,pi].
+        deadline = time.time() + timeout
         while True:
             rclpy.spin_once(self, timeout_sec=0.2)
             if self._alarm:
@@ -308,6 +330,20 @@ class DroneController(Node):
                 return False
             if not self._busy:
                 break
+            if self.action_interrupt is not None and self.action_interrupt():
+                # Cel zostaje otwarty na serwerze, ale nastepne goto i tak go
+                # nadpisze — ArduPilot w GUIDED trzyma zawsze ostatni zadany
+                # punkt, wiec dron po prostu zawraca tam, gdzie kazemy.
+                self._busy = False
+                self.get_logger().warn(
+                    f'akcja {client._action_name} przerwana na zadanie misji')
+                return False
+            if time.time() > deadline:
+                self._busy = False
+                self.get_logger().error(
+                    f'akcja {client._action_name} nie zakonczyla sie w {timeout:.0f}s '
+                    f'— ide dalej')
+                return False
         return True
 
     def _on_action_response(self, send_future, client: ActionClient):
@@ -405,6 +441,33 @@ class DroneController(Node):
         return True
     
 # functions to fly by vectors
+    def set_gimbal_pitch(self, pitch_deg):
+        '''
+        Ustawia pitch gimbala w STOPNIACH przez MAVLink (mount) -> drone_handler.
+        Ta sama sciezka co na prawdziwym dronie (ArduPilot steruje serwem montazu),
+        wiec kod nie zmienia sie przy przejsciu sim -> real.
+
+        :param pitch_deg: kat pitch montazu w stopniach (ujemne = w dol)
+        '''
+        self.gimbal_publisher.publish(Float32(data=float(pitch_deg)))
+
+    def set_servo(self, servo_id: int, pwm: int) -> bool:
+        """Surowe PWM na wyjscie serwa (MAV_CMD_DO_SET_SERVO).
+
+        Wymaga SERVOn_FUNCTION = 0 dla uzytego kanalu — inaczej ArduPilot
+        nadpisze wartosc wlasna funkcja wyjscia i zrzut nie zadziala.
+        """
+        if not self._servo_client.service_is_ready():
+            self.get_logger().error(
+                "serwis set_servo niedostepny — drone_handler nie chodzi?")
+            return False
+        req = SetServo.Request()
+        req.servo_id = int(servo_id)
+        req.pwm = int(pwm)
+        self._servo_client.call_async(req)
+        self.get_logger().info(f"SERVO {servo_id} -> {pwm} us")
+        return True
+
     def send_vectors(self, vx, vy, vz, yaw=0.0):
         '''
         Method to send velocity vector in FRD frame to drone_handler.

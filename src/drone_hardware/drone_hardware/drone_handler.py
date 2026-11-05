@@ -18,9 +18,12 @@ from rclpy.executors import MultiThreadedExecutor
 from drone_interfaces.msg import Telemetry, VelocityVectors
 from drone_interfaces.srv import GetAttitude, GetLocationRelative, SetServo, SetMode, SetSpeed, GetGpsPos, ToggleVelocityControl
 from drone_interfaces.action import GotoRelative, GotoGlobal, Arm, Takeoff, SetYawAction
+from std_msgs.msg import Float32
 
 import haversine as hv
 class DroneHandler(Node):
+
+
     def __init__(self):
         super().__init__('drone_handler')
         self.vehicle = None
@@ -56,6 +59,9 @@ class DroneHandler(Node):
         self.vector_receiver = self.create_subscription(VelocityVectors, NAMESPACE+'velocity_vectors', self.velocity_control_callback ,10)
         self._velocity_control_flag = False
         self.toggle_velocity_control_srv = self.create_service(ToggleVelocityControl, NAMESPACE+'toggle_v_control', self.toggle_velocity_control)
+
+        #DECLARE GIMBAL (pitch w stopniach przez MAVLink gimbal manager -> Mount2/MAIN7)
+        self.gimbal_pitch_sub = self.create_subscription(Float32, NAMESPACE+'gimbal_pitch', self.gimbal_pitch_callback, 10)
 
         # ONLY FOR TEST IF YOU SEE HERE SOMETHING UNCOMMENTED TELL THIS TO HIS CREATOR
         #self._counter = 0
@@ -210,13 +216,12 @@ class DroneHandler(Node):
 
     def set_servo(self, servo_id, pwm):
         msg = self.vehicle.message_factory.command_long_encode(
-            0, 0,          # time_boot_ms (not used)
-            0,   # target system, target component
-            mavutil.mavlink.MAV_CMD_DO_SET_SERVO, #command
-            0,          #not used
-            servo_id,   #number of servo instance
-            pwm,        #pwm value for servo control
-            0,0,0,0) #not used
+            0, 0,          # target system, target component
+            mavutil.mavlink.MAV_CMD_DO_SET_SERVO, # command
+            0,             # confirmation
+            servo_id,      # param1: numer serwa
+            pwm,           # param2: PWM
+            0, 0, 0, 0, 0) # param3-7
         # send command to vehicle
         self.vehicle.send_mavlink(msg)
 
@@ -534,11 +539,15 @@ class DroneHandler(Node):
             self.get_logger().info(f"ESC is not initialized yet:{self.vehicle.battery}")
 
         # Publish current velocity
-        if self.vehicle and self.vehicle.velocity:
+        # Zanim przyjdzie pierwsza ramka, dronekit zwraca [None, None, None] —
+        # sama lista jest prawdziwa, wiec trzeba sprawdzic elementy. Inaczej
+        # float(None) leci wyjatkiem, a to jest poza try i ubija executor.
+        vel = self.vehicle.velocity if self.vehicle else None
+        if vel and all(v is not None for v in vel):
             vel_msg = VelocityVectors()
-            vel_msg.vx = float(self.vehicle.velocity[0])
-            vel_msg.vy = float(self.vehicle.velocity[1])
-            vel_msg.vz = float(self.vehicle.velocity[2])
+            vel_msg.vx = float(vel[0])
+            vel_msg.vy = float(vel[1])
+            vel_msg.vz = float(vel[2])
             self.velocity_pub.publish(vel_msg)
 
     #velocty control definitions
@@ -579,6 +588,27 @@ class DroneHandler(Node):
             yaw_rate = msg.yaw
 
             self.send_global_velocity(v_n, v_e, v_d, yaw_rate)
+
+
+    def gimbal_pitch_callback(self, msg):
+        """Pitch gimbala (MAIN7) przez surowe PWM - DO_SET_SERVO.
+        Wymaga SERVO7_FUNCTION = 0 w ArduPilocie.
+        Kalibracja: -90 deg = 1100 us (prosto w dol), -45 deg = 1600 us.
+        Zakres realny: -90 do ok. -18 deg (limit PWM 1900).
+        msg.data = kat w stopniach, ujemne = w dol."""
+        if self.vehicle is None:
+            return
+
+        # punkty kalibracyjne (kat -> PWM) i bezpieczne krance
+        a1, p1 = -90.0, 1100
+        a2, p2 = -45.0, 1600
+        pwm_min, pwm_max = 1100, 1900
+
+        angle = float(msg.data)
+        pwm = p1 + (angle - a1) * (p2 - p1) / (a2 - a1)   # interpolacja liniowa
+        pwm = int(max(pwm_min, min(pwm_max, pwm)))         # clamp do bezpiecznego zakresu
+
+        self.set_servo(7, pwm)
 
     def toggle_velocity_control(self, request, response):
 

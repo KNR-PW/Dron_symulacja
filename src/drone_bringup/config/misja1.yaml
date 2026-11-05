@@ -1,0 +1,390 @@
+# Parametry misji SUAS — wezel suas_mission.
+#
+# Pelny opis dzialania i uzasadnienie kazdej liczby: docs/misja.md.
+#
+# Uzycie (musi isc przez `ros2 run`, NIE z launcha — wait_confirm czyta
+# klawiature i potrzebuje stdin podpietego do terminala):
+#
+# UWAGA NA SCIEZKE — Docker montuje TYLKO katalog src/, wiec '~' znaczy co
+# innego po kazdej stronie i to samo polecenie nie zadziala w obu:
+#
+#   Jetson / host:
+#     ros2 run drone_autonomy suas_mission --ros-args \
+#       --params-file ~/Dron_symulacja/src/drone_bringup/config/misja.yaml
+#
+#   kontener Docker (~ to /root, repo jest pod /root/ros_ws/src):
+#     ros2 run drone_autonomy suas_mission --ros-args \
+#       --params-file /root/ros_ws/src/drone_bringup/config/misja.yaml
+#
+# "Couldn't parse params file ... Error opening YAML file" znaczy DOKLADNIE
+# tyle, ze pliku nie ma pod ta sciezka — nie ze yaml jest zly.
+#
+# '/**' = dotyczy wezla o dowolnej nazwie.
+/**:
+  ros__parameters:
+
+    # ═══ WYSOKOSC ════════════════════════════════════════════════════
+    # Cala misja leci na tej wysokosci: skan, dolot, podejscie, zrzut.
+    target_alt: 50.0
+
+    # ═══ PLIKI — OBA W drone_bringup/config ══════════════════════════
+    # targets_json pisze suas_geolocator. Zeby pisal TUTAJ, uruchom go z:
+    #   ros2 launch drone_bringup suas_geolocator.launch.py \
+    #     save_dir:=/home/jetsonknr/Dron_symulacja/src/drone_bringup/config
+    # Katalog w src/ jest zamontowany w kontenerze Dockera, wiec plik jest
+    # ten sam na hoscie i w kontenerze — w ~/suas_targets NIE byl.
+    #
+    # Brak pliku NIE jest bledem: znaczy tyle, ze zadna klasa nie ma adresu
+    # i namiot idzie sciezka skanu.
+    # scan_waypoints misja ZNAJDZIE sama, jesli tej sciezki nie ma: sprawdza
+    # po kolei /root/ros_ws/src/..., ~/Dron_symulacja/src/... i katalog share
+    # pakietu, po czym loguje, ktory plik wziela. Wystarczy wiec sama nazwa.
+    #
+    # targets_json NIE jest tak podmieniany celowo: plik z innego srodowiska
+    # moze byc z poprzedniego lotu, a zrzut pod nieaktualny adres jest gorszy
+    # niz brak adresu. Misja tylko powie, gdzie taki plik lezy.
+    targets_json: "~/Dron_symulacja/src/drone_bringup/config/targets.json"
+    scan_waypoints: "misja_skan1.waypoints"
+
+    person_waypoints: "~/Dron_symulacja/src/drone_bringup/config/czlowiek1.waypoints"
+
+    # ═══ PRZEJECIE LOTU ══════════════════════════════════════════════
+    takeover_timeout: 1200.0
+    auto_takeoff: false        # true = TRYB TESTOWY, sam uzbraja i startuje
+    finish_action: "rtl"       # "rtl" albo "land"
+    # false = po przejeciu lotu dron rusza PROSTO na cel i schodzi na
+    # target_alt PO DRODZE, zamiast najpierw zjezdzac w miejscu. Zejscie
+    # z 80 na 50 m to 12-20 s zawisu, ktore w ten sposob odpadaja.
+    # Nad celem wysokosc jest i tak doczekana przed akwizycja i zrzutem —
+    # akcja goto_global konczy sie na odleglosci POZIOMEJ i wysokosci nie
+    # sprawdza, wiec bez tego doczekania zrzut moglby pojsc z 70 m.
+    # true = stare zachowanie.
+    descend_in_place: false
+
+    # ═══ SCIEZKA B — mam adres (dolot na waypoint) ═══════════════════
+    # Twardy budzet od dolotu do decyzji. Bez niego migoczaca detekcja
+    # zapetlilaby pytanie nad jednym punktem: cel wraca -> pytamy -> znika ->
+    # wraca -> pytamy... Pytanie jest zreszta zadawane RAZ i odpowiedz jest
+    # ostateczna, wiec budzet to drugie, niezalezne zabezpieczenie.
+    #
+    #   t=0     dolot, gimbal w pion
+    #   t<=5    okno M z N (wp_acquire)
+    #   dalej   ZAWIS (hover_timeout) albo ZRZUT NA WSPOLRZEDNE
+    # Przy operator_confirm=false pytania nie ma, wiec wp_budget nie ogranicza
+    # juz niczego poza wp_acquire — zostaje jako siatka bezpieczenstwa.
+    wp_budget: 20.0
+    # 5.0, a nie 10.0: jesli cel jest pod dronem, bramka 4 z 8 domyka sie
+    # w ulamku sekundy. Dziesiec sekund milczenia detektora nie znaczy "zaraz
+    # go zlapie", tylko "nie ma go w kadrze" — a wtedy i tak konczy sie zrzutem
+    # na wspolrzedne. Skrocenie oszczedza 5 s na kazdej klasie.
+    wp_acquire: 5.0
+
+    # Gdy nad waypointem pod dronem NIC nie widac — skan z tego miejsca,
+    # tymi samymi katami co skan bez geolokatora, zamiast zrzutu w ciemno.
+    # Adres bywa przesuniety (slaba geolokalizacja, cel ruszyl sie miedzy
+    # przelotem ortofoto a misja), a cel oddalony o kilkadziesiat metrow jest
+    # DALEJ W ZASIEGU — tylko nie w nadirze. Skan siega ok. 78 m wokol
+    # waypointu, czyli obejmuje caly realny blad adresu.
+    #
+    # Cel znaleziony tym skanem jest OBOK, nie pod dronem, wiec obsluga idzie
+    # sciezka A (CELUJ -> SPACJA -> PODLOT -> ZAWIS), a nie samym zawisem.
+    # Nic nie znalazl -> zrzut na wspolrzedne, tak jak dotad.
+    # false = pod waypointem nic nie widac -> OD RAZU zrzut na wspolrzedne,
+    # bez skanu 360 z tego miejsca. Ufamy adresowi z geolokatora: skan kosztuje
+    # do wp_scan_timeout i ma sens tylko wtedy, gdy adres bywa przesuniety
+    # o kilkadziesiat metrow. Wlacz (true), jesli geolokator zacznie sie mylic.
+    wp_scan_on_miss: false
+    wp_scan_arc_deg: 360.0
+    wp_scan_timeout: 120.0
+    confirm_timeout: 10.0
+
+    # ═══ OKNO NA POPRAWKE ADRESU ═════════════════════════════════════
+    # Dron wisi nad waypointem, gimbal w pionie, detektor celu nie potwierdzil
+    # (namiot) albo klasa i tak nie centruje (czlowiek). Zamiast zrzucac od razu
+    # — tyle sekund na klik w GUI. Geolokator przepisuje targets.json do 5 s,
+    # misja czyta go co sekunde i LECI na poprawiony punkt zamiast zrzucac.
+    # Cisza konczy okno zrzutem, czyli tym, co misja zrobilaby bez tej funkcji.
+    #
+    # 0 = wylaczone (stare zachowanie: zrzut natychmiast).
+    wp_fix_window: 10.0
+    wp_fix_tol: 5.0            # mniejsze przesuniecie to nie poprawka, to szum
+    wp_fix_max: 2              # ile razy z rzedu mozna poprawiac
+
+    # ═══ CENTROWANIE NAD CELEM Z ADRESU ══════════════════════════════
+    # Dotyczy WYLACZNIE dolotu na waypoint z targets.json (sciezka B).
+    # false = detektor widzi cel pod dronem, ale misja i tak zrzuca na
+    # wspolrzedne z adresu, bez zawisu z centrowaniem.
+    #
+    # NAMIOT true: bramka 4 z 8 z ciagloscia track_id, 49 px na 50 m — jak
+    # detektor mowi "widze", to widzi, a centrowanie realnie poprawia celnosc.
+    #
+    # CZLOWIEK false: bramka jest rozluzniona do 2 z 8 BEZ ciaglosci ID (bez
+    # tego lezacy czlowiek nigdy by jej nie przeszedl), wiec "widzialem" moze
+    # znaczyc dwie klatki cienia. Adres z geolokatora to klaster setek
+    # obserwacji albo klik operatora — mocniejsza przeslanka niz taka detekcja.
+    # Oszczedza tez do hover_timeout sekund na tej klasie.
+    center_on_tent: true
+    center_on_person: false
+
+    # ═══ POTWIERDZANIE SPACJA ════════════════════════════════════════
+    # false = misja NIGDY nie pyta i nie czeka na SPACJE, dokladnie tak, jakby
+    # suas_marker_web nie byl podlaczony. W obu miejscach, ktore dotad pytaly,
+    # decyduje detektor:
+    #   * cel ze skanu -> zrzut WYLACZNIE po udanym wycentrowaniu,
+    #   * cel z adresu w targets.json widoczny w kadrze -> centrowanie na tym,
+    #     co widac; dopiero nieudane centrowanie schodzi na wspolrzedne.
+    # Oszczedza do confirm_timeout na kazdym celu.
+    # true = wroc do pytania (i tak zadziala tylko przy zywym /operator_online).
+    operator_confirm: false
+
+    # ═══ SCIEZKA A — CELUJ (obrot na cel przed podlotem) ═════════════
+    # Warunek w PIKSELACH, nie w metrach: przy wysoko podniesionym gimbalu
+    # gorne wiersze kadru moga patrzec ponad horyzont, a rzutowanie zwraca
+    # wtedy None — uchyb metrowy odczytalby sie jako "wycentrowany" dokladnie
+    # wtedy, gdy nie jest.
+    aim_tol_px: 0.06
+    aim_hold: 1.0
+    aim_timeout: 15.0
+
+    # ═══ SKAN (namiot bez adresu) ════════════════════════════════════
+    # Krok obrotu drona w osi yaw (w stopniach). 60 st. daje 11 st. zakladki.
+    scan_yaw_step: 60.0
+    # Szerokosc wachlarza skanu dla kolejnych WP. (Np. z rogu pola wystarczy 90).
+    # Jesli punktow w pliku jest wiecej, reszta uzyje ostatniej wartosci z listy.
+    scan_arc_deg: [180.0, 360.0, 180.0]
+    # Azymut srodka wachlarza (0-360) dla kolejnych WP. 
+    # Jak liczyc z rogu pola dla luku 90st (patrzysz wdluz krawedzi = to Twoj azymut):
+    # - Jesli pole jest po PRAWEJ stronie (czyli lewy rog) ➔ Dodajesz 45 stopni. (Azymut + 45)
+    # - Jesli pole jest po LEWEJ stronie (czyli prawy rog) ➔ Odejmujesz 45 stopni. (Azymut - 45)
+    scan_heading_deg: [270.0, 0.0, 90.0]
+    # Skan pionowo w dol (robiony raz na dany WP, obracanie drona nic tu nie zmienia).
+    scan_pitch_nadir: -90.0
+    # Zestaw pochylen gimbala dla kazdej z pozycji obrotu yaw.
+    scan_pitches: [-65.0, -40.0]
+    # Czas postoju (s) na zebranie klatek po kazdym obrocie / zmianie kata gimbala.
+    scan_dwell: 1.5
+    # Predkosc obrotu drona (rad/s) podczas krecenia glowa w skanie.
+    # 0.4 (23 st./s), a nie 1.0 (57 st./s). Petla _turn_to konczy sie, gdy uchyb
+    # spadnie ponizej 3 st. - czyli W RUCHU, przy pelnej predkosci. Potem leci
+    # zero i dron dohamowuje wybiegiem: przy 57 st./s samo hamowanie to ~6 st.,
+    # a opoznienie telemetrii (10 Hz) doklada drugie tyle, wiec krok 60 st.
+    # konczyl sie na ~70 st. Przy 23 st./s przestrzelenie spada do ~4-5 st.
+    scan_yaw_rate: 0.4         # bylo 1.0
+    # 0.8, a nie 0.4: okno detekcji zeruje sie DOPIERO po tym czasie, wiec dluzszy
+    # settle sprawia, ze klatki nie licza sie, gdy dron jeszcze buja po obrocie.
+    scan_settle: 0.8           # Czas (s) na ustabilizowanie gimbala po zmianie kata.
+    
+    # Bramka detekcji podczas POSTOJU (czulsza). Falszywka kosztuje tylko czas na celowanie.
+    scan_confirm_frames: 3
+    scan_window_frames: 6
+    # Bramka detekcji w PRZELOCIE (ostrzejsza). Falszywka hamuje drona i oslepia detektor.
+    transit_confirm_frames: 4
+    transit_window_frames: 8
+
+    # ─── NIZSZE BRAMKI DLA CZLOWIEKA ─────────────────────────────────
+    # Namiot ma na 50 m 49 px i wykrywa sie w kazdej klatce. Czlowiek LEZACY
+    # ma 30x22 px, a STOJACY 8 px — detektor lapie go z przerwami, wiec te
+    # same progi co dla namiotu bywaja NIEPRZECHODZALNE: cel jest w kadrze,
+    # a dron nigdy nie wchodzi w podlot.
+    #
+    # Dzialaja w trzech miejscach, kazde ma swoja pare:
+    #   scan     - obserwator na postoju: czy warto sie zatrzymac i sprawdzic
+    #   transit  - obserwator w przelocie (ostrzejszy: obraz rozmyty ruchem)
+    #   det      - bramka KONTROLERA: SPRAWDZ na stojaco oraz SEARCH -> APPROACH
+    #              (to ta decyduje o wejsciu w podlot i centrowanie)
+    #
+    # Ryzyko falszywki rosnie, ale konsekwencja jest ograniczona: po tych
+    # bramkach ida jeszcze SPRAWDZ na stojaco, CELUJ, SPACJA i UDANE
+    # centrowanie. Detekcja bez ID trackera (podpis migoczacej falszywki)
+    # jest odrzucana niezaleznie od progow.
+    #
+    # Ustaw rowne wartosciom wyzej, zeby wylaczyc nadpisanie dla danej fazy.
+    # Zmierzone 2026-09-08 na realu: gdy czlowiek JEST w kadrze, detektor
+    # lapie go w ~28% klatek (skrajnie 12-44%) przy 7-8 FPS. Szansa domkniecia
+    # okna przy tej skutecznosci:
+    #     4 z 8 -> 25%      3 z 8 -> 52%      2 z 8 -> 80%
+    # Stad 2 z 8 tam, gdzie bramka BLOKUJE podlot.
+    person_scan_confirm_frames: 2      # zamiast 3
+    person_scan_window_frames: 8       # szersze okno = wiecej szans w komorce
+    # W przelocie zostaje ostrzej: falszywy stop kosztuje hamowanie
+    # + sprawdzenie + cisze, a czlowieka i tak lapiemy glownie na postoju.
+    person_transit_confirm_frames: 3   # zamiast 4
+    person_transit_window_frames: 8
+    person_det_confirm_frames: 2       # zamiast 4 — to ta wpuszcza w podlot
+    person_det_window_frames: 8
+
+    # NAJWAZNIEJSZE z calej tej sekcji. require_same_track odrzuca track_id < 0
+    # ORAZ czysci okno przy kazdej zmianie ID. Przy celu widzianym w 28% klatek
+    # tracker gubi sciezke i nadaje nowe ID przy kazdym powrocie, wiec okno
+    # NIGDY sie nie domyka — a trafienie z track_id < 0 nie odswieza nawet
+    # last_det_time, przez co CELUJ od razu melduje "cel zniknal".
+    #
+    # UWAGA: to zdejmuje zabezpieczenie, ktore 2026-09-02 zlapalo drzewo brane
+    # za czlowieka (4/6 klatek, ID=-1). Zostaje reszta lancucha: SPRAWDZ na
+    # stojaco, CELUJ, SPACJA i UDANE centrowanie — cel skaczacy po kadrze sie
+    # nie wycentruje, wiec zrzut nie padnie. Dla NAMIOTU zabezpieczenie
+    # zostaje wlaczone (require_same_track wyzej).
+    person_require_same_track: false
+
+    # Przerwy w detekcji czlowieka siegaja 2 s (ciagi 0/16 w logu), a dwie pod
+    # rzad to 4,4 s. Przy 3.0 kontroler uznaje cel za zgubiony w srodku
+    # podlotu i wraca do SEARCH. Cena: przez te 5 s dron leci na OSTATNIA
+    # znana pozycje celu, wiec przy falszywce moze zjechac kilkanascie metrow.
+    person_lost_timeout: 5.0
+    
+    # Czy po skonczeniu trasy dron ma wrocic na poczatek (WP1) i powtorzyc skan.
+    scan_return_to_first: true
+    scan_timeout: 600.0
+
+    # Po zrzucie na namiot — szukaj czlowieka tym samym skanem, zamiast wracac
+    # z ladunkiem. Ma sens, bo w trakcie skanu na namiot NIKT nie obserwowal
+    # klasy CZLOWIEK (watcher sluchal tylko /tent_detections), wiec teren jest
+    # pod tym katem nieogladany, mimo ze dron nad nim przelecial.
+    #
+    # Przebieg: obrot 360 st. W MIEJSCU (dron stoi nad namiotem, obrot jest
+    # darmowy) -> lot do NAJBLIZSZEGO punktu trasy -> jego skonfigurowany skan
+    # -> dalej cyklicznie (np. WP2, WP3, WP1). Powrot na WP1 tylko po to, zeby
+    # zaczac "od poczatku", bylby czystym przelotem bez zysku.
+    #
+    # Szanse sa ograniczone fizyka, nie kodem: na 50 m czlowiek STOJACY ma
+    # 8 px, czyli ponizej progu YOLO. Realnie liczy sie tylko lezacy
+    # (30x22 px na 50 m) — patrz docs/misja.md sekcja 5.
+    search_person_after_tent: true
+    person_scan_timeout: 300.0
+
+    # ═══ PATROL W OCZEKIWANIU NA OPERATORA ═══════════════════════════
+    # Dotyczy KAZDEGO ladunku, ktory zostal na pokladzie:
+    #   * czlowiek bez adresu — zawsze (detektor nie ma szans, 8 px),
+    #   * namiot po NIEUDANYM skanie — inaczej dron krazylby z jego ladunkiem,
+    #     a operator widzialby go na podgladzie bez sposobu, zeby to zglosic.
+    # Dron lata w kolko po tej trasie, na target_alt, z gimbalem w pionie,
+    # i czeka az operator kliknie cel w GUI. Po kliknieciu przerywa dolot
+    # (nawet w polowie odcinka) i leci dowiezc ladunek tej klasy.
+    # Gdy czekaja oba — kolejnosc jak w reszcie misji: najpierw namiot.
+    #
+    # Trasa: .waypoints z Mission Plannera, "lat, lon" w linii, albo OFFSETS
+    # w metrach. Kolejnosc liczona od NAJBLIZSZEGO punktu, nie od WP1.
+    #
+    # Patrol przyjmuje WYLACZNIE adres ze zrodlem 'operator' — automat na
+    # czlowieku to cien albo krzak, bo na 50 m ma on 8 px przy stride 8.
+    
+    person_patrol_timeout: 0.0   # 0 = bez limitu, do klikniecia albo RTL
+    
+    # Pochylenie gimbala w przelocie miedzy punktami trasy.
+    pitch_transit: -55.0
+    # Cisza dla klasy po falszywce — bez tego ten sam krzak zatrzymywalby
+    # drona w kolko: wracamy na kurs, okno napelnia sie z tego samego miejsca
+    # i znowu stoimy.
+    det_cooldown: 20.0
+    # Cisza po falszywce ZNALEZIONEJ W SKANIE — osobna i krotka. Skan trwa
+    # ~35 s, wiec cisza 20 s oslepia polowe komorek. Zmierzone 2026-09-07:
+    # falszywka z przelotu wyciszyla klase na 20 s i 4 z 6 pozycji yaw na WP2
+    # przeleciano ze slepym detektorem, a namiot byl na 5/6. W skanie dlugiej
+    # ciszy nie trzeba: po nieudanym sprawdzeniu wznawiamy od NASTEPNEJ
+    # komorki, wiec ta sama falszywka i tak nie wraca.
+    scan_det_cooldown: 5.0
+    reconfirm_timeout: 3.0     # ile czekamy na potwierdzenie NA STOJACO
+    brake_settle_time: 3.0     # ile czekamy, az dron wyhamuje (5 m/s -> ~2 s)
+    arrive_tol: 3.0
+
+    # ═══ CENTROWANIE NAD CELEM ═══════════════════════════════════════
+    approach_timeout: 90.0     # gorny limit PODLOTU + centrowania (sciezka A)
+    # Limit SAMEGO ZAWISU, gdy dron stoi juz nad celem (sciezka B — dolot na
+    # waypoint z targets.json). Nie ma tu czego przelatywac, wiec 90 s znaczylo
+    # w praktyce "buja sie w kolko az do konca budzetu": przy oscylacji wokol
+    # center_tol_m licznik hover_hold_time kasuje sie w nieskonczonosc.
+    # Po tym czasie misja przestaje probowac i schodzi na zrzut po
+    # wspolrzednych — ladunek pada w KAZDYM wypadku.
+    #
+    # 10 s to okolo piec okien hover_hold_time (2 s). Jesli w tylu podejsciach
+    # licznik ani razu nie doszedl do konca, to nie jest kwestia sekundy —
+    # to oscylacja wokol progu i dalsze czekanie nic nie da.
+    #
+    # UWAGA: center_lost_timeout (15 s) jest teraz WIEKSZY, wiec przy celu,
+    # ktory zniknal, zadziala ten limit, a nie tamten. Oba i tak koncza sie
+    # zrzutem na wspolrzedne, wiec roznica jest tylko w tresci komunikatu.
+    hover_timeout: 10.0
+    center_lost_timeout: 15.0  # ciagly SEARCH tak dlugo = cel zniknal na dobre
+    # 3.0, a nie 1.5. Licznik "trzymam N s" jest KASOWANY przy kazdej iteracji,
+    # w ktorej uchyb wyjdzie poza te tolerancje. Przy oscylacji o amplitudzie
+    # wiekszej niz tolerancja zegar startuje od nowa co pol sekundy i zawis
+    # konczy sie approach_timeout zamiast zrzutem. Ciasniejsze pasmo i tak nie
+    # kupuje celnosci: zrzut z 50 m ma rozrzut balistyczny wiekszy niz 2 m.
+    center_tol_m: 3.0          # bylo 1.5
+    # 2.0, a nie 5.0. Sam HOVER nie znaczy jeszcze "wycentrowany" - kontroler
+    # wchodzi w ten stan, gdy gimbal dojdzie do pionu, a dron moze byc wtedy
+    # dalej w ruchu; dlatego licznik w ogole istnieje. Ale przy szerszym
+    # center_tol_m 2 s wystarcza na potwierdzenie, ze dron nie przelatuje.
+    hover_hold_time: 2.0       # bylo 5.0
+    lost_timeout: 3.0
+    # 1.5, a nie 0.5. Ponizej tej odleglosci regulator zeruje vx/vy, wiec
+    # przestaje gonic szum rzutowania - a ten przy 50 m ma rzad metra. To jest
+    # ten parametr, ktory gasi oscylacje w zawisie u zrodla, a nie tylko
+    # rozszerza pasmo zaliczenia. MUSI byc <= center_tol_m, inaczej misja
+    # podniesie tolerancje sama, z ostrzezeniem przy starcie.
+    hover_deadzone_m: 1.5      # bylo 0.5
+    acquire_timeout: 5.0
+
+    # ═══ GIMBAL ══════════════════════════════════════════════════════
+    # pitch_max ZOSTAJE -30. Kuszace bylo obnizenie do -55, skoro tyle wynosi
+    # kat przelotowy, ale to zepsuloby dwie rzeczy: (1) sledzenie — cel 70 m
+    # przed dronem wymaga gimbala na -35 st., wiec limit -55 pozwalalby
+    # sledzic tylko to, co blizej niz 35 m, czyli polowe wlasnego zasiegu;
+    # (2) predkosc podlotu — kontroler liczy ja z POLOZENIA gimbala w zakresie
+    # (pitch_max - pitch_min), wiec zwezenie z 60 na 35 st. przesunelo by cala
+    # charakterystyke i kp_vx trzeba by przestroic od nowa.
+    # Skan uzywa -40, wiec limit -55 wykluczylby tez najwyzszy krok skanu.
+    pitch_search: -55.0
+    pitch_min: -90.0           # najnizej: prosto w dol (HOVER)
+    pitch_max: -30.0           # najwyzej
+    pitch_hover_thr: -83.0     # prog APPROACH -> HOVER (7 st. od pionu)
+    gimbal_deadzone: 0.06
+    damping: 0.6
+
+    # ═══ POTWIERDZANIE DETEKCJI (kontroler) ══════════════════════════
+    # M trafien z ostatnich N klatek, o tym samym ID z trackera. To jest ostra
+    # bramka — obowiazuje przy SPRAWDZ na stojaco i przy SEARCH -> APPROACH.
+    # Prog PEWNOSCI ustawia sam detektor (parametr 'conf' w launchu detekcji).
+    det_confirm_frames: 4
+    det_window_frames: 8
+    # Przerwa miedzy KLATKAMI detektora, po ktorej okno jest zerowane.
+    # Detektor publikuje kazda klatke (takze pusta), wiec to mierzy jitter
+    # detektora, a nie utrate celu. 0,5 zerowalo okno w kolko przy ~5 Hz.
+    det_confirm_gap: 1.5
+    # Brak ID sciezki = trafienie NIE liczy sie do okna. Prawdziwe cele
+    # dostaja ID od razu (namiot 53, lezacy czlowiek 151), a track_id = -1
+    # to podpis migoczacej falszywki.
+    require_same_track: true
+
+    # ═══ REGULATORY ══════════════════════════════════════════════════
+    kp_vx: 4.0                 # predkosc do przodu w APPROACH
+    kp_hover: 0.2              # korekta pozycji w HOVER [1/s], uchyb w metrach
+    kp_alt: 0.5
+    kp_yaw: 0.3
+    max_vel: 3.0
+    max_vz: 1.5
+    max_yaw_rate: 0.5
+    ema_alpha: 0.15
+    tilt_comp: true            # odejmij przechyl ramy od uchybu obrazu
+
+    # ═══ KAMERA ══════════════════════════════════════════════════════
+    # OAK-D PRO W, kwadratowe preview 1024x1024 (config/oak_rgb.yaml).
+    # Symulacja jest dociagnieta do realu — NIE nadpisywac tych wartosci.
+    vfov_deg: 64.4
+    img_w: 1024
+    img_h: 1024
+    control_rate: 10.0
+
+    # ═══ ZRZUT LADUNKU ═══════════════════════════════════════════════
+    # JEDEN serwomechanizm na dwa ladunki (u nas AUX5 = kanal 13): wychyla sie
+    # w dwie strony wzgledem pozycji neutralnej. Wychyl w jedna strone zwalnia
+    # namiot, w druga czlowieka, neutral trzyma oba.
+    #
+    # drop_servo_ch = 0 -> TRYB SYMULACJI: zrzut tylko sie loguje, nic nie
+    # jedzie na sprzet. PRZED LOTEM W POLU wpisz numer kanalu serwa: 13.
+    #
+    # Wartosci zmierzone 2026-09-05 na realu (kanal 13, SERVO13=RCIN11).
+    drop_servo_ch: 13                  # 0 = symulacja; na realu 13
+    drop_pwm_by_class: [1580, 1060]   # [namiot, czlowiek]
+    drop_pwm_neutral: 1300
+    drop_hold_s: 2.0

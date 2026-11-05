@@ -3,3 +3,16 @@ FRAME_TYPE       1          # X class
 
 BATT_MONITOR     4          # Analog Voltage and Current (model Gazebo nie symuluje baterii,
                             # wlaczamy monitor, by SITL raportowal napiecie/procenty)
+
+# --- Gimbal: surowe PWM na SERVO7, ta sama sciezka co na realu ---
+# drone_handler.gimbal_pitch_callback wysyla DO_SET_SERVO(7), a nie komendy
+# mounta — wiec w SITL tez ma isc przez SERVO7. Kanal 6 w ArduPilotPlugin
+# modelu iris_with_gimbal czyta to serwo i rusza przegubem pitch.
+# DO_SET_SERVO dziala tylko na kanale z FUNCTION = 0 (Disabled).
+SERVO7_FUNCTION  0          # Disabled -> steruje nim DO_SET_SERVO
+SERVO7_MIN       1100       # zgodne z servo_min w pluginie modelu
+SERVO7_MAX       1900       # zgodne z servo_max w pluginie modelu
+# Mount wylaczony: nic poza nasza komenda nie ma ruszac przegubem pitch
+# (plugin republikuje /gimbal/cmd_pitch co iteracje, wiec dwa zrodla = wojna).
+MNT1_TYPE        0          # brak mounta
+SERVO10_FUNCTION 0          # SERVO10 juz nie steruje gimbalem

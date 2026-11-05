@@ -193,7 +193,11 @@
         <gz_frame_id>pitch_link</gz_frame_id>
         <pose>0 0 0 -1.57 -1.57 0</pose>
         <camera>
-          <horizontal_fov>2.0</horizontal_fov>
+          <!-- 64.4 deg = 1.123992 rad. Klatka kwadratowa (1024x1024), wiec
+               pionowy FOV = poziomy = 64.4 deg — dokladnie jak preview
+               OAK-D PRO W na realu. Dzieki temu vfov_deg/img_w/img_h w
+               suas_flight_controller sa te same w Gazebo i w polu. -->
+          <horizontal_fov>1.123992</horizontal_fov>
           <image>
             <width>1024</width>
             <height>1024</height>
@@ -207,11 +211,18 @@
         <update_rate>10</update_rate>
         <visualize>1</visualize>
 
-        <plugin filename="CameraZoomPlugin"
-            name="CameraZoomPlugin">
-          <max_zoom>125.0</max_zoom>
-          <slew_rate>0.42514285714</slew_rate>
-        </plugin>
+        <!-- CameraZoomPlugin USUNIETY - rozjezdzal geometrie kamery.
+             Wtyczka wola camera->SetHFOV() i renderowala obraz z polem widzenia
+             ok. 97 st. zamiast deklarowanych 64.4 st. camera_info raportowalo
+             przy tym wartosc z SDF (fx=813), wiec bledu nie dalo sie zauwazyc
+             inaczej niz mierzac geometrie: rzutowanie pikseli na ziemie wychodzilo
+             1.79x za male (tan(97/2)/tan(64.4/2) = 1.787), przez co geolokator
+             "gubil" cel razem z lotem drona.
+             Zmierzone 2026-09-01: przy Z=18.645 m namiot 3 m miał box 74 px,
+             co odpowiada focal 455 px, a nie 813.
+             Nikt w projekcie nie wysyla komend zoomu (grep cmd_zoom), wiec
+             wtyczka byla martwa, a psula i geolokalizacje, i vfov_deg
+             w suas_flight_controller. -->
         
         <plugin name="GstCameraPlugin"
             filename="GstCameraPlugin">
