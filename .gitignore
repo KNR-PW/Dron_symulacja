@@ -49,3 +49,7 @@ saved_video/
 *.AppImage
 
 .venv/
+
+# Tekstury Gazebo musza byc w repo (wyjatek od *.png/*.jpg wyzej)
+!src/drone_bringup/gazebo/**/*.png
+!src/drone_bringup/gazebo/**/*.jpg
