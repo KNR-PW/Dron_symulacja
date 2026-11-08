@@ -33,7 +33,7 @@ Istniejący klon / po każdym pullu, który zmienia wskaźnik submodułu:
 
 ```bash
 cd ~/Dron_symulacja
-docker pull dierust/knr_ap_sim:latest
+docker pull dierust/knr_px4_sim:latest
 git pull
 git submodule sync --recursive
 git submodule update --init --recursive
