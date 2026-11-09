@@ -12,6 +12,7 @@ Kroki oznaczone **[WSL]** są specyficzne dla setupu na WSL2 i mogą być zbędn
 
 - MATLAB R2026a z toolboxami: **ROS Toolbox**, Simulink, Stateflow
 - Działający `drone_handler_px4` w kontenerze (wystawia `/knr_hardware/*`).
+- **QGroundControl** odpalony na hoście (sekcja 1, bez niego PX4 nie uzbroi drona).
 - Repo `Dron_symulacja` **z zainicjalizowanymi submodułami** (sekcja 1), z pakietami `px4_msgs` i `drone_interfaces` w `src/`.
 
 ---
@@ -96,6 +97,43 @@ cd ~/Dron_symulacja && git add KNR_Drone_PX4_Autopilot && git commit -m "Bump PX
 ```
 
 Skrypt odpala PX4 SITL + Gazebo w kontenerze `knr_drone_px4` (z zamontowanym `KNR_Drone_PX4_Autopilot`). Jeśli kontenera nie ma, wypisze gotową komendę `docker run`. Przed startem sprawdza, czy istnieje świat, czy `<world name>` w SDF zgadza się z nazwą pliku i czy jest airframe dla targetu.
+
+### QGroundControl (WYMAGANY — bez niego `arm` nic nie robi)
+
+PX4 SITL odrzuca uzbrojenie, dopóki nie widzi stacji naziemnej (heartbeat MAVLink). Objaw: `d.arm()` zwraca `status=1 result=0`, handler loguje `Arm:` na czerwono, dron stoi. QGC musi **działać przez cały czas** pracy z symulacją.
+
+Instalacja (jednorazowo, Ubuntu 24.04 / WSL2 z WSLg):
+
+```bash
+sudo apt install -y libfuse2 libxcb-xinerama0 libxkbcommon-x11-0 libxcb-cursor0
+cd ~/Dron_symulacja/scripts/start_sim
+wget https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl-x86_64.AppImage
+chmod +x QGroundControl-x86_64.AppImage
+```
+
+AppImage leży w `scripts/start_sim/` (tam szuka go `start_px4_sim.sh`; `*.AppImage` jest w `.gitignore`, więc nie wpadnie do commita).
+
+Uruchomienie — **przed** `d.arm()`, jako zwykły user (nie `sudo`):
+
+```bash
+~/Dron_symulacja/scripts/start_sim/QGroundControl-x86_64.AppImage &
+```
+
+Kontener chodzi na `--network host`, więc QGC łapie SITL sam (UDP 14550). Weryfikacja: w lewym górnym rogu QGC status zamiast `Disconnected`, dron widoczny na mapie.
+
+Opcjonalnie (tylko jeśli podpinasz prawdziwy FC po USB, w SITL zbędne):
+
+```bash
+sudo usermod -aG dialout "$(id -un)"          # wyloguj się i zaloguj ponownie
+sudo systemctl mask --now ModemManager.service # na WSL bez systemd może nie istnieć — wtedy pomiń
+```
+
+Pułapki:
+
+- **`dlopen(): error loading libfuse.so.2`** -> brak `libfuse2`.
+- **`qt.qpa.plugin: Could not load the Qt platform plugin "xcb"`** -> brak `libxcb-cursor0` / `libxcb-xinerama0`.
+- **Okno się nie pokazuje na WSL** -> brak WSLg (wymaga Windows 11 / aktualnego WSL: `wsl --update` w PowerShellu).
+- **QGC nie startuje jako root** -> odpalaj bez `sudo`.
 
 ---
 
@@ -295,8 +333,9 @@ d.stop();
 
 1. Zaktualizuj repo + submoduły: `git pull && git submodule update --init --recursive` (sekcja 1).
 2. Odpal symulację ERC: `~/Dron_symulacja/scripts/WSL_scripts/run_px4_sim_erc.sh`, potem most microXRCE + `drone_handler_px4`.
-3. Odpal MATLAB (startup.m załaduje typy + UDP automatycznie).
-4. `d = DroneControllerMATLAB(); d.arm(); d.takeoff(...);`
+3. Odpal QGroundControl: `~/Dron_symulacja/scripts/start_sim/QGroundControl-x86_64.AppImage &`.
+4. Odpal MATLAB (startup.m załaduje typy + UDP automatycznie).
+5. `d = DroneControllerMATLAB(); d.arm(); d.takeoff(...);`
 
 ## Kolejność debugowania gdy nie działa
 
@@ -304,6 +343,7 @@ d.stop();
 - `BLAD: w ERC_test.sdf jest <world name=...>` -> nazwa świata w SDF musi być równa nazwie pliku.
 - Cisza na subscriberze -> [WSL] UDP profil (`getenv FASTRTPS...`).
 - `Unknown package drone_interfaces` w kontenerze -> `source install/setup.bash`.
+- `d.arm()` zwraca `status=1 result=0`, handler `Arm:` na czerwono -> **nie działa QGroundControl** (sekcja 1).
 - set_mode `CallError` -> to normalne (pusty response), komenda działa.
 - Dron nie lata mimo arm -> sprawdź `nav_state` (`ros2 topic echo /fmu/out/vehicle_status_v1`): musi być 14 (offboard) ORAZ arming_state 2.
 - Klasa nie przeładowuje zmian -> `clear classes; rehash`; jak nie pomaga, **restart MATLAB**.
@@ -329,6 +369,7 @@ Steps marked **[WSL]** are specific to the WSL2 setup and may be unnecessary on 
 
 - MATLAB R2026a with toolboxes: **ROS Toolbox**, Simulink, Stateflow
 - Running `drone_handler_px4` in the container (exposes `/knr_hardware/*`).
+- **QGroundControl** running on the host (section 1, without it PX4 won't arm).
 - `Dron_symulacja` repo **with initialized submodules** (section 1), with the `px4_msgs` and `drone_interfaces` packages in `src/`.
 
 ---
@@ -412,6 +453,43 @@ cd ~/Dron_symulacja && git add KNR_Drone_PX4_Autopilot && git commit -m "Bump PX
 ```
 
 The script starts PX4 SITL + Gazebo in the `knr_drone_px4` container (with `KNR_Drone_PX4_Autopilot` mounted). If the container doesn't exist, it prints a ready `docker run` command. Before starting it checks that the world exists, that `<world name>` in the SDF matches the file name, and that an airframe exists for the target.
+
+### QGroundControl (REQUIRED — without it `arm` does nothing)
+
+PX4 SITL rejects arming until it sees a ground station (MAVLink heartbeat). Symptom: `d.arm()` returns `status=1 result=0`, the handler logs `Arm:` in red, the drone doesn't move. QGC must **stay running** the whole time you work with the simulation.
+
+Install (one-time, Ubuntu 24.04 / WSL2 with WSLg):
+
+```bash
+sudo apt install -y libfuse2 libxcb-xinerama0 libxkbcommon-x11-0 libxcb-cursor0
+cd ~/Dron_symulacja/scripts/start_sim
+wget https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl-x86_64.AppImage
+chmod +x QGroundControl-x86_64.AppImage
+```
+
+The AppImage lives in `scripts/start_sim/` (that's where `start_px4_sim.sh` looks for it; `*.AppImage` is in `.gitignore`, so it won't get committed).
+
+Run it **before** `d.arm()`, as a regular user (not `sudo`):
+
+```bash
+~/Dron_symulacja/scripts/start_sim/QGroundControl-x86_64.AppImage &
+```
+
+The container runs with `--network host`, so QGC picks up SITL automatically (UDP 14550). Check: the top-left status in QGC is no longer `Disconnected` and the drone shows up on the map.
+
+Optional (only for a real FC over USB, not needed for SITL):
+
+```bash
+sudo usermod -aG dialout "$(id -un)"          # log out and back in
+sudo systemctl mask --now ModemManager.service # may not exist on WSL without systemd — skip then
+```
+
+Pitfalls:
+
+- **`dlopen(): error loading libfuse.so.2`** -> missing `libfuse2`.
+- **`qt.qpa.plugin: Could not load the Qt platform plugin "xcb"`** -> missing `libxcb-cursor0` / `libxcb-xinerama0`.
+- **No window on WSL** -> no WSLg (needs Windows 11 / up-to-date WSL: `wsl --update` in PowerShell).
+- **QGC won't start as root** -> run it without `sudo`.
 
 ---
 
@@ -611,8 +689,9 @@ d.stop();
 
 1. Update the repo + submodules: `git pull && git submodule update --init --recursive` (section 1).
 2. Start the ERC simulation: `~/Dron_symulacja/scripts/WSL_scripts/run_px4_sim_erc.sh`, then the microXRCE bridge + `drone_handler_px4`.
-3. Start MATLAB (startup.m loads the types + UDP automatically).
-4. `d = DroneControllerMATLAB(); d.arm(); d.takeoff(...);`
+3. Start QGroundControl: `~/Dron_symulacja/scripts/start_sim/QGroundControl-x86_64.AppImage &`.
+4. Start MATLAB (startup.m loads the types + UDP automatically).
+5. `d = DroneControllerMATLAB(); d.arm(); d.takeoff(...);`
 
 ## Debugging order when something doesn't work
 
@@ -620,6 +699,7 @@ d.stop();
 - `BLAD: w ERC_test.sdf jest <world name=...>` -> the world name in the SDF must match the file name.
 - Silence on the subscriber -> [WSL] UDP profile (`getenv FASTRTPS...`).
 - `Unknown package drone_interfaces` in the container -> `source install/setup.bash`.
+- `d.arm()` returns `status=1 result=0`, handler logs `Arm:` in red -> **QGroundControl isn't running** (section 1).
 - set_mode `CallError` -> normal (empty response), the command works.
 - Drone doesn't fly despite arming -> check `nav_state` (`ros2 topic echo /fmu/out/vehicle_status_v1`): must be 14 (offboard) AND arming_state 2.
 - Class doesn't reload changes -> `clear classes; rehash`; if that doesn't help, **restart MATLAB**.
