@@ -28,11 +28,11 @@ cd docker/docker_px4
 Teraz będziemy musieli potrzebować włączyć symulacje w gazeboo i sitl px4
 do właczenia modelu drona w trybie multiwirnikowca
 ```bash
-./run_px4_quad_sitl.sh
+./run_px4_sitl.sh sitl
 ```
 do właczenia modelu drona w trybie vtola
 ```bash
-./run_px4_vtol_sitl.sh
+./run_px4_sitl.sh vtol
 ```
 ## krok 4
 W tym kroku będziemy uruchamiać aplikacje microxrcdds która tłumaczy wewnętrzne wiadomości (uORB) PX4 na rosowe wiadomości
