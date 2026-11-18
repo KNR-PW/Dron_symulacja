@@ -83,7 +83,7 @@ def main():
         }
 
     sciezka = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                           '..', 'src', 'drone_bringup', 'config', 'targets.json')
+                           '..', '..', 'src', 'drone_bringup', 'config', 'targets.json')
     sciezka = os.path.normpath(sciezka)
     with open(sciezka, 'w') as fh:
         json.dump(data, fh, indent=2, ensure_ascii=False)

@@ -4,10 +4,10 @@
 
 ```bash
 # VTOL (knr_tiltrotor)
-./scripts/run_px4_vtol_sitl.sh <nazwa_świata>
+./scripts/run_px4_sitl.sh vtol <nazwa_świata>
 
 # Quadrotor (x500)
-./scripts/run_px4_quad_sitl.sh <nazwa_świata>
+./scripts/run_px4_sitl.sh quad <nazwa_świata>
 ```
 
 Domyślny świat: `aruco`
